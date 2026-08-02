@@ -1,0 +1,37 @@
+# Docker MCP Toolkit server definition for hardly
+# Import: docker mcp catalog create local
+#         docker mcp catalog add local hardly ./docker/server.yaml --force
+#         docker mcp server enable hardly
+name: hardly
+image: hardly-mcp:latest
+type: server
+meta:
+  category: devops
+  tags:
+    - har
+    - api
+    - reverse-engineering
+    - documentation
+about:
+  title: hardly
+  description: >
+    HAR analysis MCP server — index, query, document, and probe APIs without
+    loading giant HAR captures into the model context.
+run:
+  volumes:
+    - "{{hardly.workspace}}:/workspace"
+    - hardly-cache:/var/cache/hardly
+  env:
+    HARDLY_CACHE_DIR: /var/cache/hardly
+    HARDLY_WORKSPACE: /workspace
+config:
+  description: Host directory mounted at /workspace (HAR files and export targets)
+  parameters:
+    type: object
+    properties:
+      workspace:
+        type: string
+        description: Host path containing HAR files (mounted read-write at /workspace)
+        default: "D:\\code"
+    required:
+      - workspace

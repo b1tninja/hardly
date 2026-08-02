@@ -1,0 +1,34 @@
+# Full catalog file for: docker mcp catalog import docker/catalog.yaml
+# (Alternative to catalog create + add)
+registry:
+  hardly:
+    description: >
+      HAR analysis MCP server — index, query, document, and probe APIs without
+      loading giant HAR captures into the model context.
+    title: hardly
+    type: server
+    image: hardly-mcp:latest
+    meta:
+      category: devops
+      tags:
+        - har
+        - api
+        - reverse-engineering
+        - documentation
+    volumes:
+      - "{{hardly.workspace}}:/workspace"
+      - hardly-cache:/var/cache/hardly
+    env:
+      HARDLY_CACHE_DIR: /var/cache/hardly
+      HARDLY_WORKSPACE: /workspace
+    config:
+      - description: Host directory mounted at /workspace (HAR files and export targets)
+        parameters:
+          type: object
+          properties:
+            workspace:
+              type: string
+              description: Host path containing HAR files
+              default: "D:\\code"
+          required:
+            - workspace

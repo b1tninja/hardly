@@ -1,0 +1,17 @@
+.venv/
+.git/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.hardly/
+*.db
+.mypy_cache/
+.ruff_cache/
+tests/
+**/.DS_Store
+.env
+*.har
