@@ -189,7 +189,7 @@ def test_environment_only_session_not_walled(tmp_path, monkeypatch):
         _entry(1, "https://a.example.com/", status=403, resp_headers={"x-deny-reason": "host_not_allowed"},
                body="Access denied. Request blocked."),
     ])
-    walls = detect_walls(conn)
+    walls = detect_walls(conn, explain=True)
     assert walls["hit_count"] == 0 and walls["blocking"] == []
     assert walls["environment_blocked"]["detected"]
     assert "Not a site wall" in walls["next"]

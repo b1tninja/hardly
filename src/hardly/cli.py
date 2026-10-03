@@ -303,6 +303,41 @@ def cmd_auth(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_report(args: argparse.Namespace) -> int:
+    from hardly.core.report import (
+        build_report,
+        default_output_path,
+        render_markdown,
+        write_report,
+    )
+
+    result = sess.open_har(args.har)
+    if "error" in result:
+        _print(result)
+        return 1
+    sid = result["session_id"]
+    conn = sess.require_conn(sid)
+    sections = [s.strip() for s in args.sections.split(",") if s.strip()] if args.sections else None
+    try:
+        rep = build_report(
+            conn, sess.get_har_path(sid), host=args.host, sections=sections,
+            detail=args.detail, explain=args.explain,
+        )
+    except ValueError as exc:
+        _print({"error": str(exc)})
+        return 1
+    out = args.output
+    if args.write and not out:
+        out = str(default_output_path(args.har, "json" if args.format == "json" else "md"))
+    if out:
+        rep["output_path"] = str(write_report(rep, out, har_path=args.har))
+    if args.format == "md":
+        sys.stdout.write(render_markdown(rep))
+    else:
+        _print(rep)
+    return 0
+
+
 def cmd_brief(args: argparse.Namespace) -> int:
     from hardly.core.brief import portal_brief
 
@@ -454,7 +489,7 @@ def cmd_grids(args: argparse.Namespace) -> int:
         _print(result)
         return 1
     conn = sess.require_conn(result["session_id"])
-    _print(detect_grids(conn, host=args.host, limit=args.limit))
+    _print(detect_grids(conn, host=args.host, limit=args.limit, explain=getattr(args, "explain", False)))
     return 0
 
 
@@ -466,7 +501,7 @@ def cmd_challenges(args: argparse.Namespace) -> int:
         _print(result)
         return 1
     conn = sess.require_conn(result["session_id"])
-    _print(detect_challenges(conn, host=args.host, limit=args.limit))
+    _print(detect_challenges(conn, host=args.host, limit=args.limit, explain=getattr(args, "explain", False)))
     return 0
 
 
@@ -480,7 +515,7 @@ def cmd_data_attrs(args: argparse.Namespace) -> int:
     conn = sess.require_conn(result["session_id"])
     _print(
         scan_session(
-            conn, host=args.host, entry_id=args.entry_id, limit=args.limit
+            conn, host=args.host, entry_id=args.entry_id, limit=args.limit, explain=getattr(args, "explain", False)
         )
     )
     return 0
@@ -532,6 +567,7 @@ def cmd_crawl(args: argparse.Namespace) -> int:
         respect_robots=not args.ignore_robots,
         timeout_s=args.timeout,
         user_agent=args.user_agent,
+        explain=getattr(args, "explain", False),
     )
     _print(result)
     return 1 if "error" in result else 0
@@ -585,14 +621,14 @@ def cmd_stack(args: argparse.Namespace) -> int:
         _print(result)
         return 1
     conn = sess.require_conn(result["session_id"])
-    _print(fingerprint(conn, host=args.host, limit=args.limit))
+    _print(fingerprint(conn, host=args.host, limit=args.limit, explain=getattr(args, "explain", False)))
     return 0
 
 
 def cmd_auth_patterns(args: argparse.Namespace) -> int:
     from hardly.core.auth_patterns import detect_auth_patterns
 
-    _print(detect_auth_patterns(args.har, host=args.host, kinds=args.kind or None))
+    _print(detect_auth_patterns(args.har, host=args.host, kinds=args.kind or None, explain=getattr(args, "explain", False)))
     return 0
 
 
@@ -616,7 +652,7 @@ def cmd_gates(args: argparse.Namespace) -> int:
         _print(result)
         return 1
     conn = sess.require_conn(result["session_id"])
-    _print(classify_gates(conn, host=args.host))
+    _print(classify_gates(conn, host=args.host, explain=getattr(args, "explain", False)))
     return 0
 
 
@@ -647,7 +683,7 @@ def cmd_redirects(args: argparse.Namespace) -> int:
         _print(result)
         return 1
     conn = sess.require_conn(result["session_id"])
-    _print(redirect_chains(conn, host=args.host, limit=args.limit))
+    _print(redirect_chains(conn, host=args.host, limit=args.limit, explain=getattr(args, "explain", False)))
     return 0
 
 
@@ -711,6 +747,7 @@ def cmd_credentials(args: argparse.Namespace) -> int:
             har_path=sess.get_har_path(result["session_id"]),
             host=args.host,
             limit=args.limit,
+            explain=getattr(args, "explain", False),
         )
     )
     return 0
@@ -822,7 +859,7 @@ def cmd_wall(args: argparse.Namespace) -> int:
         _print(result)
         return 1
     conn = sess.require_conn(result["session_id"])
-    _print(detect_walls(conn, host=args.host, limit=args.limit))
+    _print(detect_walls(conn, host=args.host, limit=args.limit, explain=getattr(args, "explain", False)))
     return 0
 
 
@@ -1578,6 +1615,20 @@ def build_parser() -> argparse.ArgumentParser:
     auth_p.add_argument("--host")
     auth_p.set_defaults(func=cmd_auth)
 
+    report_p = sub.add_parser(
+        "report",
+        help="One-pass evidence index: access, auth, stack, data, forms (summary/standard/full)",
+    )
+    report_p.add_argument("har")
+    report_p.add_argument("--host")
+    report_p.add_argument("--sections", help="Comma list: access,auth,stack,data,forms,run")
+    report_p.add_argument("--detail", choices=("summary", "standard", "full"), default="summary")
+    report_p.add_argument("--format", choices=("json", "md"), default="json")
+    report_p.add_argument("--explain", action="store_true", help="Include canned prose (implications / next steps)")
+    report_p.add_argument("--output", help="Write the report here (.json -> JSON, else Markdown; a directory gets <har>.report.md)")
+    report_p.add_argument("--write", action="store_true", help="Write <har stem>.report.md/.json next to the HAR")
+    report_p.set_defaults(func=cmd_report)
+
     brief_p = sub.add_parser(
         "brief",
         help="One-shot portal RE brief (story+forms+correlate+...)",
@@ -2118,6 +2169,15 @@ def build_parser() -> argparse.ArgumentParser:
     # Bare `hardly capture URL` (no subcommand) — argparse needs a default path.
     _add_capture_flags(cap_p, url_default=argparse.SUPPRESS)
     cap_p.set_defaults(func=cmd_capture, capture_action="run")
+
+    # Evidence-only is the default; canned prose (implication/advice/next/policy)
+    # comes back only with --explain.
+    for _name in ("stack", "auth-patterns", "gates", "wall", "challenges", "credentials",
+                  "redirects", "grids", "data-attrs", "crawl"):
+        _sp = sub.choices.get(_name)
+        if _sp is not None:
+            _sp.add_argument("--explain", action="store_true",
+                             help="Include canned prose (implications / advice / next steps)")
 
     return p
 

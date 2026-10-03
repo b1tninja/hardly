@@ -14,6 +14,8 @@ import re
 import sqlite3
 from collections import Counter
 from typing import Any
+
+from hardly.core.explain import finish
 from urllib.parse import parse_qsl
 
 from hardly.core.previews import is_truncated, preview_warnings
@@ -103,7 +105,7 @@ _DATA_ATTR = re.compile(r"\sdata-([a-z][a-z0-9-]{1,40})\s*=", re.I)
 _JSON_KEY = re.compile(r'"((?:[^"\\]|\\.){1,60})"\s*:')
 
 
-def detect_grids(
+def _detect_grids(
     conn: sqlite3.Connection, *, host: str | None = None, limit: int = 20
 ) -> dict[str, Any]:
     """Summarise grid frameworks, envelope conventions and paging parameters."""
@@ -237,6 +239,15 @@ def detect_grids(
             "need the param style replayed (e.g. start/length or page/pageSize)."
         ),
     }
+
+
+def detect_grids(
+    conn: sqlite3.Connection, *, host: str | None = None, limit: int = 20,
+    explain: bool = False,
+) -> dict[str, Any]:
+    """``detect_grids``; canned prose (next, export_note) only with ``explain=True``."""
+    return finish(_detect_grids(conn, host=host, limit=limit), explain, 'next', 'export_note')
+
 
 
 def html_grid_signals(text: str) -> list[str]:

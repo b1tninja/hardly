@@ -26,6 +26,10 @@ Categorized tool catalog and workflows. Pass topic e.g. portal, tokens, capture,
 
 Suggest which hardly tools to call next for a short goal string.
 
+### `hardly_report(session_id, sections_json=None, detail='summary', explain=False, output_path=None)`
+
+One-pass evidence index: access, auth, stack, data, forms (+ run placeholder).
+
 ## Sessions
 
 ### `hardly_open(har_path, force=False)`
@@ -94,11 +98,11 @@ Infer request/response JSON schemas for an endpoint template.
 
 List HAR pageref groups (browser page loads) with document hints.
 
-### `hardly_grids(session_id, host=None, limit=20)`
+### `hardly_grids(session_id, host=None, limit=20, explain=False)`
 
 Detect data-grid frameworks, JSON envelope conventions and paging params.
 
-### `hardly_data_attrs(session_id, host=None, entry_id=None, limit=20)`
+### `hardly_data_attrs(session_id, host=None, entry_id=None, limit=20, explain=False)`
 
 Interpret HTML data-* attributes (MDN dataset model).
 
@@ -148,7 +152,7 @@ Classify query/body fields as static, dynamic, or sensitive across samples.
 
 Rank links likely to lead to a search/lookup page.
 
-### `hardly_stack(session_id, host=None, limit=30)`
+### `hardly_stack(session_id, host=None, limit=30, explain=False)`
 
 Fingerprint web/front-end frameworks, CMS/site builders, GIS stacks and UI toolkits.
 
@@ -156,13 +160,13 @@ Fingerprint web/front-end frameworks, CMS/site builders, GIS stacks and UI toolk
 
 List HTML data tables: headers, row/column counts, masked first row.
 
-### `hardly_auth_patterns(session_id, host=None, kinds_json=None)`
+### `hardly_auth_patterns(session_id, host=None, kinds_json=None, explain=False)`
 
 Detect generic auth patterns: bearer/refresh JSON login, OIDC/PKCE, SAML POST, double-submit CSRF, signed-request headers.
 
 ## Credentials and auth
 
-### `hardly_credentials(session_id, host=None, limit=40)`
+### `hardly_credentials(session_id, host=None, limit=40, explain=False)`
 
 Map login/credential evidence: passwords, session cookies, CSRF, JWT/hex/base64 shapes.
 
@@ -170,7 +174,7 @@ Map login/credential evidence: passwords, session cookies, CSRF, JWT/hex/base64 
 
 Detect auth-related paths, token responses, and auth headers for a host.
 
-### `hardly_challenges(session_id, host=None, limit=20)`
+### `hardly_challenges(session_id, host=None, limit=20, explain=False)`
 
 Detect HTTP auth challenges, throttling/lockout signals, captcha widgets.
 
@@ -190,7 +194,7 @@ Cookie name timeline (Set-Cookie / Cookie). Values are never returned.
 
 Locate sensitive header/field/query *names* (password, token, cookie, …).
 
-### `hardly_redirects(session_id, host=None, limit=30)`
+### `hardly_redirects(session_id, host=None, limit=30, explain=False)`
 
 List 3xx redirect hops and matched follow-up entry ids when present.
 
@@ -206,7 +210,7 @@ Detect GraphQL operations (operationName / query / mutation).
 
 Capture-quality issues: empty bodies, 4xx/5xx, redirects without Location.
 
-### `hardly_wall(session_id, host=None, limit=30)`
+### `hardly_wall(session_id, host=None, limit=30, explain=False)`
 
 Report bot walls actually hit, plus the bot-protection products seen.
 
@@ -222,7 +226,7 @@ List the slowest requests by HAR time_ms.
 
 Compare endpoint templates (and credential maps) between two sessions.
 
-### `hardly_gates(session_id, host=None)`
+### `hardly_gates(session_id, host=None, explain=False)`
 
 Classify the gates in a capture and the policy action for each.
 
@@ -270,7 +274,7 @@ Replay a request live. Requires confirm=true. Sensitive HAR headers are skipped 
 
 Live, polite exploration of an ArcGIS REST service or layer URL (needs confirm=true).
 
-### `hardly_crawl(start_url, keywords_json=None, confirm=False, max_pages=12, depth=2, delay_s=1.0, follow_external=False, respect_robots=True, timeout_s=15.0, user_agent=None)`
+### `hardly_crawl(start_url, keywords_json=None, confirm=False, max_pages=12, depth=2, delay_s=1.0, follow_external=False, respect_robots=True, timeout_s=15.0, user_agent=None, explain=False)`
 
 Curl-first, robots-aware, polite crawl that finds candidate pages. LIVE GETs: requires confirm=true.
 

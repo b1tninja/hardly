@@ -556,13 +556,23 @@ _DETECTORS = {
 
 
 def detect_auth_patterns(
-    har_path: str | Path, *, host: str | None = None, kinds: list[str] | None = None
+    har_path: str | Path,
+    *,
+    host: str | None = None,
+    kinds: list[str] | None = None,
+    explain: bool = False,
 ) -> dict[str, Any]:
-    """Run the generic auth-pattern detectors over a HAR (names/shapes only)."""
+    """Run the generic auth-pattern detectors over a HAR (names/shapes only).
+
+    ``replay_hint`` prose on signed-request groups is kept only with ``explain``.
+    """
     wanted = [k for k in (kinds or KINDS) if k in _DETECTORS]
     entries = _load(har_path, host)
     result: dict[str, Any] = {"host": host, "entry_count": len(entries)}
     for k in wanted:
         result[k] = _DETECTORS[k](entries)
     result["detected"] = [k for k in wanted if result[k].get("detected")]
+    if not explain:
+        for grp in (result.get("signed_requests") or {}).get("groups") or []:
+            grp.pop("replay_hint", None)
     return result

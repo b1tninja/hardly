@@ -8,6 +8,8 @@ import sqlite3
 from pathlib import Path
 from urllib.parse import parse_qsl, urlparse
 from typing import Any
+
+from hardly.core.explain import finish
 import ijson
 
 from hardly.core.auth import AUTH_PATH_RE, detect_auth
@@ -52,7 +54,7 @@ _SESSION_COOKIE_RE = re.compile(
 _CSRF_RE = re.compile(r"csrf|xsrf|requestverification|__requestverification", re.I)
 
 
-def map_credentials(
+def _map_credentials(
     conn: sqlite3.Connection,
     *,
     har_path: str | Path | None = None,
@@ -201,6 +203,19 @@ def map_credentials(
             "hardly_compare_entries; stub with placeholders via hardly_stub."
         ),
     }
+
+
+def map_credentials(
+    conn: sqlite3.Connection,
+    *,
+    har_path: str | Path | None = None,
+    host: str | None = None,
+    limit: int = 40,
+    explain: bool = False,
+) -> dict[str, Any]:
+    """``map_credentials``; canned prose (next) only with ``explain=True``."""
+    return finish(_map_credentials(conn, har_path=har_path, host=host, limit=limit), explain, 'next')
+
 
 
 def _query_secret_names(

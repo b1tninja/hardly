@@ -18,6 +18,8 @@ import sqlite3
 from dataclasses import dataclass, field
 from typing import Any
 
+from hardly.core.explain import finish
+
 _STRONG, _MEDIUM, _WEAK = 3, 2, 1
 
 
@@ -268,6 +270,7 @@ def detect_bot_protection(
     har_path: str | None = None,
     host: str | None = None,
     limit: int = 20,
+    explain: bool = False,
 ) -> dict[str, Any]:
     """Score every catalog product against cookies, headers, URLs and bodies."""
     ev: dict[str, dict[tuple[str, str], dict[str, Any]]] = {v.id: {} for v in CATALOG}
@@ -418,7 +421,7 @@ def detect_bot_protection(
     vendors.sort(key=lambda d: (-{"high": 2, "medium": 1, "low": 0}[d["confidence"]], -d["score"]))
     blocking = [d for d in vendors if d["state"] in {"blocked", "challenged"}]
     needs_person = [d["id"] for d in blocking]
-    return {
+    out = {
         "host": host,
         "vendors": vendors[:limit],
         "vendor_count": len(vendors),
@@ -434,6 +437,7 @@ def detect_bot_protection(
         ),
         "needs_person": needs_person,
     }
+    return finish(out, explain, "recommendation")
 
 
 def classify_response_vendors(

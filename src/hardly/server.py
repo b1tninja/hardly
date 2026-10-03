@@ -931,6 +931,47 @@ def hardly_brief(
 
 
 @mcp.tool
+def hardly_report(
+    session_id: str,
+    sections_json: str | None = None,
+    detail: str = "summary",
+    explain: bool = False,
+    output_path: str | None = None,
+) -> str:
+    """One-pass evidence index: access, auth, stack, data, forms (+ run placeholder).
+
+    Runs the existing detectors once and returns findings {section, kind,
+    severity info|notice|blocker, label, entry_ids, names/shapes only, lookup}.
+    detail: summary (~1 KB: counts per section + blockers) | standard (capped
+    findings) | full (more findings + the drill-down tool per finding).
+    `sections_json` is an optional JSON list restricting the sections. Never
+    returns secret values. explain=true adds canned prose (implications / next
+    steps). `output_path` writes Markdown (or JSON for a .json path; a
+    directory gets <har>.report.md) and returns the written path.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    sections = None
+    if sections_json:
+        try:
+            sections = [str(s) for s in json.loads(sections_json)]
+        except (json.JSONDecodeError, TypeError) as exc:
+            return _err(exc)
+    from hardly.core.report import build_report, write_report
+
+    har_path = sess.get_har_path(session_id)
+    try:
+        rep = build_report(conn, har_path, sections=sections, detail=detail, explain=explain)
+        if output_path:
+            rep["output_path"] = str(write_report(rep, resolve_path(output_path), har_path=har_path))
+    except (ValueError, OSError) as exc:
+        return _err(exc)
+    return _ok(rep)
+
+
+@mcp.tool
 def hardly_story(
     session_id: str,
     host: str | None = None,
@@ -1103,6 +1144,7 @@ def hardly_challenges(
     session_id: str,
     host: str | None = None,
     limit: int = 20,
+    explain: bool = False,
 ) -> str:
     """Detect HTTP auth challenges, throttling/lockout signals, captcha widgets.
 
@@ -1118,7 +1160,7 @@ def hardly_challenges(
         return _err(exc)
     from hardly.core.challenges import detect_challenges
 
-    return _ok(detect_challenges(conn, host=host, limit=min(limit, 50)))
+    return _ok(detect_challenges(conn, host=host, limit=min(limit, 50), explain=explain))
 
 
 @mcp.tool
@@ -1127,6 +1169,7 @@ def hardly_data_attrs(
     host: str | None = None,
     entry_id: int | None = None,
     limit: int = 20,
+    explain: bool = False,
 ) -> str:
     """Interpret HTML data-* attributes (MDN dataset model).
 
@@ -1142,7 +1185,7 @@ def hardly_data_attrs(
         return _err(exc)
     from hardly.core.data_attrs import scan_session
 
-    return _ok(scan_session(conn, host=host, entry_id=entry_id, limit=min(limit, 60)))
+    return _ok(scan_session(conn, host=host, entry_id=entry_id, limit=min(limit, 60), explain=explain))
 
 
 @mcp.tool
@@ -1207,6 +1250,7 @@ def hardly_crawl(
     respect_robots: bool = True,
     timeout_s: float = 15.0,
     user_agent: str | None = None,
+    explain: bool = False,
 ) -> str:
     """Curl-first, robots-aware, polite crawl that finds candidate pages. LIVE GETs: requires confirm=true.
 
@@ -1217,7 +1261,7 @@ def hardly_crawl(
     stops at gates (bot wall / captcha / environment block) and on 429/Retry-After.
     Caps: max_pages <= 40, depth <= 4. External registrable domains are only recorded
     unless follow_external=true (one hop). Returns candidates (search forms first),
-    per-page form field NAMES, gate classes, needs_browser pages and `next` advice -
+    per-page form field NAMES, gate classes, needs_browser pages (and `next` advice with explain=true) -
     no bodies, URLs redacted. Pages flagged needs_browser: use hardly_capture_recipe /
     `capture discover` with a find_click step.
     """
@@ -1248,6 +1292,7 @@ def hardly_crawl(
                 respect_robots=respect_robots,
                 timeout_s=timeout_s,
                 user_agent=user_agent,
+                explain=explain,
             )
         )
     except Exception as exc:  # noqa: BLE001
@@ -1300,7 +1345,9 @@ def hardly_replay_check(
 
 
 @mcp.tool
-def hardly_auth_patterns(session_id: str, host: str | None = None, kinds_json: str | None = None) -> str:
+def hardly_auth_patterns(
+    session_id: str, host: str | None = None, kinds_json: str | None = None, explain: bool = False
+) -> str:
     """Detect generic auth patterns: bearer/refresh JSON login, OIDC/PKCE, SAML POST, double-submit CSRF, signed-request headers.
 
     Names, shapes, lengths and entry ids only - never values. `kinds_json` is an
@@ -1317,7 +1364,7 @@ def hardly_auth_patterns(session_id: str, host: str | None = None, kinds_json: s
             return _err(exc)
     from hardly.core.auth_patterns import detect_auth_patterns
 
-    return _ok(detect_auth_patterns(path, host=host, kinds=kinds))
+    return _ok(detect_auth_patterns(path, host=host, kinds=kinds, explain=explain))
 
 
 @mcp.tool
@@ -1325,14 +1372,15 @@ def hardly_stack(
     session_id: str,
     host: str | None = None,
     limit: int = 30,
+    explain: bool = False,
 ) -> str:
     """Fingerprint web/front-end frameworks, CMS/site builders, GIS stacks and UI toolkits.
 
     Reads response/request header names, cookie names, URL paths and HTML/JS
     body previews. Each technology has a category, confidence, evidence
     (kind + marker label, never values), entry_ids and a one-sentence SDK
-    implication (e.g. carry all WebForms hidden fields, echo XSRF cookie into
-    a header, Blazor needs a browser, ArcGIS query params). Also flags the
+    implication (only with explain=true; e.g. carry all WebForms hidden fields, echo
+    XSRF cookie into a header, Blazor needs a browser). Also flags the
     double-encoded-json data convention. CDN/WAF products: use hardly_wall.
     """
     try:
@@ -1341,7 +1389,7 @@ def hardly_stack(
         return _err(exc)
     from hardly.core.stack import fingerprint
 
-    return _ok(fingerprint(conn, host=host, limit=min(limit, 60)))
+    return _ok(fingerprint(conn, host=host, limit=min(limit, 60), explain=explain))
 
 
 
@@ -1371,7 +1419,7 @@ def hardly_tables(
 
 
 @mcp.tool
-def hardly_gates(session_id: str, host: str | None = None) -> str:
+def hardly_gates(session_id: str, host: str | None = None, explain: bool = False) -> str:
     """Classify the gates in a capture and the policy action for each.
 
     Classes: environment_blocked (our sandbox/proxy refused - "unknown, re-run
@@ -1389,7 +1437,7 @@ def hardly_gates(session_id: str, host: str | None = None) -> str:
         return _err(exc)
     from hardly.core.gates import classify_gates
 
-    return _ok(classify_gates(conn, host=host))
+    return _ok(classify_gates(conn, host=host, explain=explain))
 
 
 @mcp.tool
@@ -1397,6 +1445,7 @@ def hardly_grids(
     session_id: str,
     host: str | None = None,
     limit: int = 20,
+    explain: bool = False,
 ) -> str:
     """Detect data-grid frameworks, JSON envelope conventions and paging params.
 
@@ -1411,7 +1460,7 @@ def hardly_grids(
         return _err(exc)
     from hardly.core.grids import detect_grids
 
-    return _ok(detect_grids(conn, host=host, limit=min(limit, 50)))
+    return _ok(detect_grids(conn, host=host, limit=min(limit, 50), explain=explain))
 
 
 @mcp.tool
@@ -1444,6 +1493,7 @@ def hardly_redirects(
     session_id: str,
     host: str | None = None,
     limit: int = 30,
+    explain: bool = False,
 ) -> str:
     """List 3xx redirect hops and matched follow-up entry ids when present."""
     try:
@@ -1453,7 +1503,7 @@ def hardly_redirects(
     from hardly.core.redirects import redirect_chains
 
     return _ok(
-        redirect_chains(conn, host=host, limit=min(limit, 80))
+        redirect_chains(conn, host=host, limit=min(limit, 80), explain=explain)
     )
 
 
@@ -1529,6 +1579,7 @@ def hardly_credentials(
     session_id: str,
     host: str | None = None,
     limit: int = 40,
+    explain: bool = False,
 ) -> str:
     """Map login/credential evidence: passwords, session cookies, CSRF, JWT/hex/base64 shapes.
 
@@ -1547,6 +1598,7 @@ def hardly_credentials(
             har_path=sess.get_har_path(session_id),
             host=host,
             limit=min(limit, 60),
+            explain=explain,
         )
     )
 
@@ -1744,6 +1796,7 @@ def hardly_wall(
     session_id: str,
     host: str | None = None,
     limit: int = 30,
+    explain: bool = False,
 ) -> str:
     """Report bot walls actually hit, plus the bot-protection products seen.
 
@@ -1759,7 +1812,7 @@ def hardly_wall(
         return _err(exc)
     from hardly.core.wall import detect_walls
 
-    return _ok(detect_walls(conn, host=host, limit=min(limit, 60)))
+    return _ok(detect_walls(conn, host=host, limit=min(limit, 60), explain=explain))
 
 
 @mcp.tool

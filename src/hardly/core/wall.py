@@ -5,11 +5,14 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
+from hardly.core.explain import finish
+
 def detect_walls(
     conn: sqlite3.Connection,
     *,
     host: str | None = None,
     limit: int = 30,
+    explain: bool = False,
 ) -> dict[str, Any]:
     """Report entries that were actually blocked or challenged, plus the products seen.
 
@@ -26,7 +29,7 @@ def detect_walls(
         har_path = row["value"] if row else None
     except sqlite3.Error:
         pass
-    prot = detect_bot_protection(conn, har_path=har_path, host=host, limit=30)
+    prot = detect_bot_protection(conn, har_path=har_path, host=host, limit=30, explain=True)
 
     clauses = ["1 = 1"]
     params: list[Any] = []
@@ -97,7 +100,7 @@ def detect_walls(
         for k in h.get("kinds") or []:
             by_kind[k] = by_kind.get(k, 0) + 1
 
-    return {
+    out = {
         "host": host,
         "hit_count": len(hits),
         "by_kind": by_kind,
@@ -121,6 +124,7 @@ def detect_walls(
             else "No wall observed; protection fingerprints (if any) are informational."
         ),
     }
+    return finish(out, explain, "recommendation", "next")
 
 
 def _add(
