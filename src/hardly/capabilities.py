@@ -45,6 +45,8 @@ FEATURES = (
     "crawl_robots",
     "crawl",
     "redirect_diag",
+    "dismiss_consent",
+    "live_find_click",
     "arcgis_explore",
     "arcgis",
     "data_attrs",

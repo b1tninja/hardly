@@ -34,11 +34,14 @@ A recipe is a JSON list of steps. Headless one-shots run **in-process**:
 | `fill` | `css`, `value` | |
 | `press` | `key` | default `Enter` |
 | `find_click` | `keywords` (your domain terms), `max_hops` (default 4, max 8), `min_fields` (default 2) | follows the best-ranked link/button/postback each hop until a real search form appears; result has `reached`, `form`, `hops` (each hop's `via` is `click` or `goto`). The goal check skips login forms, one-box site search, newsletter/feedback/translate widgets, email-only and select-only forms, and nameless inputs; hidden elements and `target=_blank` links fall back to navigating to the link's `href` |
+| `dismiss_consent` | `prefer` (`reject` default, or `accept`), `timeout_ms` | dismisses cookie/consent dialogs only, reject first. Refuses login, captcha, terms/disclaimer and form-bearing dialogs and bot-wall pages (listed in `refused[]`); no banner is not an error (`dismissed: false`) |
 | `evaluate` | `js` | result is returned in the step output |
 | `fetch` | `url`, `method`, `headers`, `body` | same-tab `fetch`, so APIs/GraphQL land in the HAR without clicking through a UI |
 
-`find_click` is available in headless one-shots only (not in the live session
-runner). The live capture session (`hardly_capture_start` + `hardly_capture_recipe`)
+`find_click` and `dismiss_consent` run both in headless one-shots and in the live
+session runner. `find_click` also searches same-origin iframes and open shadow DOM
+(not closed roots or cross-origin frames) and hovers menu triggers to reveal hidden
+submenu links (`hover: false` disables; hops report `via: hover+click`). The live capture session (`hardly_capture_start` + `hardly_capture_recipe`)
 additionally supports `elements`, `aria`, `screenshot`, `note`, `url`, and
 selecting by `ref`/`text`/`role` from the accessibility snapshot. Use
 `hardly_capture_aria` to get Playwright accessibility YAML with `refs[]`, then
@@ -149,3 +152,7 @@ it as `redirect_loop` and retries once. Run `hardly redirect-diag <url> --yes`
 (MCP `hardly_redirect_diag`, `confirm=true`) to follow the chain by hand with and without
 cookies, name the loop shape, and probe the alternate host. Output: statuses, redacted URLs
 and cookie names only.
+
+### Per-step navigation options
+
+`goto` takes `wait_until` (`commit`, `domcontentloaded`, `load`, `networkidle`) and `timeout_ms` (default 60000, max 300000); `click` takes `wait_until` and `timeout_ms` (default 10000); `find_click` takes `hover`, `timeout_ms` and `wait_until`.
