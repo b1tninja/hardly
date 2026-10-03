@@ -446,6 +446,18 @@ def cmd_find_search(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_grids(args: argparse.Namespace) -> int:
+    from hardly.core.grids import detect_grids
+
+    result = sess.open_har(args.har)
+    if "error" in result:
+        _print(result)
+        return 1
+    conn = sess.require_conn(result["session_id"])
+    _print(detect_grids(conn, host=args.host, limit=args.limit))
+    return 0
+
+
 def cmd_recipe_plan(args: argparse.Namespace) -> int:
     from hardly.core.recipe_plan import recipe_from_story
 
@@ -1430,6 +1442,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip credentials/session map diff",
     )
     diff_p.set_defaults(func=cmd_diff)
+
+    grids_p = sub.add_parser(
+        "grids",
+        help="Detect grid frameworks, JSON envelope and paging conventions",
+    )
+    grids_p.add_argument("har")
+    grids_p.add_argument("--host")
+    grids_p.add_argument("--limit", type=int, default=20)
+    grids_p.set_defaults(func=cmd_grids)
 
     find_search_p = sub.add_parser(
         "find-search",

@@ -179,7 +179,7 @@ samples in separate projects.
 | Discovery | `summary`, `stats`, `hosts` (`preferred_host`), `endpoints`, `content`, `search`, `entry`, `compare_entries` |
 | Portal / HTML | `brief`, `story`, `forms` / `ui` (incl. common label/value layouts), `outline`, `pages`, `wall` |
 | Tokens / credentials | `credentials` (login map + jwt/hex/base64 shapes), `correlate`, `trace`, `cookies`, `secrets`, `redirects` |
-| Structure | `routes`, `around`, `tree`, `params`, `graphql`, `find_search`, `duplicates`, `slow` |
+| Structure | `routes`, `around`, `tree`, `params`, `graphql`, `grids`, `find_search`, `duplicates`, `slow` |
 | Quality | `coverage`, `issues`, `diff`, `recommend` |
 | Auth / schema | `auth`, `flow`, `schema` |
 | Export | `export_md`, `export_openapi`, `export_postman`, `export_brief`, `stub`, `recipe_plan`, `curl`, `sql` |

@@ -80,6 +80,35 @@ Values are never returned; probes take secrets only through overrides.
 operation type and name, and variable keys (values redacted when sensitive) —
 so a client can be written without schema introspection.
 
+## Data grids and data conventions
+
+`hardly_grids` (CLI `hardly grids`) reports, by name and count only (never row
+data or parameter values):
+
+- **HTML grid libraries:** DataTables, jqGrid, AG Grid, Kendo, Telerik RadGrid,
+  DevExpress, Syncfusion, ASP.NET GridView, Tabulator, Handsontable,
+  Bootstrap Table, Ext JS, PrimeFaces/PrimeNG, MUI DataGrid, Ant Design,
+  Angular Material, Vaadin, SlickGrid, Webix, w2ui, Grid.js, TanStack Table.
+  WebForms pager/sort commands (`Page$N`, `Sort$`, `Select$N`) are extracted
+  from `__doPostBack` arguments.
+- **JSON envelope conventions:** DataTables server-side
+  (`recordsTotal`/`recordsFiltered`), jqGrid (`page`/`total`/`records`/`rows`),
+  OData v2 and v4, the ASP.NET `d` wrapper, JSON:API, HAL, Spring Data pages,
+  Django REST pagination, Relay connections (`edges`/`pageInfo`), Elasticsearch
+  hits, ArcGIS REST feature sets, GeoJSON, Kendo `Data`/`Total`, and generic
+  `totalCount`/`nextPageToken` style lists.
+- **Request paging/sort/filter styles:** `draw/start/length`, jqGrid
+  `_search/nd/sidx/sord`, Kendo `take/skip`, OData `$top/$skip/$filter`,
+  `offset/limit`, `page/pageSize`, cursor/`after`/`pageToken`, Solr/Elastic
+  `rows/from`, ArcGIS `resultOffset/where/outFields`, and sort parameters.
+- **`data-*` attributes** ranked by frequency (`data-toggle`, `data-row-id`,
+  `data-field`…), which usually reveal the grid's row and column identifiers.
+
+SDK consequence: the paging style tells you how to enumerate all rows (and
+whether the server pages at all); the envelope tells you where rows and totals
+live; the grid library tells you whether the HTML is a rendered table or the
+data arrives separately as JSON.
+
 ## Data and media kinds
 
 `hardly_content` classifies every response: `json`, `jsonl`, `jsonp`, `csv`,

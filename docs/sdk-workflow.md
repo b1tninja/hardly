@@ -28,6 +28,7 @@ hardly endpoints a.har --host api.site.example   # templated routes, methods, st
 hardly content a.har --host site.example         # json / jsonl / csv / html_table / pdf / image …
 hardly schema a.har GET api.site.example /items/{id}   # inferred JSON schema (method host path_template)
 hardly graphql a.har                             # operations: type, name, variable keys
+hardly grids a.har                               # grid libraries, JSON envelopes, paging params, data-* attrs
 hardly routes a.har                              # URLs referenced in JS but never fetched
 ```
 

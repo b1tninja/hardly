@@ -94,6 +94,10 @@ Infer request/response JSON schemas for an endpoint template.
 
 List HAR pageref groups (browser page loads) with document hints.
 
+### `hardly_grids(session_id, host=None, limit=20)`
+
+Detect data-grid frameworks, JSON envelope conventions and paging params.
+
 ## HTML, forms and labels
 
 ### `hardly_brief(session_id, host=None)`

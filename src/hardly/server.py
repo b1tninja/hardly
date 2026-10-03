@@ -1081,6 +1081,28 @@ def hardly_recipe_plan(
 
 
 @mcp.tool
+def hardly_grids(
+    session_id: str,
+    host: str | None = None,
+    limit: int = 20,
+) -> str:
+    """Detect data-grid frameworks, JSON envelope conventions and paging params.
+
+    HTML grid libraries (DataTables, jqGrid, AG Grid, Kendo, RadGrid, GridView
+    pager commands…), response envelopes (OData, JSON:API, HAL, Spring/DRF
+    pagination, Relay, ArcGIS REST, GeoJSON…), request paging/sort parameter
+    styles, and common data-* attributes. Names and counts only.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.grids import detect_grids
+
+    return _ok(detect_grids(conn, host=host, limit=min(limit, 50)))
+
+
+@mcp.tool
 def hardly_find_search(
     session_id: str,
     host: str | None = None,

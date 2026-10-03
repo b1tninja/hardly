@@ -18,7 +18,7 @@ OUT = ROOT / "docs" / "tools.md"
 GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Orientation", ("modes", "mode", "capabilities", "help", "recommend")),
     ("Sessions", ("open", "reopen", "list_sessions", "close", "summary", "stats", "coverage")),
-    ("Endpoints and content", ("hosts", "endpoints", "content", "search", "entry", "compare_entries", "flow", "schema", "pages")),
+    ("Endpoints and content", ("hosts", "endpoints", "content", "search", "entry", "compare_entries", "flow", "schema", "pages", "grids")),
     ("HTML, forms and labels", ("brief", "story", "forms", "ui", "outline", "routes", "around", "tree", "params", "find_search")),
     ("Credentials and auth", ("credentials", "auth", "correlate", "trace", "cookies", "secrets", "redirects")),
     ("APIs", ("graphql",)),
