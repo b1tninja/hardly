@@ -1056,44 +1056,33 @@ def endpoint_schema(
     method: str,
     host: str,
     path_template: str,
-    limit: int = 20,
+    limit: int = 500,
 ) -> dict:
-    rows = conn.execute(
-        """
-        SELECT entry_id FROM entries
-        WHERE method = ? AND host = ? AND path_template = ?
-        LIMIT ?
-        """,
-        (method.upper(), host.lower(), path_template, limit),
-    ).fetchall()
-    req_samples = []
-    resp_samples = []
-    for r in rows:
-        for side, bucket in (("request", req_samples), ("response", resp_samples)):
-            b = conn.execute(
-                "SELECT preview_text FROM bodies WHERE entry_id = ? AND side = ?",
-                (r["entry_id"], side),
-            ).fetchone()
-            if b and b["preview_text"]:
-                try:
-                    parsed = json.loads(b["preview_text"])
-                except (json.JSONDecodeError, TypeError):
-                    continue
-                if isinstance(parsed, str):
-                    from hardly.core.json_unwrap import unwrap_double_encoded
+    """Merged request/response schema over all samples (up to ``limit``) of an endpoint."""
+    from hardly.core.schema_infer import endpoint_samples
 
-                    inner = unwrap_double_encoded(b["preview_text"])
-                    if inner is not None:
-                        parsed = inner
-                bucket.append(parsed)
-    return {
+    rows = endpoint_samples(
+        conn, method=method, host=host, path_template=path_template, limit=limit
+    )
+    req_samples = [r["request"] for r in rows if r["request"] is not None]
+    resp_samples = [r["response"] for r in rows if r["response"] is not None]
+    by_status: dict[str, list] = {}
+    for r in rows:
+        if r["response"] is not None:
+            by_status.setdefault(str(r["status"] or 0), []).append(r["response"])
+    out = {
         "method": method.upper(),
         "host": host.lower(),
         "path_template": path_template,
         "sample_count": len(rows),
+        "request_sample_count": len(req_samples),
+        "response_sample_count": len(resp_samples),
         "request_schema": infer_schema(req_samples) if req_samples else None,
         "response_schema": infer_schema(resp_samples) if resp_samples else None,
     }
+    if len(by_status) > 1:
+        out["response_schema_by_status"] = {k: infer_schema(v) for k, v in sorted(by_status.items())}
+    return out
 
 
 def run_sql(

@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from hardly.core.schema_infer import infer_schema
+from hardly.core.schema_infer import endpoint_samples, infer_schema
 
 
 def _parse_json(text: str | None) -> Any | None:
@@ -20,41 +20,52 @@ def _parse_json(text: str | None) -> Any | None:
 
 
 def _schema_to_openapi(schema: dict) -> dict:
-    """Convert our compact schema to a loose OpenAPI schema object."""
+    """Convert our inferred schema to an OpenAPI 3.0 schema object.
+
+    Carries nullable, enum, format, oneOf and sample counts (``x-sample-count``).
+    Secret-looking fields keep only their shape (``x-secret-shape``), never a value.
+    """
     t = schema.get("type", "object")
-    if t == "object" or (isinstance(t, str) and t.startswith("object")):
-        props = {}
-        for k, v in schema.get("properties", {}).items():
-            props[k] = _schema_to_openapi(v)
-        out: dict[str, Any] = {"type": "object", "properties": props}
+    out: dict[str, Any]
+    if schema.get("oneOf"):
+        variants = [_schema_to_openapi(v) for v in schema["oneOf"]]
+        out = {"oneOf": variants} if len(variants) > 1 else dict(variants[0])
+    elif t == "object":
+        props = {k: _schema_to_openapi(v) for k, v in (schema.get("properties") or {}).items()}
+        out = {"type": "object", "properties": props}
         if schema.get("required"):
-            out["required"] = schema["required"]
-        return out
-    if t == "array":
-        return {
-            "type": "array",
-            "items": _schema_to_openapi(schema.get("items", {"type": "string"})),
-        }
-    base = t.rstrip("?").split("|")[0]
-    mapping = {
-        "integer": "integer",
-        "number": "number",
-        "boolean": "boolean",
-        "string": "string",
-        "null": "string",
-    }
-    return {"type": mapping.get(base, "string")}
+            out["required"] = list(schema["required"])
+    elif t == "array":
+        items = schema.get("items") or {"type": "string"}
+        out = {"type": "array", "items": _schema_to_openapi(items) if items.get("type") != "unknown" else {}}
+    else:
+        base = str(t).rstrip("?").split("|")[0]
+        mapping = {"integer": "integer", "number": "number", "boolean": "boolean", "string": "string"}
+        if base in {"null", "unknown", "any"}:
+            out = {}
+        else:
+            out = {"type": mapping.get(base, "string")}
+        if schema.get("format"):
+            out["format"] = schema["format"]
+        if schema.get("enum"):
+            out["enum"] = list(schema["enum"])
+        if schema.get("secret_shape"):
+            out["x-secret-shape"] = schema["secret_shape"]
+    if schema.get("nullable"):
+        out["nullable"] = True
+    if schema.get("count") is not None:
+        out["x-sample-count"] = schema["count"]
+    return out
 
 
-def export_openapi(
+def build_openapi(
     conn: sqlite3.Connection,
-    output_path: str | Path,
     *,
     host: str | None = None,
     exclude_noise: bool = True,
     title: str = "HAR-derived API",
-    as_yaml: bool = False,
 ) -> dict:
+    """Build the OpenAPI document (no file I/O)."""
     clauses = ["1=1"]
     params: list[Any] = []
     if host:
@@ -86,46 +97,32 @@ def export_openapi(
         if method == "options":
             continue
 
-        # Collect body samples
-        samples_req: list[Any] = []
-        samples_resp: list[Any] = []
-        ep_clauses = ["e.method = ?", "e.host = ?", "e.path_template = ?"]
-        ep_params: list[Any] = [ep["method"], ep["host"], ep["path_template"]]
-        if exclude_noise:
-            ep_clauses.append("e.is_noise = 0")
-        rows = conn.execute(
-            f"""
-            SELECT e.entry_id, e.status FROM entries e
-            WHERE {" AND ".join(ep_clauses)}
-            LIMIT 15
-            """,
-            ep_params,
-        ).fetchall()
+        rows = endpoint_samples(
+            conn, method=ep["method"], host=ep["host"], path_template=ep["path_template"],
+            exclude_noise=exclude_noise,
+        )
+        samples_req = [r["request"] for r in rows if r["request"] is not None]
+        resp_by_status: dict[int, list[Any]] = {}
         status_codes: set[int] = set()
         for r in rows:
             status_codes.add(r["status"] or 0)
-            for side, bucket in (("request", samples_req), ("response", samples_resp)):
-                b = conn.execute(
-                    "SELECT preview_text FROM bodies WHERE entry_id = ? AND side = ?",
-                    (r["entry_id"], side),
-                ).fetchone()
-                parsed = _parse_json(b["preview_text"] if b else None)
-                if parsed is not None:
-                    bucket.append(parsed)
+            if r["response"] is not None:
+                resp_by_status.setdefault(r["status"] or 0, []).append(r["response"])
 
         parameters = _path_parameters(path_key) + _query_parameters(conn, rows)
         auth_scheme = _operation_auth_scheme(conn, rows)
         op: dict[str, Any] = {
             "summary": f"{ep['method']} {path_key}",
             "operationId": f"{method}_{ep['host'].replace('.', '_')}_{path_key.strip('/').replace('/', '_').replace('{', '').replace('}', '')}"[:80],
+            "x-sample-count": len(rows),
             "responses": {},
         }
         for code in sorted(status_codes) or [200]:
             resp_obj: dict[str, Any] = {"description": f"HTTP {code}"}
-            if samples_resp:
+            if resp_by_status.get(code):
                 resp_obj["content"] = {
                     "application/json": {
-                        "schema": _schema_to_openapi(infer_schema(samples_resp))
+                        "schema": _schema_to_openapi(infer_schema(resp_by_status[code]))
                     }
                 }
             op["responses"][str(code)] = resp_obj
@@ -146,7 +143,7 @@ def export_openapi(
 
         paths.setdefault(path_key, {})[method] = op
 
-    security_schemes, security = _security_from_auth(conn, host=host)
+    security_schemes, _security = _security_from_auth(conn, host=host)
 
     doc: dict[str, Any] = {
         "openapi": "3.0.3",
@@ -158,6 +155,21 @@ def export_openapi(
         doc["components"] = {"securitySchemes": security_schemes}
         # No global requirement: public operations (login, docs) must stay open.
         # Operations that were called with credentials carry their own `security`.
+    return doc
+
+
+def export_openapi(
+    conn: sqlite3.Connection,
+    output_path: str | Path,
+    *,
+    host: str | None = None,
+    exclude_noise: bool = True,
+    title: str = "HAR-derived API",
+    as_yaml: bool = False,
+) -> dict:
+    doc = build_openapi(conn, host=host, exclude_noise=exclude_noise, title=title)
+    paths = doc["paths"]
+    security_schemes = (doc.get("components") or {}).get("securitySchemes") or {}
 
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
