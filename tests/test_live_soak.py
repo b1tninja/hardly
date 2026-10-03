@@ -21,14 +21,19 @@ from hardly.live_targets import TARGETS, catalog_summary, list_targets, target_b
 
 
 def test_live_target_catalog_shape():
-    assert len(TARGETS) >= 5
+    assert len(TARGETS) >= 8
     ids = {t.id for t in TARGETS}
     assert "wyobiz" in ids
     assert "example" in ids
+    assert "countries-gql" in ids
+    assert "jsonplaceholder" in ids
+    assert "petstore-openapi" in ids
     rows = catalog_summary()
     assert all("url" in r and "tech" in r for r in rows)
     assert target_by_id("wyobiz") is not None
     assert list_targets(ids=["example"])[0].id == "example"
+    gql = target_by_id("countries-gql")
+    assert gql and any(s.get("op") == "fetch" for s in gql.recipe)
 
 
 def test_live_target_ids_unique():
@@ -49,7 +54,17 @@ def test_live_soak_example_and_aspnet(tmp_path, monkeypatch):
 
     from hardly.soak_live import run_soak
 
-    summary = run_soak(ids=["example", "wyobiz", "httpbin-form", "the-internet-login"])
+    summary = run_soak(
+        ids=[
+            "example",
+            "wyobiz",
+            "httpbin-form",
+            "the-internet-login",
+            "countries-gql",
+            "jsonplaceholder",
+        ],
+        fixture_dir=tmp_path / "fixtures",
+    )
     by_id = {r["id"]: r for r in summary["results"]}
     assert by_id["example"]["ok"], by_id["example"]
     assert by_id["wyobiz"]["ok"], by_id["wyobiz"]
@@ -57,6 +72,12 @@ def test_live_soak_example_and_aspnet(tmp_path, monkeypatch):
     assert by_id["httpbin-form"]["ok"], by_id["httpbin-form"]
     assert by_id["the-internet-login"]["ok"], by_id["the-internet-login"]
     assert by_id["the-internet-login"]["password_fields"] >= 1
+    assert by_id["countries-gql"]["ok"], by_id["countries-gql"]
+    assert by_id["countries-gql"]["graphql_ops"] >= 1
+    assert by_id["jsonplaceholder"]["ok"], by_id["jsonplaceholder"]
+    assert by_id["jsonplaceholder"]["json_entries"] >= 1
+    assert summary.get("fixtures")
+    assert (tmp_path / "fixtures" / "manifest.json").is_file()
 
 
 @pytest.mark.skipif(not playwright_available(), reason="playwright not installed")

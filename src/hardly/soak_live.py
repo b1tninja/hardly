@@ -15,7 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
+import re
 import tempfile
 import time
 import traceback
@@ -34,6 +34,7 @@ def _ensure_cache() -> Path:
 def run_target(target: LiveTarget) -> dict[str, Any]:
     """Capture one target headlessly and evaluate expected analysis signals."""
     from hardly.capture import capture_headless, playwright_status
+    from hardly.core.classify import summarize_content
     from hardly.core.credentials import map_credentials
     from hardly.core.graphql import detect_graphql
     from hardly.index import query as q
@@ -92,7 +93,34 @@ def run_target(target: LiveTarget) -> dict[str, Any]:
         if (e.get("webforms") or {}).get("aspnet")
     )
     cred = map_credentials(conn, har_path=sess.get_har_path(str(sid)), host=host, limit=20)
-    gql = detect_graphql(conn, host=host, limit=10)
+    # GraphQL may live on an API host; scan unscoped when asserting GraphQL.
+    gql = detect_graphql(
+        conn,
+        host=None if target.expect_graphql else host,
+        limit=20,
+    )
+    content = summarize_content(conn, host=None, exclude_noise=False, limit=40)
+    by_kind = content.get("by_kind") or {}
+    json_hits = int(
+        by_kind.get("json", 0)
+        + by_kind.get("jsonl", 0)
+        + by_kind.get("jsonp", 0)
+    )
+    # Tiny single-entry JSON captures sometimes land as mime-only.
+    if json_hits == 0:
+        json_hits = int(
+            conn.execute(
+                """
+                SELECT COUNT(*) AS n FROM entries e
+                LEFT JOIN bodies b ON b.entry_id = e.entry_id AND b.side = 'response'
+                WHERE lower(IFNULL(e.mime, '')) LIKE '%json%'
+                   OR lower(IFNULL(b.content_type, '')) LIKE '%json%'
+                   OR IFNULL(b.preview_text, '') LIKE '{%'
+                   OR IFNULL(b.preview_text, '') LIKE '[%'
+                """
+            ).fetchone()["n"]
+            or 0
+        )
 
     out["preferred_host"] = host
     out["entries"] = summary.get("entries") or summary.get("total") or out["entries_hint"]
@@ -101,6 +129,7 @@ def run_target(target: LiveTarget) -> dict[str, Any]:
     out["aspnet_pages"] = asp
     out["password_fields"] = cred.get("password_field_count")
     out["graphql_ops"] = gql.get("operation_count")
+    out["json_entries"] = json_hits
     out["brief_host"] = (captured.get("brief") or {}).get("host")
     out["label_rows"] = sum(
         int(e.get("label_count") or 0) for e in forms.get("entries") or []
@@ -124,6 +153,8 @@ def run_target(target: LiveTarget) -> dict[str, Any]:
         failures.append("expected password field")
     if target.expect_graphql and int(gql.get("operation_count") or 0) < 1:
         failures.append("expected GraphQL operations")
+    if target.expect_json and json_hits < 1:
+        failures.append("expected JSON response bodies")
 
     out["failures"] = failures
     out["ok"] = not failures
@@ -131,10 +162,90 @@ def run_target(target: LiveTarget) -> dict[str, Any]:
     return out
 
 
+def write_fixtures(results: list[dict[str, Any]], out_dir: Path) -> list[dict[str, Any]]:
+    """Write small offline HTML/JSON snippets from successful live captures.
+
+    Never writes full HARs — only short previews useful as unit-test fixtures
+    (VIEWSTATE form HTML, a GraphQL request body sample, etc.).
+    """
+    from hardly import session as sess
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written: list[dict[str, Any]] = []
+    for r in results:
+        if not r.get("ok") or not r.get("session_id"):
+            continue
+        sid = str(r["session_id"])
+        conn = sess.require_conn(sid)
+        tid = r["id"]
+        # Prefer an HTML body with VIEWSTATE / forms for portal stacks.
+        row = conn.execute(
+            """
+            SELECT e.entry_id, e.path, b.preview_text, b.content_type
+            FROM entries e
+            JOIN bodies b ON b.entry_id = e.entry_id AND b.side = 'response'
+            WHERE b.preview_text IS NOT NULL AND length(b.preview_text) > 80
+            ORDER BY
+              CASE
+                WHEN b.preview_text LIKE '%__VIEWSTATE%' THEN 0
+                WHEN lower(IFNULL(b.content_type,'')) LIKE '%json%' THEN 1
+                WHEN b.preview_text LIKE '%<form%' THEN 2
+                ELSE 3
+              END,
+              length(b.preview_text) DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        if not row:
+            continue
+        text = row["preview_text"] or ""
+        # Cap fixture size; scrub common secret-ish lengths without inventing content.
+        if len(text) > 12_000:
+            text = text[:12_000] + "\n<!-- truncated by hardly soak_live -->\n"
+        # Redact long VIEWSTATE / EVENTVALIDATION values to keep fixtures small.
+        text = re.sub(
+            r'(name="__(?:VIEWSTATE|EVENTVALIDATION|VIEWSTATEGENERATOR)"[^>]*value=")([^"]{40,})(")',
+            r'\1[REDACTED]\3',
+            text,
+            flags=re.I,
+        )
+        ext = ".json" if "json" in (row["content_type"] or "").lower() or text.lstrip()[:1] in "{[" else ".html"
+        path = out_dir / f"live_{tid}{ext}"
+        path.write_text(text, encoding="utf-8")
+        written.append(
+            {
+                "id": tid,
+                "path": str(path),
+                "entry_id": row["entry_id"],
+                "bytes": path.stat().st_size,
+            }
+        )
+        # GraphQL request sample when present.
+        gql_req = conn.execute(
+            """
+            SELECT b.preview_text FROM entries e
+            JOIN bodies b ON b.entry_id = e.entry_id AND b.side = 'request'
+            WHERE e.method = 'POST' AND b.preview_text LIKE '%"query"%'
+            ORDER BY e.entry_id DESC LIMIT 1
+            """
+        ).fetchone()
+        if gql_req and gql_req["preview_text"]:
+            gpath = out_dir / f"live_{tid}_graphql_request.json"
+            sample = gql_req["preview_text"]
+            if len(sample) > 4000:
+                sample = sample[:4000]
+            gpath.write_text(sample, encoding="utf-8")
+            written.append({"id": tid, "path": str(gpath), "kind": "graphql_request"})
+    manifest = out_dir / "manifest.json"
+    manifest.write_text(json.dumps(written, indent=2) + "\n", encoding="utf-8")
+    return written
+
+
 def run_soak(
     *,
     ids: list[str] | None = None,
     fail_soft: bool = False,
+    fixture_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """Run the live catalog (or a subset) and return a summary dict."""
     cache = _ensure_cache()
@@ -146,6 +257,9 @@ def run_soak(
         if not r.get("ok") and not (r.get("soft") and not fail_soft)
     ]
     soft_fail = [r for r in results if not r.get("ok") and r.get("soft")]
+    fixtures: list[dict[str, Any]] = []
+    if fixture_dir:
+        fixtures = write_fixtures(results, Path(fixture_dir))
     return {
         "cache": str(cache),
         "targets": len(results),
@@ -153,6 +267,7 @@ def run_soak(
         "soft_fail": len(soft_fail),
         "fail": len(hard_fail),
         "results": results,
+        "fixtures": fixtures,
         "catalog": catalog_summary() if not ids else None,
     }
 
@@ -182,6 +297,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print full JSON summary only",
     )
+    p.add_argument(
+        "--write-fixtures",
+        default="",
+        help="Write small redacted HTML/JSON snippets from successful captures",
+    )
     args = p.parse_args(argv)
 
     if args.list:
@@ -195,7 +315,11 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print("targets", [t.id for t in list_targets()], flush=True)
 
-    summary = run_soak(ids=ids, fail_soft=bool(args.fail_soft))
+    summary = run_soak(
+        ids=ids,
+        fail_soft=bool(args.fail_soft),
+        fixture_dir=args.write_fixtures or None,
+    )
     if args.json:
         print(json.dumps(summary, indent=2, default=str))
     else:

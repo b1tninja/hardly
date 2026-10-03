@@ -1048,9 +1048,32 @@ def capture_headless(
                 context.on("response", on_response)
 
             page = context.new_page()
-            page.goto(target_url, wait_until="domcontentloaded", timeout=60_000)
+            goto_error: str | None = None
+            try:
+                if target_url and target_url != "about:blank":
+                    page.goto(
+                        target_url, wait_until="domcontentloaded", timeout=60_000
+                    )
+                elif target_url == "about:blank":
+                    page.goto("about:blank")
+            except Exception as exc:  # noqa: BLE001
+                # API roots that return 204 / abort navigation still allow
+                # recipe fetch/evaluate against absolute URLs.
+                goto_error = str(exc)
+                if not recipe:
+                    raise CaptureError(goto_error) from exc
+                try:
+                    page.goto("about:blank")
+                except Exception:  # noqa: BLE001
+                    pass
             if recipe:
                 recipe_result = _run_inprocess_recipe(page, recipe)
+                if goto_error:
+                    recipe_result = {
+                        **(recipe_result or {}),
+                        "goto_error": goto_error,
+                        "goto_recovered": True,
+                    }
             settle_ms = int(max(0.0, float(wait_seconds)) * 1000)
             if settle_ms:
                 page.wait_for_timeout(min(settle_ms, 60_000))
@@ -1150,6 +1173,44 @@ def _run_inprocess_recipe(page: Any, steps: list[dict[str, Any]]) -> dict[str, A
             elif op == "press":
                 page.keyboard.press(str(raw.get("key") or "Enter"))
                 step_out["result"] = {"url": page.url}
+            elif op == "evaluate":
+                js = str(raw.get("js") or raw.get("expression") or "").strip()
+                if not js:
+                    raise CaptureError("evaluate requires js")
+                # Playwright runs the expression in-page; async functions are awaited.
+                step_out["result"] = {"value": page.evaluate(js)}
+            elif op == "fetch":
+                # Issue a same-tab fetch so the HAR records JSON/GraphQL APIs
+                # without needing a GraphiQL click. Prefer same-origin URLs.
+                dest = str(raw.get("url") or "").strip()
+                if not dest:
+                    raise CaptureError("fetch requires url")
+                method = str(raw.get("method") or "GET").upper()
+                headers = raw.get("headers") if isinstance(raw.get("headers"), dict) else {}
+                body = raw.get("body")
+                step_out["result"] = page.evaluate(
+                    """async ({url, method, headers, body}) => {
+                      const init = { method, headers: headers || {} };
+                      if (body !== null && body !== undefined) {
+                        init.body = typeof body === 'string' ? body : JSON.stringify(body);
+                      }
+                      const resp = await fetch(url, init);
+                      const text = await resp.text();
+                      return {
+                        status: resp.status,
+                        ok: resp.ok,
+                        url: resp.url,
+                        bytes: text.length,
+                      };
+                    }""",
+                    {
+                        "url": dest,
+                        "method": method,
+                        "headers": headers,
+                        "body": body,
+                    },
+                )
+                page.wait_for_timeout(200)
             elif op in {"note", "elements", "url", "aria", "screenshot"}:
                 step_out["result"] = {"skipped": op, "note": "in-process soak recipe"}
             else:

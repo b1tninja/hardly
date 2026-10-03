@@ -109,6 +109,9 @@ def _parse_graphql(
         m2 = _ANON.search(query)
         if m2:
             op_type = m2.group(1).lower()
+        elif query.lstrip().startswith(("{", "fragment")):
+            # Shorthand selection-set queries: `{ __typename }` / `{ user { id } }`
+            op_type = "query"
         elif "graphql" in ct or data.get("variables") is not None:
             op_type = "unknown"
         else:

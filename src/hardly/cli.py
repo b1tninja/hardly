@@ -744,6 +744,8 @@ def cmd_soak_live(args: argparse.Namespace) -> int:
         argv.append("--fail-soft")
     if getattr(args, "json", False):
         argv.append("--json")
+    if getattr(args, "write_fixtures", "") or "":
+        argv.extend(["--write-fixtures", args.write_fixtures])
     return soak_main(argv)
 
 
@@ -1138,6 +1140,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Print full JSON summary only",
+    )
+    soak_live_p.add_argument(
+        "--write-fixtures",
+        default="",
+        help="Write small redacted HTML/JSON snippets from successful captures",
     )
     soak_live_p.set_defaults(func=cmd_soak_live)
 
