@@ -1,4 +1,10 @@
-"""Soak-test key analysis paths against real HARs (dev only)."""
+"""Soak-test key analysis paths against HARs matched by glob (dev only).
+
+    python scripts/soak.py "~/captures/*.har" "other/**/*.har"
+    HARDLY_SOAK_GLOB="~/captures/*.har" python scripts/soak.py
+
+With no arguments it runs the synthetic fixtures in tests/fixtures.
+"""
 
 from __future__ import annotations
 
@@ -27,17 +33,29 @@ from hardly.core.tree import entry_tree
 from hardly.core.wall import detect_walls
 from hardly.index import query as q
 
-# (path, preferred_host substring that must win — guards CDN/payment seed bugs)
-HARS: list[tuple[Path, str | None]] = [
-    (Path(r"D:\code\jason\recordersdocumentindex.saccounty.gov.har"), "saccounty"),
-    (Path(r"D:\code\i-doxs\secure8.i-doxs.net2.har"), "i-doxs"),
-    (Path(r"D:\code\jason\app.jobtread.com.har"), "jobtread"),
-    (Path(r"D:\code\jason\aca-prod.accela.com.har"), "accela"),
-    (Path(r"D:\code\payhoa\app.payhoa.com.har"), "payhoa"),
-    (Path(r"D:\code\jason\assessorparcelviewer.saccounty.gov.har"), "saccounty"),
-    (Path(r"D:\code\jason\countyfusion4.kofiletech.us.har"), "kofile"),
-    (Path(r"D:\code\jason\common1.mptsweb.com.har"), "mptsweb"),
-]
+DEFAULT_GLOB = str(Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "*.har")
+
+
+def har_paths(patterns: list[str] | None = None) -> list[Path]:
+    """Expand globs (``~`` and ``**`` supported) into a sorted, de-duplicated list.
+
+    Sources, first non-empty wins: command-line arguments, then
+    ``HARDLY_SOAK_GLOB`` (patterns separated by ``os.pathsep``), then the
+    synthetic fixtures. Nothing site-specific is checked in.
+    """
+    import glob
+
+    if not patterns:
+        env = os.environ.get("HARDLY_SOAK_GLOB", "")
+        patterns = [p for p in env.split(os.pathsep) if p] or [DEFAULT_GLOB]
+    found: dict[str, Path] = {}
+    for pattern in patterns:
+        for hit in glob.glob(os.path.expanduser(pattern), recursive=True):
+            path = Path(hit)
+            if path.is_file():
+                found[str(path.resolve())] = path
+    return sorted(found.values(), key=lambda p: str(p))
+
 
 # Patterns that must never appear in soak JSON (values from fixtures / live HARs).
 _LEAK_RE = __import__("re").compile(
@@ -190,12 +208,6 @@ def run_one(path: Path, *, expect_host: str | None = None) -> dict:
             if len(sample_labels) >= 8:
                 break
         out["label_sample"] = sample_labels
-        # Placer detail HARs should expose label rows without custom scripts.
-        if expect_host in {"kofile", "mptsweb"} and label_total == 0:
-            out["ok"] = False
-            out["error"] = f"expected label rows for {expect_host}, got 0"
-            out["total_s"] = round(time.perf_counter() - t0, 2)
-            return out
 
         t1 = time.perf_counter()
         cred = map_credentials(
@@ -235,17 +247,18 @@ def run_one(path: Path, *, expect_host: str | None = None) -> dict:
     return out
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    paths = har_paths(sys.argv[1:] if argv is None else argv)
+    if not paths:
+        print("no HARs matched (pass globs, or set HARDLY_SOAK_GLOB)")
+        return 2
     print("cache", os.environ["HARDLY_CACHE_DIR"])
     print("help categories", len(tool_help()["categories"]))
     print("modes", [m["id"] for m in list_modes()["modes"]])
     results = []
-    for path, expect_host in HARS:
-        if not path.is_file():
-            print("MISSING", path)
-            continue
+    for path in paths:
         print("==>", path.name, flush=True)
-        r = run_one(path, expect_host=expect_host)
+        r = run_one(path)
         results.append(r)
         print(json.dumps({k: v for k, v in r.items() if k != "trace"}, indent=2))
         if r.get("trace"):

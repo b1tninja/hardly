@@ -50,3 +50,13 @@ def test_cli_smoke_brief(tmp_path, monkeypatch, capsys):
     assert args.func(args) == 0
     out = capsys.readouterr().out
     assert "portal.example.com" in out
+
+
+def test_tool_docs_are_current():
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[1] / "scripts" / "gen_tool_docs.py"
+    rc = subprocess.run([sys.executable, str(script), "--check"]).returncode
+    assert rc == 0, "docs/tools.md is stale: run python scripts/gen_tool_docs.py"

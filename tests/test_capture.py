@@ -20,9 +20,9 @@ from hardly.capture import (
 
 def test_default_har_path_under_cache(tmp_path, monkeypatch):
     monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
-    path = default_har_path("arcc-acclaim.sdcounty.ca.gov")
+    path = default_har_path("portal.example.com")
     assert path.parent == tmp_path / "captures"
-    assert "arcc-acclaim" in path.name
+    assert "portal" in path.name
     assert path.suffix == ".har"
 
 
@@ -92,8 +92,8 @@ def test_discover_apis_uses_nested_session(tmp_path, monkeypatch):
     monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
     # Force subprocess path so this test still covers the nested-session promotion.
     monkeypatch.setenv("HARDLY_CAPTURE_SUBPROCESS", "1")
-    from hardly import capture as cap
     import hardly.core.brief as brief_mod
+    from hardly import capture as cap
 
     def fake_start(url, har_path=None, **kwargs):
         return {"capture_id": "disc1", "status": "running", "url": url}
@@ -213,3 +213,76 @@ def test_headless_capture_example(tmp_path):
     assert har.is_file()
     assert har.stat().st_size > 100
     assert (result.get("entry_count_hint") or 0) >= 1
+
+
+def test_browser_executable_env(tmp_path, monkeypatch):
+    from hardly.capture import default_executable
+
+    exe = tmp_path / "chromium"
+    exe.write_text("")
+    monkeypatch.setenv("HARDLY_BROWSER_EXECUTABLE", str(exe))
+    assert default_executable() == str(exe)
+    monkeypatch.setenv("HARDLY_BROWSER_EXECUTABLE", str(tmp_path / "missing"))
+    assert default_executable() == ""
+
+
+def test_cli_discover_keeps_its_url():
+    from hardly.cli import build_parser
+
+    ns = build_parser().parse_args(
+        ["capture", "discover", "https://site.example/x", "--headless", "--wait", "1"]
+    )
+    assert ns.url == "https://site.example/x" and ns.capture_action == "discover"
+    ns = build_parser().parse_args(["capture", "goto", "https://site.example/y"])
+    assert ns.url == "https://site.example/y"
+
+
+def test_bare_capture_url_means_run():
+    from hardly.cli import build_parser, normalize_argv
+
+    argv = normalize_argv(["capture", "https://a.example", "-o", "x.har", "--headless"])
+    assert argv[:2] == ["capture", "run"]
+    ns = build_parser().parse_args(argv)
+    assert ns.url == "https://a.example" and ns.capture_action == "run" and ns.output == "x.har"
+    # explicit subcommands and unrelated commands are untouched
+    assert normalize_argv(["capture", "discover", "u"]) == ["capture", "discover", "u"]
+    assert normalize_argv(["capture", "list"]) == ["capture", "list"]
+    assert normalize_argv(["summary", "a.har"]) == ["summary", "a.har"]
+    assert normalize_argv(["capture", "-h"]) == ["capture", "-h"]
+
+
+def test_goto_with_retry_retries_transient_errors_only():
+    from hardly.capture import _goto_with_retry
+
+    class Page:
+        def __init__(self, errors):
+            self.errors, self.calls = list(errors), 0
+
+        def goto(self, url, **kw):
+            self.calls += 1
+            if self.errors:
+                raise RuntimeError(self.errors.pop(0))
+            return "ok"
+
+        def wait_for_timeout(self, ms):
+            pass
+
+    p = Page(["net::ERR_TOO_MANY_RETRIES at x", "Navigation to y is interrupted by another navigation to about:blank"])
+    assert _goto_with_retry(p, "https://x") == "ok" and p.calls == 3
+    denied = Page(["net::ERR_TUNNEL_CONNECTION_FAILED at x"])
+    try:
+        _goto_with_retry(denied, "https://x")
+        raise AssertionError("should have raised")
+    except RuntimeError:
+        assert denied.calls == 1  # proxy denial is permanent: no retry
+
+
+def test_landed_on_new_page():
+    from hardly.capture import _landed_on_new_page as landed
+
+    assert landed("https://www.loc.gov/", "https://catalog.loc.gov/")           # dedicated subdomain root
+    assert landed("https://a.example/", "https://a.example/search/records")
+    assert not landed("https://a.example/", "https://a.example/")               # same homepage
+    assert not landed("https://a.example/x", "https://a.example/x")
+    assert not landed("https://a.example/", "https://a.example/#top")           # root + fragment only
+    assert not landed("https://a.example/x", "chrome-error://chromewebdata/")

@@ -7,8 +7,8 @@ from hardly.core.brief import portal_brief
 from hardly.core.cookies import cookie_timeline
 from hardly.core.correlate import correlate_tokens
 from hardly.core.diff import diff_sessions
-from hardly.core.recipe_plan import recipe_from_story
 from hardly.core.issues import find_issues
+from hardly.core.recipe_plan import recipe_from_story
 from hardly.core.redirects import redirect_chains
 
 FIX = Path(__file__).parent / "fixtures" / "sample.har"
@@ -124,3 +124,44 @@ def test_portal_brief_auto_host(tmp_path, monkeypatch):
     assert result["step_count"] >= 1
     assert result.get("apex") == "example.com"
     assert isinstance(result.get("related_hosts"), list)
+
+
+def _entry(i, url, *, req_headers=None, body="", status=200):
+    return {
+        "startedDateTime": f"2026-01-01T00:00:0{i}.000Z",
+        "time": 10,
+        "request": {
+            "method": "GET", "url": url, "httpVersion": "HTTP/1.1",
+            "headers": [{"name": k, "value": v} for k, v in (req_headers or {}).items()],
+            "queryString": [], "cookies": [], "headersSize": -1, "bodySize": 0,
+        },
+        "response": {
+            "status": status, "statusText": "OK", "httpVersion": "HTTP/1.1",
+            "headers": [{"name": "Content-Type", "value": "application/json"}],
+            "cookies": [], "redirectURL": "", "headersSize": -1, "bodySize": len(body),
+            "content": {"size": len(body), "mimeType": "application/json", "text": body},
+        },
+    }
+
+
+def test_correlate_server_issued_key_replayed_in_custom_headers(tmp_path, monkeypatch):
+    import json
+
+    key, pw = "Zk9vQmFyQmF6S2V5MTIzNDU2Nzg5MA==", "p4ssW0rdValue99xyz"
+    har = {"log": {"version": "1.2", "creator": {"name": "t", "version": "1"}, "entries": [
+        _entry(1, "https://api.example.com/handshake",
+               body=json.dumps({"EncryptedKey": key, "Password": pw})),
+        _entry(2, "https://api.example.com/search",
+               req_headers={"X-Key": key, "X-Pass": pw, "Accept": "application/json"},
+               body=json.dumps({"rows": []})),
+    ]}}
+    path = tmp_path / "hs.har"
+    path.write_text(json.dumps(har))
+    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    info = sess.open_har(str(path), force=True)
+    conn = sess.require_conn(info["session_id"])
+    out = correlate_tokens(conn, har_path=sess.get_har_path(info["session_id"]))
+    hits = {(c["to_where"], c["name_hint"]) for c in out["correlations"]}
+    assert ("header", "x-key") in hits and ("header", "x-pass") in hits
+    blob = str(out)
+    assert key not in blob and pw not in blob

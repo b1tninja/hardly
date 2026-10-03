@@ -1,19 +1,149 @@
-"""Generate a minimal urllib client sketch from HAR entry ids."""
+"""Generate a urllib client sketch from HAR entry ids.
+
+Values that an earlier response issued (hidden form fields, antiforgery
+tokens, cookies echoed into headers, JSON session keys) are *carried forward*
+with extraction code instead of placeholders. Only user-supplied inputs
+(passwords, search terms) and values with no producer step stay as
+``PLACEHOLDER_*`` keyword defaults of ``run(**inputs)``.
+"""
 
 from __future__ import annotations
 
+import inspect
 import json
 import re
 import sqlite3
-import textwrap
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl, urlencode
+from urllib.parse import parse_qsl
 
-from hardly.core.redact import is_sensitive_key
+from hardly.core.ajax_delta import delta_hidden, parse_delta
+from hardly.core.grids import paging_helper_source, paging_params
+from hardly.core.pagination import find_next, iter_follow
+from hardly.core.redact import classify_value_shape, is_sensitive_key
+from hardly.core.retry import (
+    RETRY_STATUSES,
+    backoff_delay,
+    retry_after_seconds,
+)
 from hardly.core.story import portal_story
 
-_MAX_CODE_CHARS = 12_000
+_MAX_CODE_CHARS = 60_000
+
+
+class _Expr:
+    """Raw Python source embedded in generated code."""
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+
+
+class _Spread:
+    def __init__(self, code: str) -> None:
+        self.code = code
+
+
+_HELPERS = '''\
+def _hidden_fields(html: str) -> dict[str, str]:
+    """All <input type=hidden> fields (name -> value) in an HTML document."""
+    found: dict[str, str] = {}
+    if parse_delta(html):  # ASP.NET AJAX partial response
+        return delta_hidden(html)
+
+    class _P(HTMLParser):
+        def handle_starttag(self, tag, attrs):
+            if tag != "input":
+                return
+            a = {k.lower(): (v or "") for k, v in attrs}
+            if a.get("type", "").lower() == "hidden":
+                name = a.get("name") or a.get("id")
+                if name:
+                    found[name] = a.get("value", "")
+
+    _P().feed(html)
+    return found
+
+
+def _hidden(html: str, name: str) -> str:
+    fields = _hidden_fields(html)
+    assert name in fields, f"hidden field {name!r} not found in previous response"
+    return fields[name]
+
+
+def _cookie(jar: CookieJar, name: str) -> str:
+    """Current cookie value, URL-decoded (e.g. XSRF-TOKEN -> X-XSRF-TOKEN)."""
+    for c in jar:
+        if c.name == name and c.value is not None:
+            return unquote(c.value)
+    raise AssertionError(f"cookie {name!r} not set by an earlier response")
+
+
+def _unwrap_json(text: str):
+    """Parse JSON, then keep parsing while the result is itself a JSON string."""
+    value = json.loads(text)
+    while isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            break
+    return value
+
+
+def _deep_find(obj, key: str):
+    if isinstance(obj, dict):
+        if key in obj:
+            return obj[key]
+        children = list(obj.values())
+    elif isinstance(obj, list):
+        children = obj
+    else:
+        return None
+    for child in children:
+        if isinstance(child, str) and child.lstrip()[:1] in "{[":
+            try:
+                child = _unwrap_json(child)
+            except ValueError:
+                continue
+        found = _deep_find(child, key)
+        if found is not None:
+            return found
+    return None
+
+
+def _json_path(text: str, path: str) -> str:
+    """Value at dotted path ("a.b.0.c") of a possibly double-encoded JSON body.
+
+    Falls back to a deep search for the last path segment.
+    """
+    cur = _unwrap_json(text)
+    root = cur
+    for part in path.split("."):
+        if isinstance(cur, str) and cur.lstrip()[:1] in "{[":
+            cur = _unwrap_json(cur)
+        try:
+            cur = cur[int(part)] if isinstance(cur, list) else cur[part]
+        except (KeyError, IndexError, ValueError, TypeError):
+            cur = _deep_find(root, path.rsplit(".", 1)[-1])
+            break
+    assert cur is not None, f"JSON path {path!r} not found in previous response"
+    return str(cur)
+'''
+
+
+_HELPERS += "\n\n" + "\n\n".join(
+    inspect.getsource(f) for f in (parse_delta, delta_hidden)
+)
+
+
+def _runtime_source() -> str:
+    """Run-time helpers (retry/backoff, next-link following, paging) for stubs."""
+    funcs = (retry_after_seconds, backoff_delay, find_next, iter_follow)
+    return (
+        "RETRY_STATUSES = " + repr(RETRY_STATUSES) + "\n\n\n"
+        + "\n\n\n".join(inspect.getsource(f) for f in funcs)
+        + "\n\n\n" + paging_helper_source()
+    )
 
 
 def client_stub(
@@ -24,8 +154,7 @@ def client_stub(
     output_path: str | Path | None = None,
     class_name: str = "PortalClient",
 ) -> dict[str, Any]:
-    """Build a redacted urllib sketch for the given entries (or a portal story)."""
-    corr_notes: list[str] = []
+    """Build a redacted urllib client for the given entries (or a portal story)."""
     if entry_ids:
         ids = [int(x) for x in entry_ids][:30]
     else:
@@ -38,83 +167,187 @@ def client_stub(
         ][:25]
         if not ids:
             return {"error": "no entries to stub", "host": host}
+
+    hits: list[dict[str, Any]] = []
     try:
         from hardly.core.correlate import correlate_tokens
 
-        for c in (correlate_tokens(conn, host=host, limit=12).get("correlations") or []):
-            hint = c.get("name_hint") or "value"
-            corr_notes.append(
-                f"# Correlate {hint}: entry {c.get('from_entry_id')} → "
-                f"{c.get('to_entry_id')} ({c.get('to_where')})"
-            )
+        hits = list(
+            correlate_tokens(conn, host=None, limit=80).get("correlations") or []
+        )
     except Exception:  # noqa: BLE001
-        pass
+        hits = []
 
+    position = {eid: i for i, eid in enumerate(ids)}
+    wires: dict[int, list[dict[str, Any]]] = {}
+    unwired: list[str] = []
+    seen_wire: set[tuple] = set()
+    for h in hits:
+        to_id, from_id = h.get("to_entry_id"), h.get("from_entry_id")
+        if to_id not in position or from_id not in position:
+            continue
+        if position[from_id] >= position[to_id]:
+            continue
+        if h.get("to_where") == "cookie":
+            continue  # cookie jar replays Set-Cookie automatically
+        key = (to_id, h.get("to_where"), h.get("to_name_hint"))
+        if key in seen_wire:
+            continue
+        seen_wire.add(key)
+        if _source_expr(conn, h) is None or not h.get("to_name_hint"):
+            unwired.append(
+                f"# Correlate {h.get('name_hint') or 'value'}: entry {from_id} → "
+                f"{to_id} ({h.get('to_where')}) — wire by hand"
+            )
+            continue
+        wires.setdefault(int(to_id), []).append(h)
+
+    inputs: dict[str, str] = {}
     steps_code: list[str] = []
     used_hosts: set[str] = set()
-    needs_json = False
-    if corr_notes:
-        steps_code.append("\n".join(corr_notes[:12]))
     for entry_id in ids:
-        piece = _entry_step(conn, entry_id)
+        piece = _entry_step(
+            conn, entry_id, wires.get(entry_id, []), inputs,
+            prior_ids=ids[: position[entry_id]],
+        )
         if not piece:
             continue
         used_hosts.add(piece["host"])
-        needs_json = needs_json or bool(piece.get("needs_json"))
         steps_code.append(piece["code"])
 
     if not steps_code:
         return {"error": "no stubbable entries", "entry_ids": ids}
 
     base = next(iter(used_hosts)) if len(used_hosts) == 1 else "https://example.com"
-    json_import = "import json\n" if needs_json else ""
-    body = textwrap.dedent(
-        f'''\
-        """Auto-generated sketch from hardly_stub — review before use.
-
-        Secrets are placeholders. Prefer cookies via CookieJar; do not commit
-        live credentials. Generated for host hints: {", ".join(sorted(used_hosts))}.
-        """
-
-        from __future__ import annotations
-
-        {json_import}from http.cookiejar import CookieJar
-        from urllib.parse import urlencode
-        from urllib.request import HTTPCookieProcessor, Request, build_opener
-
-        BASE = {base!r}
-        UA = (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
-        )
-
-
-        class {class_name}:
-            def __init__(self) -> None:
-                self._opener = build_opener(HTTPCookieProcessor(CookieJar()))
-
-            def _fetch(
-                self,
-                method: str,
-                url: str,
-                data: bytes | None = None,
-                headers: dict[str, str] | None = None,
-            ) -> tuple[int, str]:
-                sent = {{"User-Agent": UA, "Accept": "*/*"}}
-                if headers:
-                    sent.update(headers)
-                req = Request(url, data=data, headers=sent, method=method)
-                with self._opener.open(req, timeout=60) as resp:
-                    return int(resp.status), resp.read().decode("utf-8", "replace")
-
-            def run(self) -> None:
-                # Steps follow capture order. Fill PLACEHOLDER_* values.
-        '''
+    defaults = (
+        "INPUT_DEFAULTS = {\n"
+        + "".join(f"    {k!r}: {v!r},\n" for k, v in sorted(inputs.items()))
+        + "}"
+        if inputs
+        else "INPUT_DEFAULTS: dict[str, str] = {}"
     )
-    indented = "\n".join(
-        textwrap.indent(block.rstrip() + "\n", "        ") for block in steps_code
+    head = (
+        '"""Auto-generated client from hardly_stub — review before use.\n\n'
+        "Tokens issued by earlier responses (hidden fields, antiforgery values,\n"
+        "cookies, JSON keys) are extracted at run time. User inputs are\n"
+        "PLACEHOLDER_* defaults of run(**inputs); never commit live credentials.\n"
+        f'Generated for host hints: {", ".join(sorted(used_hosts))}.\n'
+        '"""\n\n'
+        "from __future__ import annotations\n\n"
+        "import json\n"
+        "import os\n"
+        "import time\n"
+        "from html.parser import HTMLParser\n"
+        "from http.cookiejar import CookieJar\n"
+        "from urllib.error import HTTPError, URLError\n"
+        "from urllib.parse import unquote, urlencode, urljoin\n"
+        "from urllib.request import HTTPCookieProcessor, Request, build_opener\n\n"
+        f"BASE = {base!r}\n"
+        "UA = (\n"
+        '    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "\n'
+        '    "(KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"\n'
+        ")\n"
+        f"{defaults}\n\n\n"
     )
-    code = body + "\n" + indented + "\n\n\nif __name__ == \"__main__\":\n    " + class_name + "().run()\n"
+    cls = (
+        f"class {class_name}:\n"
+        "    def __init__(self) -> None:\n"
+        "        self._jar = CookieJar()\n"
+        "        self._opener = build_opener(HTTPCookieProcessor(self._jar))\n"
+        "        self.resp: dict[int, str] = {}  # entry_id -> response body\n"
+        "        self.hidden: dict[str, str] = {}  # latest AJAX-delta hidden fields\n"
+        "        self.last_headers: dict[str, str] = {}\n"
+        "        self.pagers: dict[int, tuple] = {}  # entry_id -> (fetch, config)\n"
+        "        self.followers: dict[int, object] = {}  # entry_id -> fetch(ref)\n\n"
+        "    def _fetch(\n"
+        "        self,\n"
+        "        method: str,\n"
+        "        url: str,\n"
+        "        data: bytes | None = None,\n"
+        "        headers: dict[str, str] | None = None,\n"
+        "    ) -> tuple[int, str]:\n"
+        '        """One request with retry/backoff (429/5xx, Retry-After honoured).\n\n'
+        "        Tune with HARDLY_STUB_RETRIES (default 3) and HARDLY_STUB_BACKOFF\n"
+        "        (base seconds, default 1.0). Non-idempotent requests are retried\n"
+        '        only on 429/503, which the server rejected before processing.\n'
+        '        """\n'
+        '        sent = {"User-Agent": UA, "Accept": "*/*"}\n'
+        "        if headers:\n"
+        "            sent.update(headers)\n"
+        '        retries = int(os.environ.get("HARDLY_STUB_RETRIES", "3"))\n'
+        '        base = float(os.environ.get("HARDLY_STUB_BACKOFF", "1.0"))\n'
+        '        safe = method.upper() in ("GET", "HEAD", "OPTIONS")\n'
+        "        for attempt in range(retries + 1):\n"
+        "            req = Request(url, data=data, headers=sent, method=method)\n"
+        "            try:\n"
+        "                with self._opener.open(req, timeout=60) as resp:\n"
+        "                    status, hdrs, raw = int(resp.status), resp.headers, resp.read()\n"
+        "            except HTTPError as exc:\n"
+        "                status, hdrs, raw = int(exc.code), exc.headers, exc.read()\n"
+        "            except URLError:\n"
+        "                if attempt >= retries or not safe:\n"
+        "                    raise\n"
+        "                time.sleep(backoff_delay(attempt, None, base, jitter=0.2))\n"
+        "                continue\n"
+        "            if (\n"
+        "                status in RETRY_STATUSES\n"
+        "                and attempt < retries\n"
+        "                and (safe or status in (429, 503))\n"
+        "            ):\n"
+        '                wait = retry_after_seconds(hdrs.get("Retry-After"))\n'
+        "                time.sleep(backoff_delay(attempt, wait, base, jitter=0.2))\n"
+        "                continue\n"
+        "            break\n"
+        "        self.last_headers = {k: v for k, v in hdrs.items()}\n"
+        '        text = raw.decode("utf-8", "replace")\n'
+        "        for kind, ident, _content in parse_delta(text):\n"
+        '            if kind == "error":\n'
+        '                raise AssertionError(f"async postback error {ident}")\n'
+        "        self.hidden.update(delta_hidden(text))\n"
+        "        return status, text\n\n"
+        "    def _refresh(self, form: dict) -> dict:\n"
+        '        """Swap in the newest server-issued hidden values (VIEWSTATE etc.)."""\n'
+        "        return {k: self.hidden.get(k, v) for k, v in form.items()}\n\n"
+        "    def _absorb(self, body: str) -> str:\n"
+        "        if \"<input\" in body:\n"
+        "            self.hidden.update(_hidden_fields(body))\n"
+        "        return body\n\n"
+        "    def _follow_get(self, url, query, hdrs, ref):\n"
+        '        """Fetch the first page (ref None) or the next-link/cursor page."""\n'
+        "        if ref is None:\n"
+        "            target = url + ('?' + urlencode(query) if query else '')\n"
+        '        elif ref["kind"] in ("link-header", "next-link"):\n'
+        '            target = urljoin(url, ref["value"])\n'
+        "        else:\n"
+        '            target = url + "?" + urlencode({**query, ref["param"]: ref["value"]})\n'
+        '        _, body = self._fetch("GET", target, headers=hdrs)\n'
+        "        return self.last_headers, body\n\n"
+        "    def pages(self, entry_id: int, **overrides):\n"
+        '        """Iterate page bodies of a captured paged request until empty/last."""\n'
+        "        fetch, cfg = self.pagers[entry_id]\n"
+        "        return iter_pages(fetch, **{**cfg, **overrides})\n\n"
+        "    def follow(self, entry_id: int, **kw):\n"
+        '        """Iterate page bodies by following next-link/cursor/Link header."""\n'
+        "        return iter_follow(self.followers[entry_id], **kw)\n\n"
+        "    def run(self, **inputs: str) -> None:\n"
+        "        # Steps follow capture order; pass user inputs as keywords.\n"
+        "        inp = {**INPUT_DEFAULTS, **inputs}\n"
+    )
+    blocks = ([("\n".join(unwired[:12]))] if unwired else []) + steps_code
+    indented = "\n".join(_indent(b.rstrip() + "\n", "        ") for b in blocks)
+    code = (
+        head
+        + _HELPERS
+        + "\n\n"
+        + _runtime_source()
+        + "\n\n\n"
+        + cls
+        + "\n"
+        + indented
+        + "\n\nif __name__ == \"__main__\":\n    "
+        + class_name
+        + "().run()\n"
+    )
     if len(code) > _MAX_CODE_CHARS:
         code = code[:_MAX_CODE_CHARS] + "\n# … truncated …\n"
 
@@ -129,23 +362,193 @@ def client_stub(
         "host": host or base,
         "entry_ids": ids,
         "output_path": written,
+        "inputs": sorted(inputs),
         "code": code if not written else None,
         "note": (
-            "Sketch only — verify paths/fields against hardly_story / live probes. "
-            "When output_path is set, code is written to disk and omitted here."
+            "Tokens are carried forward from earlier responses; user inputs are "
+            "run(**inputs) keywords. Verify paths/fields against hardly_story / "
+            "live probes. When output_path is set, code is written to disk and "
+            "omitted here."
         ),
     }
 
 
-def _entry_step(conn: sqlite3.Connection, entry_id: int) -> dict[str, Any] | None:
+def _indent(text: str, prefix: str) -> str:
+    return "".join(
+        (prefix + line) if line.strip() else line for line in text.splitlines(True)
+    )
+
+
+def _json_key_path(text: str | None, key: str) -> str:
+    """Dotted path to ``key`` in a (possibly truncated) JSON preview, else key."""
+    try:
+        data = json.loads(text or "")
+        while isinstance(data, str) and data.lstrip()[:1] in ("{", "["):
+            data = json.loads(data)
+    except (ValueError, TypeError):
+        return key
+
+    def walk(obj: Any, trail: list[str], depth: int) -> list[str] | None:
+        if depth > 6:
+            return None
+        if isinstance(obj, dict):
+            if key in obj and isinstance(obj[key], str):
+                return trail + [key]
+            for k, v in obj.items():
+                r = walk(v, trail + [str(k)], depth + 1)
+                if r:
+                    return r
+        elif isinstance(obj, list) and obj:
+            return walk(obj[0], trail + ["0"], depth + 1)
+        return None
+
+    found = walk(data, [], 0)
+    return ".".join(found) if found else key
+
+
+def _source_expr(conn: sqlite3.Connection, hit: dict[str, Any]) -> str | None:
+    where = hit.get("from_where")
+    name = hit.get("from_name_hint")
+    src = hit.get("from_entry_id")
+    if not name or src is None:
+        return None
+    if where == "set-cookie":
+        return f"_cookie(self._jar, {name!r})"
+    if where == "html.hidden":
+        return f"_hidden(self.resp[{src}], {name!r})"
+    if where == "response.json":
+        row = conn.execute(
+            "SELECT preview_text FROM bodies WHERE entry_id = ? AND side = 'response'",
+            (src,),
+        ).fetchone()
+        path = _json_key_path(row["preview_text"] if row else None, name)
+        return f"_json_path(self.resp[{src}], {path!r})"
+    return None
+
+
+def _auth_scheme(conn: sqlite3.Connection, entry_id: int) -> str:
+    """Authorization scheme prefix from the stored value shape (headers are redacted)."""
+    row = conn.execute(
+        "SELECT shape FROM value_shapes WHERE entry_id = ? "
+        "AND lower(name) = 'authorization' LIMIT 1",
+        (entry_id,),
+    ).fetchone()
+    shape = row["shape"] if row else None
+    if shape in ("bearer_jwt", "bearer_token"):
+        return "Bearer "
+    if shape == "basic_auth":
+        return "Basic "
+    return ""
+
+
+_TOKEN_CHARS = re.compile(r"^[A-Za-z0-9+/=_\-.~%]{16,}$")
+
+
+def _tokenish_value(val: str) -> bool:
+    """True for opaque token-looking literals that must never be inlined."""
+    if not isinstance(val, str) or not val:
+        return False
+    if classify_value_shape(val):
+        return True
+    return bool(
+        _TOKEN_CHARS.match(val)
+        and re.search(r"\d", val)
+        and re.search(r"[A-Za-z]", val)
+    )
+
+
+class _HiddenScan(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.names: set[str] = set()
+
+    def handle_starttag(self, tag, attrs):
+        if tag != "input":
+            return
+        a = {k.lower(): (v or "") for k, v in attrs}
+        if a.get("type", "").lower() == "hidden":
+            n = a.get("name") or a.get("id")
+            if n:
+                self.names.add(n)
+
+
+def _hidden_names(html: str | None) -> set[str]:
+    if not html:
+        return set()
+    p = _HiddenScan()
+    try:
+        p.feed(html)
+    except Exception:  # noqa: BLE001
+        pass
+    return p.names
+
+
+def _earlier_hidden_sources(
+    conn: sqlite3.Connection, entry_id: int, prior_ids: list[int]
+) -> dict[str, int]:
+    """field name -> most recent earlier entry whose HTML response has that hidden input."""
+    found: dict[str, int] = {}
+    for eid in prior_ids:
+        row = conn.execute(
+            "SELECT preview_text, content_type FROM bodies "
+            "WHERE entry_id = ? AND side = 'response'",
+            (eid,),
+        ).fetchone()
+        if not row or not row["preview_text"]:
+            continue
+        text = row["preview_text"]
+        # AJAX partial responses carry refreshed hidden fields (names only here).
+        for n in delta_hidden(text):
+            found[n] = eid
+        if "html" not in (row["content_type"] or "").lower() and "<input" not in text.lower():
+            continue
+        for n in _hidden_names(text):
+            found[n] = eid
+    return found
+
+
+def _render(obj: Any, level: int = 0) -> str:
+    pad = "    " * (level + 1)
+    end = "    " * level
+    if isinstance(obj, _Expr):
+        return obj.code
+    if isinstance(obj, dict):
+        if not obj:
+            return "{}"
+        rows = []
+        for k, v in obj.items():
+            if isinstance(v, _Spread):
+                rows.append(f"{pad}**{v.code},")
+            else:
+                rows.append(f"{pad}{json.dumps(k)}: {_render(v, level + 1)},")
+        return "{\n" + "\n".join(rows) + f"\n{end}}}"
+    if isinstance(obj, list):
+        if not obj:
+            return "[]"
+        rows = [f"{pad}{_render(v, level + 1)}," for v in obj]
+        return "[\n" + "\n".join(rows) + f"\n{end}]"
+    return repr(obj)
+
+
+def _input(name: str, inputs: dict[str, str]) -> _Expr:
+    key = _slug(name).lower()
+    inputs.setdefault(key, f"PLACEHOLDER_{_slug(name).upper()}")
+    return _Expr(f"inp[{key!r}]")
+
+
+def _entry_step(
+    conn: sqlite3.Connection,
+    entry_id: int,
+    wires: list[dict[str, Any]],
+    inputs: dict[str, str],
+    prior_ids: list[int] | None = None,
+) -> dict[str, Any] | None:
     row = conn.execute(
         "SELECT * FROM entries WHERE entry_id = ?", (entry_id,)
     ).fetchone()
     if not row:
         return None
-    url = f"{row['scheme']}://{row['host']}{row['path']}"
-    if row["query_raw"]:
-        url = f"{url}?{row['query_raw']}"
+    base_url = f"{row['scheme']}://{row['host']}{row['path']}"
     body_row = conn.execute(
         "SELECT preview_text, content_type FROM bodies "
         "WHERE entry_id = ? AND side = 'request'",
@@ -159,54 +562,224 @@ def _entry_step(conn: sqlite3.Connection, entry_id: int) -> dict[str, Any] | Non
             (entry_id,),
         )
     }
-    interesting = {
+    interesting: dict[str, Any] = {
         k: v
         for k, v in headers.items()
         if k.lower()
-        in {
-            "content-type",
-            "accept",
-            "x-requested-with",
-            "origin",
-            "referer",
-        }
+        in {"content-type", "accept", "x-requested-with", "origin", "referer"}
     }
+    # Authorization/API-key headers: keep the scheme, never the value.
+    for k in list(headers):
+        low = k.lower()
+        if low == "authorization":
+            shape = conn.execute(
+                "SELECT shape FROM value_shapes WHERE entry_id = ? "
+                "AND lower(name) = 'authorization' LIMIT 1",
+                (entry_id,),
+            ).fetchone()
+            basic = bool(shape) and shape["shape"] == "basic_auth"
+            interesting[k] = (
+                "Basic PLACEHOLDER_BASIC_CREDENTIALS" if basic
+                else "Bearer PLACEHOLDER_TOKEN"
+            )
+        elif low in {"api_key", "api-key", "apikey", "x-api-key", "x-auth-token", "x-access-token"}:
+            interesting[k] = f"PLACEHOLDER_{low.upper().replace('-', '_')}"
+    by_where: dict[str, list[dict[str, Any]]] = {}
+    for w in wires:
+        by_where.setdefault(w["to_where"], []).append(w)
+
     method = row["method"]
-    lines = [
-        f"# entry_id={entry_id} {method} {row['path']}",
-    ]
-    hdr_lit = json.dumps(interesting, indent=4)
-    needs_json = False
-    if method == "GET" or not (body_row and body_row["preview_text"]):
-        lines.append(f"status, body = self._fetch({method!r}, {url!r}, headers={hdr_lit})")
-        lines.append("assert status < 400, (status, body[:200])")
+    lines = [f"# entry_id={entry_id} {method} {row['path']}"]
+
+    # --- URL (query params may be carried) --------------------------------
+    query_wires = {w["to_name_hint"]: w for w in by_where.get("query", [])}
+    nxt = _next_shape(conn, entry_id) if method == "GET" else None
+    paging = (
+        paging_params(dict(parse_qsl(row["query_raw"] or "", keep_blank_values=True)))
+        if method == "GET"
+        else None
+    )
+    if (query_wires or nxt or paging) and row["query_raw"]:
+        query: dict[str, Any] = {}
+        for k, v in parse_qsl(row["query_raw"], keep_blank_values=True):
+            if k in query_wires:
+                w = query_wires[k]
+                lines.append(
+                    f"# {k}: carried from entry {w['from_entry_id']} "
+                    f"({w['from_where']})"
+                )
+                query[k] = _Expr(_source_expr(conn, w))
+            elif is_sensitive_key(k) or len(v) > 80 or _tokenish_value(v):
+                query[k] = _input(k, inputs)
+            else:
+                query[k] = v
+        lines.append(f"query = {_render(query)}")
+        lines.append(f"url = {base_url!r} + '?' + urlencode(query)")
+    elif nxt:
+        lines.append("query = {}")
+        lines.append(f"url = {base_url!r}")
     else:
-        raw = body_row["preview_text"]
+        url = base_url + (f"?{row['query_raw']}" if row["query_raw"] else "")
+        lines.append(f"url = {url!r}")
+
+    # --- headers ----------------------------------------------------------
+    hdr_wires = by_where.get("header", [])
+    hdrs: dict[str, Any] = dict(interesting)
+    lower = {k.lower(): k for k in headers}
+    for w in hdr_wires:
+        hname = lower.get(w["to_name_hint"], w["to_name_hint"])
+        lines.append(
+            f"# {hname}: carried from entry {w['from_entry_id']} ({w['from_where']})"
+        )
+        hdrs[hname] = _Expr(_source_expr(conn, w))
+    auth_scheme = _auth_scheme(conn, entry_id)
+    for w in by_where.get("authorization", []):
+        scheme = auth_scheme
+        lines.append(
+            f"# Authorization: carried from entry {w['from_entry_id']} "
+            f"({w['from_where']})"
+        )
+        hdrs["Authorization"] = _Expr(f"{scheme!r} + {_source_expr(conn, w)}")
+    lines.append(f"hdrs = {_render(hdrs)}")
+
+    # --- body -------------------------------------------------------------
+    send = ""
+    raw = body_row["preview_text"] if body_row else None
+    if method != "GET" and raw:
         ct = (body_row["content_type"] or "").lower()
         if "json" in ct or raw.lstrip().startswith(("{", "[")):
-            needs_json = True
-            lines.append(f"payload = {_json_placeholder(raw)}")
-            lines.append(
-                f"hdrs = {hdr_lit}"
-            )
+            lines.append(f"payload = {_render(_json_placeholder(raw, inputs))}")
+            for w in by_where.get("request.json", []):
+                path = _json_key_path(raw, w["to_name_hint"]).split(".")
+                target = "payload" + "".join(
+                    f"[{int(p)}]" if p.isdigit() else f"[{p!r}]" for p in path
+                )
+                lines.append(
+                    f"# {w['to_name_hint']}: carried from entry "
+                    f"{w['from_entry_id']} ({w['from_where']})"
+                )
+                lines.append(f"{target} = {_source_expr(conn, w)}")
             lines.append("hdrs = {**hdrs, 'Content-Type': 'application/json'}")
-            lines.append(
-                f"status, body = self._fetch({method!r}, {url!r}, "
-                f"data=json.dumps(payload).encode(), headers=hdrs)"
-            )
+            send = ", data=json.dumps(payload).encode()"
         else:
-            fields = _form_placeholders(raw)
-            lines.append(f"form = {json.dumps(fields, indent=4)}")
-            lines.append(
-                f"status, body = self._fetch({method!r}, {url!r}, "
-                f"data=urlencode(form).encode(), headers={hdr_lit})"
+            form_wires = {w["to_name_hint"]: w for w in by_where.get("request.form", [])}
+            hidden_srcs = sorted(
+                {
+                    w["from_entry_id"]
+                    for w in form_wires.values()
+                    if w["from_where"] == "html.hidden"
+                }
             )
-        lines.append("assert status < 400, (status, body[:200])")
+            carry_all = bool(hidden_srcs)
+            hidden_any = _earlier_hidden_sources(conn, entry_id, prior_ids or [])
+            form: dict[str, Any] = {}
+            if carry_all:
+                src = hidden_srcs[0]
+                lines.append(
+                    f"# hidden fields (VIEWSTATE, antiforgery, ...) carried "
+                    f"from entry {src}"
+                )
+                form["**"] = _Spread(
+                    f"{{**_hidden_fields(self.resp[{src}]), **self.hidden}}"
+                )
+            for name, val in parse_qsl(raw, keep_blank_values=True)[:40]:
+                if not name:
+                    continue
+                if name in form_wires:
+                    w = form_wires[name]
+                    if w["from_where"] == "html.hidden" and carry_all:
+                        continue  # already in the hidden-field spread
+                    lines.append(
+                        f"# {name}: carried from entry {w['from_entry_id']} "
+                        f"({w['from_where']})"
+                    )
+                    form[name] = _Expr(_source_expr(conn, w))
+                elif name in hidden_any:
+                    src = hidden_any[name]
+                    lines.append(
+                        f"# {name}: hidden input carried from entry {src}"
+                    )
+                    form[name] = _Expr(f"_hidden(self.resp[{src}], {name!r})")
+                elif carry_all and _ALWAYS_PLACEHOLDER.match(name):
+                    if re.match(r"^__EVENT(TARGET|ARGUMENT)$", name, re.I):
+                        form[name] = val
+                    # other token-ish hidden fields come from the spread
+                elif (
+                    is_sensitive_key(name)
+                    or _ALWAYS_PLACEHOLDER.match(name)
+                    or len(val) > 80
+                    or _tokenish_value(val)
+                ):
+                    form[name] = _input(name, inputs)
+                else:
+                    form[name] = val
+            lines.append(f"form = {_render(form)}")
+            send = ", data=urlencode(form).encode()"
+            paging = paging_params(dict(parse_qsl(raw, keep_blank_values=True)[:60]))
+            if paging:
+                lines.append(
+                    f"# paging ({paging['style']}): iterate with self.pages({entry_id})"
+                )
+                lines.append(
+                    f"self.pagers[{entry_id}] = (lambda p, _u=url, _f=dict(form), "
+                    f"_h=dict(hdrs): self._absorb(self._fetch({method!r}, _u, "
+                    f"data=urlencode({{**self._refresh(_f), **p}}).encode(), "
+                    f"headers=_h)[1]), {_pager_cfg(paging)!r})"
+                )
+
+    lines.append(
+        f"status, body = self._fetch({method!r}, url{send}, headers=hdrs)"
+    )
+    lines.append(f"self.resp[{entry_id}] = body")
+    lines.append("assert status < 400, (status, body[:200])")
+    if method == "GET" and paging:
+        lines.append(f"# paging ({paging['style']}): iterate with self.pages({entry_id})")
+        lines.append(
+            f"self.pagers[{entry_id}] = (lambda p, _u={base_url!r}, _q=dict(query), "
+            f"_h=dict(hdrs): self._absorb(self._fetch('GET', _u + '?' + "
+            f"urlencode({{**_q, **p}}), headers=_h)[1]), {_pager_cfg(paging)!r})"
+        )
+    if method == "GET" and nxt:
+        lines.append(
+            f"# pagination ({nxt['kind']} {nxt['name']}): self.follow({entry_id})"
+        )
+        lines.append(
+            f"self.followers[{entry_id}] = lambda ref, _u={base_url!r}, "
+            "_q=dict(query), _h=dict(hdrs): self._follow_get(_u, _q, _h, ref)"
+        )
     return {
         "host": f"{row['scheme']}://{row['host']}",
         "code": "\n".join(lines),
-        "needs_json": needs_json,
     }
+
+
+def _pager_cfg(paging: dict[str, Any]) -> dict[str, Any]:
+    """iter_pages keywords from a paging_params() result (names and ints only)."""
+    keys = ("page_param", "offset_param", "size_param", "first", "size", "value_fmt")
+    return {k: paging[k] for k in keys if paging.get(k) is not None}
+
+
+def _next_shape(conn: sqlite3.Connection, entry_id: int) -> dict[str, Any] | None:
+    """next-link / cursor / Link-header shape of this entry's response, if any."""
+    row = conn.execute(
+        "SELECT preview_text FROM bodies WHERE entry_id = ? AND side = 'response'",
+        (entry_id,),
+    ).fetchone()
+    hdrs = {
+        h["name"]: h["value_redacted"]
+        for h in conn.execute(
+            "SELECT name, value_redacted FROM headers WHERE entry_id = ? "
+            "AND side = 'response' AND lower(name) = 'link'",
+            (entry_id,),
+        )
+    }
+    try:
+        ref = find_next(hdrs, (row["preview_text"] if row else "") or "")
+    except Exception:  # noqa: BLE001
+        return None
+    if ref and ref["kind"] == "cursor" and not ref["param"]:
+        return None
+    return ref
 
 
 _ALWAYS_PLACEHOLDER = re.compile(
@@ -217,44 +790,26 @@ _ALWAYS_PLACEHOLDER = re.compile(
 )
 
 
-def _form_placeholders(body: str) -> dict[str, str]:
-    out: dict[str, str] = {}
-    for name, value in parse_qsl(body, keep_blank_values=True):
-        if not name:
-            continue
-        if (
-            is_sensitive_key(name)
-            or _ALWAYS_PLACEHOLDER.match(name)
-            or len(value) > 80
-        ):
-            out[name] = f"PLACEHOLDER_{_slug(name).upper()}"
-        else:
-            out[name] = value
-        if len(out) >= 40:
-            break
-    return out
-
-
-def _json_placeholder(text: str) -> str:
+def _json_placeholder(text: str, inputs: dict[str, str]) -> Any:
     try:
         data = json.loads(text)
     except (json.JSONDecodeError, TypeError):
-        return "{}"
-    return json.dumps(_redact_obj(data), indent=4)
+        return {}
+    return _redact_obj(data, inputs)
 
 
-def _redact_obj(data: Any) -> Any:
+def _redact_obj(data: Any, inputs: dict[str, str]) -> Any:
     if isinstance(data, dict):
         out = {}
         for key, value in list(data.items())[:40]:
             if is_sensitive_key(str(key)):
-                out[key] = f"PLACEHOLDER_{_slug(str(key)).upper()}"
+                out[key] = _input(str(key), inputs)
             else:
-                out[key] = _redact_obj(value)
+                out[key] = _redact_obj(value, inputs)
         return out
     if isinstance(data, list):
-        return [_redact_obj(data[0])] if data else []
-    if isinstance(data, str) and len(data) > 80:
+        return [_redact_obj(data[0], inputs)] if data else []
+    if isinstance(data, str) and (len(data) > 80 or _tokenish_value(data)):
         return "PLACEHOLDER_LONG"
     return data
 

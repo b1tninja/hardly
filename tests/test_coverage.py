@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from hardly.index import query as q
 from hardly import session as sess
+from hardly.index import query as q
 
 FIX = Path(__file__).parent / "fixtures" / "sample.har"
 

@@ -62,6 +62,15 @@ CREATE TABLE IF NOT EXISTS bodies (
 
 CREATE INDEX IF NOT EXISTS idx_bodies_entry ON bodies(entry_id);
 
+-- Signals computed at ingest on the FULL body (the stored preview is capped).
+CREATE TABLE IF NOT EXISTS body_signals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id INTEGER NOT NULL REFERENCES entries(entry_id),
+    kind TEXT NOT NULL,
+    name TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_body_signals_entry ON body_signals(entry_id, kind);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS bodies_fts USING fts5(
     entry_id UNINDEXED,
     side UNINDEXED,
@@ -76,6 +85,16 @@ CREATE TABLE IF NOT EXISTS value_shapes (
     name TEXT,
     shape TEXT NOT NULL
 );
+
+-- Shape-only summaries of stream encodings (grpc-web, protobuf, msgpack, csv, sse, websocket).
+CREATE TABLE IF NOT EXISTS stream_info (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id INTEGER NOT NULL REFERENCES entries(entry_id),
+    side TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    summary_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_stream_info_entry ON stream_info(entry_id);
 
 CREATE INDEX IF NOT EXISTS idx_shapes_entry ON value_shapes(entry_id);
 CREATE INDEX IF NOT EXISTS idx_shapes_shape ON value_shapes(shape);

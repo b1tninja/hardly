@@ -14,7 +14,7 @@ MODES: tuple[dict[str, Any], ...] = (
         "title": "Archive (existing HAR file)",
         "when": (
             "A HAR path is already available — DevTools export, prior capture, "
-            "or asspy sample. No Playwright needed."
+            "or a HAR from another tool. No Playwright needed."
         ),
         "needs_playwright": False,
         "needs_user": False,

@@ -6,8 +6,11 @@ import sqlite3
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
+from hardly.core.explain import finish
+from hardly.core.redact import redact_url
 
-def redirect_chains(
+
+def _redirect_chains(
     conn: sqlite3.Connection,
     *,
     host: str | None = None,
@@ -48,7 +51,7 @@ def redirect_chains(
                 after_id=row["entry_id"],
             )
             target = {
-                "url": abs_url,
+                "url": redact_url(abs_url),
                 "host": parsed.netloc.lower(),
                 "path": parsed.path or "/",
                 "follow_entry_id": hop_entry,
@@ -59,7 +62,7 @@ def redirect_chains(
                 "method": row["method"],
                 "status": row["status"],
                 "path": row["path"],
-                "location": location,
+                "location": redact_url(location) if location else location,
                 "target": target,
                 "started_datetime": row["started_datetime"],
             }
@@ -74,6 +77,18 @@ def redirect_chains(
             "Guest portals often 302 through disclaimer → search."
         ),
     }
+
+
+def redirect_chains(
+    conn: sqlite3.Connection,
+    *,
+    host: str | None = None,
+    limit: int = 30,
+    explain: bool = False,
+) -> dict[str, Any]:
+    """``redirect_chains``; canned prose (next) only with ``explain=True``."""
+    return finish(_redirect_chains(conn, host=host, limit=limit), explain, 'next')
+
 
 
 def _location_header(conn: sqlite3.Connection, entry_id: int) -> str | None:

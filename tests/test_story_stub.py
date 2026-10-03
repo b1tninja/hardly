@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
+from hardly import session as sess
 from hardly.core.story import portal_story
 from hardly.core.stub import client_stub
-from hardly import session as sess
 
 FIX = Path(__file__).parent / "fixtures" / "sample.har"
 
@@ -55,7 +55,19 @@ def test_client_stub_writes_file(tmp_path, monkeypatch):
     text = out.read_text(encoding="utf-8")
     assert "class ExamplePortal" in text
     assert "CookieJar" in text
+    compile(text, str(out), "exec")  # generated sketch must be valid Python
     assert "PLACEHOLDER" in text
     # ASP.NET / CSRF fields must not be hard-coded from the recording
     assert "longtoken" not in text
     assert "csrf-token-xyz-7788" not in text
+
+
+def test_client_stub_compiles_with_json_steps(tmp_path, monkeypatch):
+    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    info = sess.open_har(str(FIX), force=True)
+    conn = sess.require_conn(info["session_id"])
+    result = client_stub(conn, host=None, output_path=tmp_path / "all.py")
+    text = (tmp_path / "all.py").read_text(encoding="utf-8")
+    assert "import json" in text
+    compile(text, "all.py", "exec")
+    assert result["entry_ids"]

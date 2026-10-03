@@ -8,11 +8,30 @@ version = "0.2.30"
 description = "HAR analysis MCP/CLI — archive, headless, or interactive modes to index and query captures without burning tokens on raw files"
 readme = "README.md"
 requires-python = ">=3.10"
+keywords = ["har", "http-archive", "mcp", "fastmcp", "reverse-engineering", "api", "playwright", "sdk"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Internet :: WWW/HTTP",
+]
 dependencies = [
     "fastmcp>=2.0",
     "httpx>=0.27",
     "ijson>=3.2",
 ]
+
+[project.urls]
+Documentation = "https://github.com/b1tninja/hardly/tree/main/docs"
+Source = "https://github.com/b1tninja/hardly"
+Issues = "https://github.com/b1tninja/hardly/issues"
+Changelog = "https://github.com/b1tninja/hardly/blob/main/CHANGELOG.md"
 
 [project.scripts]
 hardly = "hardly.cli:main"
@@ -20,6 +39,7 @@ hardly = "hardly.cli:main"
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "ruff>=0.5",
 ]
 capture = [
     # 1.49+: locator.aria_snapshot; 1.59+: mode="ai" (refs for agents)
@@ -29,5 +49,32 @@ capture = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/hardly"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"docs" = "hardly/_data/docs"
+"skills" = "hardly/_data/skills"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+extend-exclude = [".venv", ".claude"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = [
+    "E501",  # long lines: docstrings and tables are intentionally wide
+    "E402",  # late imports after sys.path tweaks in scripts/tests
+    "E731",
+    "B007",
+    "B023",
+    "B904",
+    "B905",  # zip(strict=) needs 3.10+ only semantics; not worth churn
+    "UP031",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B017", "F841"]
+"scripts/*" = ["F841"]
+"src/hardly/core/*" = ["F841"]

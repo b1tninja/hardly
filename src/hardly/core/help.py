@@ -13,6 +13,7 @@ _CATEGORIES: tuple[dict[str, Any], ...] = (
         "title": "Operating modes",
         "when": "Choose archive / headless / interactive before other tools",
         "tools": [
+            "hardly_start",
             "hardly_modes",
             "hardly_mode",
             "hardly_capabilities",
@@ -52,8 +53,9 @@ _CATEGORIES: tuple[dict[str, Any], ...] = (
     {
         "id": "portal",
         "title": "HTML guest portals",
-        "when": "County / ASP.NET / search-grid UIs",
+        "when": "Server-rendered HTML portals: ASP.NET WebForms, search grids, detail pages",
         "tools": [
+            "hardly_report",
             "hardly_brief",
             "hardly_story",
             "hardly_forms",

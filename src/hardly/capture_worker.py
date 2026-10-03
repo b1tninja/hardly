@@ -75,7 +75,12 @@ def run_job(job: dict) -> int:
             "pid": __import__("os").getpid(),
             "pages": 0,
         }
+        payload["slot"] = job.get("slot")
         payload.update(extra)
+        if payload.get("error"):
+            from hardly.core.capture_errors import with_error_class
+
+            with_error_class(payload)
         payload["har_exists"] = har_path.is_file()
         payload["har_bytes"] = har_path.stat().st_size if har_path.is_file() else 0
         _persist_payload(capture_id, payload)
@@ -107,6 +112,12 @@ def run_job(job: dict) -> int:
             launch_kwargs: dict = {"headless": not headed}
             if channel:
                 launch_kwargs["channel"] = channel
+            from hardly.capture import apply_executable
+
+            exe_source = apply_executable(
+                launch_kwargs, playwright, channel=channel, headless=not headed
+            )
+            publish(browser_executable_source=exe_source)
 
             context_kwargs: dict = {
                 "record_har_path": str(har_path),
@@ -264,14 +275,36 @@ def run_job(job: dict) -> int:
                             },
                         )
                         return data if isinstance(data, dict) else {"elements": data}
+                    if op == "goto":
+                        from hardly.capture import _goto_with_retry
+
+                        _goto_with_retry(
+                            target,
+                            str(args.get("url") or ""),
+                            wait_until=str(args.get("wait_until") or "domcontentloaded"),
+                            timeout=int(args.get("timeout_ms") or 60_000),
+                        )
+                        return {"ok": True, "url": target.url, "title": target.title()}
+                    if op == "find_click":
+                        from hardly.capture import _find_click
+
+                        return _find_click(target, args)
+                    if op == "dismiss_consent":
+                        from hardly.capture import _dismiss_consent
+
+                        return _dismiss_consent(target, args)
                     if op == "click":
+                        from hardly.capture import _after_click_wait
+
                         locator = _resolve_locator(target, args)
-                        locator.click(timeout=int(args.get("timeout_ms") or 10_000))
+                        click_to = int(args.get("timeout_ms") or 10_000)
+                        locator.click(timeout=click_to)
                         target.wait_for_timeout(300)
                         return {
                             "ok": True,
                             "url": target.url,
                             "title": target.title(),
+                            **_after_click_wait(target, str(args.get("wait_until") or ""), click_to),
                         }
                     if op == "fill":
                         locator = _resolve_locator(target, args)

@@ -1,74 +1,77 @@
 # hardly
 
-HAR analysis MCP server and CLI — index, query, document, and probe APIs
-**without** loading giant HAR files into the model context.
-
-You *hardly* need the whole file.
+A generic, content-neutral CLI and MCP server for **reading and capturing HAR files** and turning
+them into what a client SDK needs: endpoints, forms and labels, data and media kinds, and how
+credentials and authentication work.
 
 ## Why
 
-Browser HAR captures are often tens of megabytes. Agents that `Read` them burn
-tokens and still miss structure. **hardly** streams a HAR into SQLite once, then
-exposes small, redacted, paginated tools over MCP (and a matching CLI).
+Browser HAR captures are often tens of megabytes. Agents that read them burn tokens and still miss
+structure. hardly streams a HAR into SQLite once, then exposes small, redacted, paginated tools over
+MCP (and a matching CLI). Bodies are truncated, secrets are redacted, lists are paginated: you
+*hardly* need the whole file.
 
-## Quick start
-
-```bash
-# 1) Have a HAR? → archive mode
-hardly modes archive --har path/to/capture.har
-hardly brief path/to/capture.har
-
-# 2) Only a URL, agent can drive? → headless
-hardly capture discover https://example.com --channel chrome
-
-# 3) Need a person (walls / MFA / complex UI)? → interactive
-hardly capture start https://example.com --channel chrome
-# ask them to click, then:
-hardly capture stop
-```
-
-MCP agents: call `hardly_modes` first, then `hardly_mode` / the entry tools above.
+hardly knows technologies (HTML forms, ASP.NET WebForms, GraphQL, OAuth/OIDC, cookies/CSRF, bot
+walls, ArcGIS REST...) and resource kinds (JSON, CSV, HTML tables, PDF, images...), not any
+particular site. Downstream SDKs keep their own recipes and vocabularies. See
+[docs/scope.md](docs/scope.md).
 
 ## Install
 
 ```bash
-cd D:\code\hardly
-python -m venv .venv
-.venv\Scripts\activate
+python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-# Optional: record HARs with Playwright
-pip install -e ".[capture]"
-playwright install chromium
+pip install -e ".[capture]" && playwright install chromium   # optional: record HARs
 ```
 
-## Cursor MCP
+Python 3.10+. Cache lives in `~/.cache/hardly/` (override with `HARDLY_CACHE_DIR`).
 
-### Local venv (recommended for headed capture)
+## 60-second quick start
+
+```bash
+hardly modes                                  # which of the three modes fits
+hardly brief path/to/capture.har              # one-screen overview of a HAR
+hardly endpoints path/to/capture.har --host api.example.com
+hardly report path/to/capture.har             # one-pass evidence index
+hardly stub path/to/capture.har --host api.example.com -o client.py
+```
+
+For agents, start with `hardly_start(goal, har_path, url)` (CLI: `hardly start --goal ...`): it
+returns an ordered plan with example calls and the current environment state.
+
+## Three modes
+
+| Mode | When | Entry |
+|------|------|-------|
+| **archive** | A HAR file already exists | `hardly_open(path)` then `hardly_brief` / `hardly_endpoints` |
+| **headless** | Only a URL; an agent can drive the page | `hardly_discover(url)` (CLI `hardly capture discover URL`) |
+| **interactive** | Bot wall, captcha, MFA, complex UI | `hardly_capture_start(headed=true)`, **ask the person**, then `hardly_capture_stop` |
+
+After any capture, continue in archive mode on the returned `session_id`. hardly never evades
+captchas or bot walls: it identifies them and tells you to stop, ask a person, or re-run elsewhere
+([docs/gate-policy.md](docs/gate-policy.md)). Details: [docs/capture.md](docs/capture.md).
+
+## MCP setup (Cursor and others)
+
+Local venv (recommended; headed capture needs a display):
 
 ```json
 {
   "mcpServers": {
     "hardly": {
-      "command": "D:\\code\\hardly\\.venv\\Scripts\\python.exe",
+      "command": "/path/to/hardly/.venv/bin/python",
       "args": ["-m", "hardly"]
     }
   }
 }
 ```
 
+On Windows use `...\\.venv\\Scripts\\python.exe`. `hardly serve` starts the same server.
+
+Docker (offline analysis only; mount your working directory):
+
 ```bash
-python -m hardly
-# or
-hardly serve
-```
-
-Headed Playwright capture needs a display. Use this entry for live capture;
-Docker is fine for offline analysis only.
-
-### Docker
-
-```powershell
-powershell -File scripts\deploy-docker.ps1
+python scripts/build_image.py       # builds hardly-mcp:latest (Windows: scripts\deploy-docker.ps1)
 ```
 
 ```json
@@ -76,168 +79,46 @@ powershell -File scripts\deploy-docker.ps1
   "mcpServers": {
     "hardly": {
       "command": "docker",
-      "args": [
-        "run", "--rm", "-i",
-        "-v", "D:/code:/workspace",
-        "-e", "HARDLY_CACHE_DIR=/workspace/.hardly-cache",
-        "-e", "HARDLY_WORKSPACE=/workspace",
-        "hardly-mcp:latest"
-      ]
+      "args": ["run", "--rm", "-i",
+               "-v", "/home/me/work:/workspace",
+               "-e", "HARDLY_CACHE_DIR=/workspace/.hardly-cache",
+               "-e", "HARDLY_WORKSPACE=/workspace",
+               "hardly-mcp:latest"]
     }
   }
 }
 ```
 
-Host paths under `D:\code\...` map to `/workspace/...`. Exports written under
-the mount land on the host.
+Host paths under the mount map to `/workspace/...`.
 
-The image carries an `io.docker.server.metadata` label for Docker MCP Toolkit
-profiles (`docker mcp profile server add …`). The direct `hardly` entry above is
-usually simpler (tools appear as `hardly_*`).
+## Agent onboarding
 
-## Three modes
+- `hardly_start`, `hardly_modes`, `hardly_capabilities` (stale MCP? restart the server),
+  `hardly_help(topic)`, `hardly_recommend("...")`.
+- MCP prompts: `analyze_har`, `discover_apis`, `capture_portal`, `document_api`, `find_auth_flow`,
+  `reverse_engineer_api`, `build_client_sdk`, `diagnose_blocked_capture`, `verify_client`.
+- MCP resources: `hardly://cheatsheet` and `hardly://docs/<name>` for the bundled docs.
+- Agent Skill: `hardly skill install [--dest DIR]` (default `~/.claude/skills/hardly`), or
+  `hardly skill print`. Source: [skills/hardly](skills/hardly/SKILL.md).
 
-Call `hardly_modes` / `hardly_mode` (or `hardly modes`) before other tools:
+## Documentation
 
-| Mode | When | Entry |
-|------|------|--------|
-| **archive** | HAR path already exists | `hardly_open` → brief / endpoints |
-| **headless** | URL only; agent can drive the page | `hardly_discover(url)` (or start headed=false + aria/recipe) |
-| **interactive** | Bot wall, CAPTCHA, MFA, complex UI | `hardly_capture_start(headed=true, channel=chrome)` → **ask the person** → stop |
+| Doc | Contents |
+|-----|----------|
+| [docs/README.md](docs/README.md) | Index of all docs |
+| [docs/scope.md](docs/scope.md) | What is in and out of scope; change checklist |
+| [docs/cheatsheet.md](docs/cheatsheet.md) | One-page quick reference |
+| [docs/concepts.md](docs/concepts.md) | Sessions, index, redaction, modes |
+| [docs/sdk-workflow.md](docs/sdk-workflow.md) | Capture to client SDK, step by step |
+| [docs/reporting.md](docs/reporting.md) | `hardly_report` evidence index |
+| [docs/catalog.md](docs/catalog.md) | Target catalog, `TargetAdapter`, batch verify |
+| [docs/capture.md](docs/capture.md) | Headless and interactive capture, recipes, env vars |
+| [docs/technologies.md](docs/technologies.md) | What is detected, per technology |
+| [docs/architecture.md](docs/architecture.md) | Data flow and design rules |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | Common first-use problems |
+| [docs/tools.md](docs/tools.md) | Generated reference for every MCP tool |
 
-```bash
-hardly modes
-hardly modes archive --har path/to/capture.har
-hardly modes headless --url https://portal.example.com
-hardly modes --goal "ask the user to search the county portal"
-```
-
-MCP prompts: `analyze_har`, `discover_apis`, `capture_portal`.
-
-### Archive — existing HAR file
-
-1. `hardly_open(path)` → `session_id`  
-2. `hardly_hosts` → `preferred_host` (apex HTML, not payment CDNs)  
-3. Portal: `hardly_brief` → forms / outline / correlate / trace  
-4. JSON API: `hardly_endpoints` → content → auth → schema  
-5. Export: stub / export_brief / export_openapi  
-
-Never `Read` the raw HAR into the model.
-
-### Headless — agent discovers APIs
-
-```bash
-hardly capture discover https://example.com --channel chrome --wait 8
-# optional: --recipe steps.json
-```
-
-MCP: `hardly_discover(url, channel="chrome")` loads headless, optional
-`recipe_json`, stops, opens a session (`session_id` + `brief`), then leaves
-you in **archive** mode for drill-down. Or loop with
-`hardly_capture_start(headed=false)` → aria → click/fill refs → stop.
-If the brief shows a wall or empty bodies, switch to **interactive**.
-
-### Interactive — person drives the browser
-
-Cursor’s IDE browser does **not** hand hardly a HAR path.
-
-1. `hardly_capture_doctor` if `capture_available` is false  
-2. `hardly_capture_start(url=…, headed=true, channel="chrome")`  
-3. **Ask the person** to use the open window (search, detail, login, …)  
-4. `hardly_capture_stop` → continue in archive mode on `session_id`  
-
-Capture backfills bodies that Playwright often leaves as `content.size == -1`.
-
-For California county portals, prefer `python -m asspy.sample <county>` (writes
-under `$ASSPY_HOME/samples/`).
-
-## MCP tools
-
-| Area | Tools |
-|------|--------|
-| Modes | `modes`, `mode`, `capabilities`, `help`, `recommend` |
-| Session | `open`, `reopen`, `list_sessions`, `close`, `summary`, `stats`, `coverage` |
-| Discovery | `summary`, `stats`, `hosts` (`preferred_host`), `endpoints`, `content`, `search`, `entry`, `compare_entries` |
-| Portal / HTML | `brief`, `story`, `forms` / `ui` (incl. Acclaim / MPTSWEB / KoFile labels), `outline`, `pages`, `wall` |
-| Tokens / credentials | `credentials` (login map + jwt/hex/base64 shapes), `correlate`, `trace`, `cookies`, `secrets`, `redirects` |
-| Structure | `routes`, `around`, `tree`, `params`, `graphql`, `duplicates`, `slow` |
-| Quality | `coverage`, `issues`, `diff`, `recommend` |
-| Auth / schema | `auth`, `flow`, `schema` |
-| Export | `export_md`, `export_openapi`, `export_postman`, `export_brief`, `stub`, `recipe_plan`, `curl`, `sql` |
-| Live probe | `probe` (`confirm=true`; secrets only via overrides) |
-| Capture | `discover`, `capture_doctor`, `capture_start` / `stop` / `list` / `status`, `capture_aria`, `capture_screenshot`, `capture_elements`, `capture_click` / `fill` / `press`, `capture_goto` / `url`, `capture_recipe`, `capture_once` |
-
-**Token rules:** bodies truncated, secrets redacted, lists paginated. Never
-returns the full HAR.
-
-## Capture CLI
-
-```bash
-pip install -e ".[capture]"
-playwright install chromium   # or HARDLY_BROWSER_CHANNEL=chrome
-hardly capture doctor
-hardly capabilities           # modes + playwright: {ready, version, hint}
-hardly modes                  # archive / headless / interactive
-
-# Headless discover (agent, no person)
-hardly capture discover https://example.com --channel chrome --wait 8
-hardly capture discover https://example.com --recipe steps.json
-
-# Interactive: browser opens; person clicks; Enter or close to stop
-hardly capture https://example.com -o D:/code/captures/example.har
-
-# Agent click loop (headless or headed)
-hardly capture start https://example.com -o out.har --channel chrome --headless
-hardly capture aria                      # YAML + refs[] (mode=ai)
-hardly capture click --ref e15
-hardly capture fill "EXAMPLE" --ref e12
-hardly capture recipe steps.json
-hardly capture stop                      # optional --trace
-
-# Timed / filtered
-hardly capture https://example.com -o out.har --wait 20 --headless
-hardly capture start https://apps.example.org/ --url-filter "**/api/**"
-```
-
-Convenience: `HARDLY_BROWSER_CHANNEL=chrome`, `--profile` for persistent cookies,
-`--omit-content` for smaller files, on-page recording banner, disk sidecars under
-`~/.cache/hardly/captures/active/` so stop works across processes. By default
-`target=_blank` / `window.open` stay in the same tab (`--allow-popups` to opt
-out); popups in the Playwright context are recorded either way.
-
-## Analysis CLI
-
-```bash
-hardly summary path/to/capture.har
-hardly hosts path/to/capture.har
-hardly endpoints path/to/capture.har --host api.example.com
-hardly content path/to/capture.har --host portal.example.com
-hardly outline path/to/capture.har 12 --format markdown
-hardly brief path/to/capture.har --host portal.example.com
-hardly story path/to/capture.har --host portal.example.com
-hardly search path/to/capture.har --host portal.example.com --kind json
-hardly correlate path/to/capture.har --host portal.example.com
-hardly trace path/to/capture.har --name __VIEWSTATE --host portal.example.com
-hardly secrets path/to/capture.har
-hardly credentials path/to/capture.har --host api.example.com
-hardly wall path/to/capture.har --host portal.example.com
-hardly stub path/to/capture.har --host portal.example.com -o client.py
-hardly recipe-plan path/to/capture.har -o steps.json
-hardly diff capture_a.har capture_b.har --host portal.example.com
-hardly export-brief path/to/capture.har -o portal.md --host portal.example.com
-hardly export-openapi path/to/capture.har -o openapi.json --host api.example.com
-hardly help-tools portal
-hardly recommend "guest portal csrf tokens"
-hardly serve
-```
-
-Cache: `~/.cache/hardly/` (override with `HARDLY_CACHE_DIR`).
-
-Maintainer soak against local HARs (edit `HARS` in the script):  
-`python scripts/soak.py` — opens each capture, runs brief/credentials/walls,
-and fails if soak JSON appears to contain secret values.
-
-## Library
+## Library use
 
 ```python
 from hardly.session import open_har, require_conn
@@ -248,56 +129,19 @@ conn = require_conn(info["session_id"])
 print(q.list_endpoints(conn, host="api.example.com"))
 ```
 
-## Features
-
-- Stream ingest (`ijson`) for large HARs  
-- Noise filter (static assets, trackers, `OPTIONS`, non-API MIME)  
-- Path templating (`/users/42` → `/users/{id}`)  
-- Preferred host (apex HTML) and related same-apex API hosts  
-- Response content kinds (json / jsonl / jsonp / csv / html_table / pdf / …)  
-- Offline HTML/XML outlines (markdown, tag tree, approx ARIA)  
-- Portal brief / story, forms/UI, token correlation & field tracing  
-- Initiator trees, param variance, GraphQL, redirects, pagerefs  
-- Duplicates, slowest requests, bot-wall detection, capture-quality issues  
-- Session reopen after MCP restart; categorized help; tool recommend  
-- OpenAPI (with `securitySchemes`), Postman, brief Markdown, urllib stubs  
-- Recipe planning with aria-ref steps after goto  
-- Three agent modes: archive (HAR file), headless discover, interactive person  
-- Optional Playwright capture: doctor, aria refs, screenshot, trace on stop  
-- Body backfill for Playwright `content.size == -1` portal XHR  
-- Gated live probe via `httpx`
-
-## Tests
+## Development and tests
 
 ```bash
-pytest
-# Live Playwright tests stay skipped unless:
-#   set HARDLY_LIVE_CAPTURE=1
+pytest -q                 # offline; HARDLY_LIVE_CAPTURE=1 enables live Playwright tests
+ruff check .
 ```
 
-### Live soak (public demos, no private HARs)
-
-Headless Chromium captures known public sites on the fly — ASP.NET VIEWSTATE,
-HTML forms, login pages, SPAs — then asserts analysis signals. HARs land under
-the cache dir and are never committed.
-
-```bash
-pip install -e ".[capture]"
-playwright install chromium
-hardly soak-live --list
-hardly soak-live --ids example,wyobiz,countries-gql,jsonplaceholder
-hardly soak-live --write-fixtures tmp/live-fixtures
-# or: python -m hardly.soak_live
-HARDLY_LIVE_CAPTURE=1 pytest tests/test_live_soak.py -q
-```
-
-Catalog: `hardly.live_targets` — ASP.NET (`wyobiz`), HTML forms, login,
-GraphQL (in-page `fetch` recipe), JSON/OpenAPI. `--write-fixtures` saves small
-redacted HTML/JSON snippets (not full HARs) for offline unit tests.
-Archive soak against local HARs remains `python scripts/soak.py`.
+Live soak against public demo sites (no private HARs): `hardly soak-live --list`, then
+`hardly soak-live`. See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md); release notes
+in [CHANGELOG.md](CHANGELOG.md).
 
 ## Security
 
-HAR files often contain live passwords and session tokens. hardly redacts by
-default, but treat captures as secrets: do not commit them, and rotate
-credentials if a HAR was shared. Capture writes full bodies into the HAR.
+HAR files often contain live passwords and session tokens. hardly redacts by default, but treat
+captures as secrets: do not commit or share them, and rotate credentials if one leaked. Use hardly
+only on targets you are authorised to access. See [SECURITY.md](SECURITY.md).

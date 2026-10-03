@@ -112,6 +112,17 @@ def classify_response(
             hints=_media_hints(kind_from_mime, mime_l, path_l, size_i),
         )
 
+    stream_kind = _stream_kind_from_mime(mime_l)
+    if stream_kind:
+        return _pack(
+            stream_kind,
+            confidence="high",
+            mime=mime_l or None,
+            path=path,
+            size=size_i,
+            hints=[f"stream:{stream_kind}", "see:hardly.core.streams.summarize_streams"],
+        )
+
     if not stripped:
         # Empty / binary omitted — fall back to mime/ext.
         if kind_from_mime:
@@ -167,6 +178,10 @@ def classify_response(
     if jsonl:
         return jsonl
 
+    wrapped = _try_double_json(stripped)
+    if wrapped:
+        return wrapped
+
     as_json = _try_json(stripped, mime_l)
     if as_json:
         return as_json
@@ -179,6 +194,18 @@ def classify_response(
     csv_hit = _try_csv(stripped, mime_l, path_l)
     if csv_hit:
         return csv_hit
+
+    from hardly.core.encodings import looks_like_sse
+
+    if looks_like_sse(stripped):
+        return _pack(
+            "sse",
+            confidence="medium",
+            mime=mime_l or None,
+            path=path,
+            size=size_i,
+            hints=["stream:sse", "sniffed_event_stream"],
+        )
 
     if kind_from_mime == "javascript" or path_l.endswith((".js", ".mjs")):
         # JSONP already handled; plain JS
@@ -279,6 +306,13 @@ def summarize_content(
             body=row["preview_text"],
             size=row["size"],
         )
+        if info["kind"] == "json":
+            from hardly.index.query import _flag_double_encoded
+
+            _flag_double_encoded(conn, row["entry_id"], info)
+        from hardly.core.streams import attach_stream_hints
+
+        attach_stream_hints(conn, row["entry_id"], info)
         k = info["kind"]
         if kind and k != kind and info.get("subtype") != kind:
             continue
@@ -339,6 +373,20 @@ def _pack(
         out["hints"] = hints[:12]
     out.update(extra)
     return out
+
+
+def _stream_kind_from_mime(mime: str) -> str | None:
+    if mime.startswith("application/grpc-web"):
+        return "grpc-web"
+    if mime.startswith("application/grpc"):
+        return "grpc"
+    if "protobuf" in mime or mime.endswith("+proto"):
+        return "protobuf"
+    if "msgpack" in mime or "messagepack" in mime:
+        return "msgpack"
+    if mime == "text/event-stream":
+        return "sse"
+    return None
 
 
 def _kind_from_mime(mime: str) -> str | None:
@@ -512,6 +560,28 @@ def _try_json(text: str, mime: str) -> dict[str, Any] | None:
         size=len(text),
         subtype=shape,
         hints=_json_shape_hints(data),
+        json_keys=_json_top_keys(data),
+    )
+
+
+def _try_double_json(text: str) -> dict[str, Any] | None:
+    """A JSON string whose content is itself a JSON object/array."""
+    if not text.startswith('"'):
+        return None
+    from hardly.core.json_unwrap import unwrap_double_encoded
+
+    data = unwrap_double_encoded(text)
+    if data is None:
+        return None
+    shape = "array" if isinstance(data, list) else "object"
+    return _pack(
+        "json",
+        confidence="high",
+        mime=None,
+        path=None,
+        size=len(text),
+        subtype=shape,
+        hints=["double_encoded_json", *_json_shape_hints(data)],
         json_keys=_json_top_keys(data),
     )
 

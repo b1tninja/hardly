@@ -2,10 +2,10 @@
 
 from pathlib import Path
 
+from hardly import session as sess
 from hardly.core.html_forms import extract_html_structure
 from hardly.core.redact import REDACTED
 from hardly.index import query as q
-from hardly import session as sess
 
 FIX = Path(__file__).parent / "fixtures" / "sample.har"
 
@@ -110,14 +110,14 @@ def test_extract_labeled_fields_mptsweb_and_kofile():
     </tr>
     <tr>
       <td align="right"><span id="fc2span" class="base">Document Type:</span></td>
-      <td>DEED</td>
+      <td>MEMO</td>
     </tr>
     </table>
     """
     out = extract_html_structure(kofile)
     labels = {row["label"]: row["value"] for row in out["labels"]}
     assert labels.get("Document Number") == "2023-0014772"
-    assert labels.get("Document Type") == "DEED"
+    assert labels.get("Document Type") == "MEMO"
     assert all(row["source"] == "td/span.base" for row in out["labels"])
 
 
@@ -138,3 +138,20 @@ def test_forms_query_on_sample_har(tmp_path, monkeypatch):
     assert detail["links"]
     assert detail["handlers"]
     assert detail["forms"][0].get("xpath")
+
+
+def test_named_token_pair_anti_forgery():
+    html = """<form action="/login.action" method="post">
+    <input type="hidden" name="struts.token.name" value="token">
+    <input type="hidden" name="token" value="ABCDEF123456">
+    <input type="text" name="username"><input type="submit" value="Go"></form>
+    <form action="/other"><input type="hidden" name="a" value="b">
+    <input type="hidden" name="b" value="c"></form>"""
+    out = extract_html_structure(html)
+    first, second = out["forms"]
+    assert first["anti_forgery"] == {
+        "scheme": "named_token",
+        "name_field": "struts.token.name",
+        "token_field": "token",
+    }
+    assert "anti_forgery" not in second  # indirection without "token" is not flagged

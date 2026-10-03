@@ -24,6 +24,25 @@ _FORBIDDEN = re.compile(
 )
 
 
+def _flag_double_encoded(conn: sqlite3.Connection, entry_id: int, content: dict) -> None:
+    """Add the double_encoded_json hint when ingest unwrapped this body."""
+    if content.get("kind") != "json":
+        return
+    hints = content.get("hints") or []
+    if "double_encoded_json" in hints:
+        return
+    try:
+        hit = conn.execute(
+            "SELECT 1 FROM body_signals WHERE entry_id = ? AND kind = 'encoding' "
+            "AND name = 'double-encoded-json' LIMIT 1",
+            (entry_id,),
+        ).fetchone()
+    except sqlite3.Error:
+        return
+    if hit:
+        content["hints"] = ["double_encoded_json", *hints][:12]
+
+
 def body_coverage(
     conn: sqlite3.Connection,
     *,
@@ -157,12 +176,16 @@ def _host_apex(host: str) -> str:
 # Tile / analytics / payment / captcha CDNs — never seed preferred_host from these.
 _CDN_SEED_RE = re.compile(
     r"(?i)(^|\.)("
-    r"arcgis|arcgisonline|googleapis|gstatic|ggpht|stripe|stripecdn|"
-    r"cloudflare|akamai|walkme|clarity\.ms|linkedin|facebook|fbcdn|"
-    r"googletagmanager|google-analytics|siteimproveanalytics|"
+    r"arcgis\w*|googleapis|gstatic|ggpht|stripe\w*|"
+    r"cloudflare\w*|akamai\w*|edgekey|edgesuite|fastly\w*|walkme|clarity\.ms|linkedin|facebook|fbcdn|"
+    r"googletagmanager|google-analytics|googlesyndication|siteimproveanalytics|"
     r"doubleclick|hotjar|segment\.|sentry\.|newrelic|nr-data|"
-    r"fontawesome|bootstrapcdn|jsdelivr|unpkg|cdnjs|"
-    r"hcaptcha|recaptcha|google\.com|gstatic\.com"
+    r"optimizely|onetrust|cookielaw|cookiebot|trustarc|truste|tiqcdn|adobedtm|demdex|omtrdc|"
+    r"qualtrics|intercom\w*|hubspot\w*|hs-\w+|fullstory|mouseflow|crazyegg|datadoghq|"
+    r"bing\.com|twimg|ytimg|youtube|vimeocdn|typekit|gravatar|"
+    r"fontawesome|bootstrapcdn|jsdelivr|unpkg|cdnjs|jquery\.com|"
+    r"hcaptcha|recaptcha|px-cloud|px-cdn|perimeterx|captcha-delivery|datadome|"
+    r"google\.com|gstatic\.com"
     r")(\.|$)"
 )
 
@@ -392,6 +415,10 @@ def search_entries(
             body=r["preview_text"],
             size=r["body_size"],
         )
+        _flag_double_encoded(conn, r["entry_id"], content)
+        from hardly.core.streams import attach_stream_hints
+
+        attach_stream_hints(conn, r["entry_id"], content)
         kind = (content.get("kind") or "").lower()
         subtype = (content.get("subtype") or "").lower()
         if want_kind and want_kind not in {kind, subtype}:
@@ -516,8 +543,7 @@ def list_forms(
     if exclude_noise:
         clauses.append("e.is_noise = 0")
     where = " AND ".join(clauses)
-    # Oversample then rank by label_count so detail pages (KoFile transAddDoc,
-    # MPTSWEB AsrMain) beat early login/search shells within the first page.
+    # Oversample then rank by label_count so detail pages (label-rich) beat early login/search shells within the first page.
     scan = min(150, max(min(limit, 100) * 5, min(limit, 100) + offset + 10))
     rows = conn.execute(
         f"""
@@ -697,10 +723,17 @@ def list_js_routes(
                     "score": route["score"],
                     "samples": [],
                     "source_entry_ids": [],
+                    "body_keys": [],
+                    "method": None,
                 },
             )
             agg["count"] += route["count"]
             agg["score"] = max(agg["score"], route["score"])
+            for k in route.get("body_keys") or []:
+                if k not in agg["body_keys"] and len(agg["body_keys"]) < 12:
+                    agg["body_keys"].append(k)
+            if route.get("method") and not agg["method"]:
+                agg["method"] = route["method"]
             if row["entry_id"] not in agg["source_entry_ids"]:
                 if len(agg["source_entry_ids"]) < 8:
                     agg["source_entry_ids"].append(row["entry_id"])
@@ -884,6 +917,10 @@ def get_entry(
         body=resp_preview,
         size=resp_size,
     )
+    _flag_double_encoded(conn, entry_id, content)
+    from hardly.core.streams import attach_stream_hints
+
+    attach_stream_hints(conn, entry_id, content)
 
     shapes: list[dict[str, Any]] = []
     try:
@@ -1019,37 +1056,33 @@ def endpoint_schema(
     method: str,
     host: str,
     path_template: str,
-    limit: int = 20,
+    limit: int = 500,
 ) -> dict:
-    rows = conn.execute(
-        """
-        SELECT entry_id FROM entries
-        WHERE method = ? AND host = ? AND path_template = ?
-        LIMIT ?
-        """,
-        (method.upper(), host.lower(), path_template, limit),
-    ).fetchall()
-    req_samples = []
-    resp_samples = []
+    """Merged request/response schema over all samples (up to ``limit``) of an endpoint."""
+    from hardly.core.schema_infer import endpoint_samples
+
+    rows = endpoint_samples(
+        conn, method=method, host=host, path_template=path_template, limit=limit
+    )
+    req_samples = [r["request"] for r in rows if r["request"] is not None]
+    resp_samples = [r["response"] for r in rows if r["response"] is not None]
+    by_status: dict[str, list] = {}
     for r in rows:
-        for side, bucket in (("request", req_samples), ("response", resp_samples)):
-            b = conn.execute(
-                "SELECT preview_text FROM bodies WHERE entry_id = ? AND side = ?",
-                (r["entry_id"], side),
-            ).fetchone()
-            if b and b["preview_text"]:
-                try:
-                    bucket.append(json.loads(b["preview_text"]))
-                except (json.JSONDecodeError, TypeError):
-                    pass
-    return {
+        if r["response"] is not None:
+            by_status.setdefault(str(r["status"] or 0), []).append(r["response"])
+    out = {
         "method": method.upper(),
         "host": host.lower(),
         "path_template": path_template,
         "sample_count": len(rows),
+        "request_sample_count": len(req_samples),
+        "response_sample_count": len(resp_samples),
         "request_schema": infer_schema(req_samples) if req_samples else None,
         "response_schema": infer_schema(resp_samples) if resp_samples else None,
     }
+    if len(by_status) > 1:
+        out["response_schema_by_status"] = {k: infer_schema(v) for k, v in sorted(by_status.items())}
+    return out
 
 
 def run_sql(
