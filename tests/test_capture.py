@@ -275,3 +275,14 @@ def test_goto_with_retry_retries_transient_errors_only():
         raise AssertionError("should have raised")
     except RuntimeError:
         assert denied.calls == 1  # proxy denial is permanent: no retry
+
+
+def test_landed_on_new_page():
+    from hardly.capture import _landed_on_new_page as landed
+
+    assert landed("https://www.loc.gov/", "https://catalog.loc.gov/")           # dedicated subdomain root
+    assert landed("https://a.example/", "https://a.example/search/records")
+    assert not landed("https://a.example/", "https://a.example/")               # same homepage
+    assert not landed("https://a.example/x", "https://a.example/x")
+    assert not landed("https://a.example/", "https://a.example/#top")           # root + fragment only
+    assert not landed("https://a.example/x", "chrome-error://chromewebdata/")

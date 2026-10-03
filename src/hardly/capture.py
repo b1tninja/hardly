@@ -1532,6 +1532,18 @@ def _page_gate_classes(page: Any, html: str) -> list[str]:
     return sorted(classes)
 
 
+def _landed_on_new_page(before: str, after: str) -> bool:
+    """A click landed somewhere new: a different host (a dedicated search
+    subdomain's root counts) or a different non-root path, not the same
+    homepage re-rendered."""
+    if not after or after == before or after.startswith("chrome-error://"):
+        return False
+    b, a = urlparse(before), urlparse(after)
+    if a.netloc.lower() != b.netloc.lower():
+        return True
+    return bool(a.path.strip("/")) and a.path != b.path
+
+
 def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
     """Follow ranked links/buttons hop by hop until a search form appears.
 
@@ -1630,7 +1642,7 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
         )
         # A one-box search counts as THE search only if the click really landed
         # on a new, non-root page (not the homepage's own header search).
-        landed = page.url != before and bool(urlparse(page.url).path.strip("/"))
+        landed = _landed_on_new_page(before, page.url)
         last_strong = landed and has_search_term(pick["text"]) and (
             not kw_lower or any(k in (pick["text"] or "").lower() for k in kw_lower)
         )

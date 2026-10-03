@@ -239,22 +239,35 @@ auth notes, and the date you verified them.
 
 ## 6. Status of the navigation hardening
 
-First live sweep (21 portal landing pages, before the fixes): 3 produced a
-result, and none of those got there by navigating. Most "reached" results were
-goal-detector false positives (site-search boxes, newsletter, translate and
-feedback forms); the rest failed on hidden elements, navigation races, or bot
-walls.
+Measured on 17 public portal landing pages (live, 2026-10-03), one visit each,
+keywords chosen per site, `max_hops=4`. "Genuine" means a person would agree the
+form reached is the lookup that was sought.
 
-Re-sweep after the goal-detector, visibility and retry fixes (partial, 11 of
-17 sites when this was written): Delaware reached its real entity-search form
-(three named fields); the Library of Congress reached its catalog search; a
-national patent and trademark office's trademark-search page was reached by link;
-the others still
-wandered after a good first hop or landed on browser error pages. The
-follow-up patch (feedback wording never a candidate, evidence floor after hop 1,
-step back from `chrome-error://`, keyword vouching by field name only) was
-prepared but not yet measured. **Re-run the sweep before trusting these
-numbers.**
+| Stage | Reached | Genuine | Notes |
+|-------|---------|---------|-------|
+| First sweep, 21 pages, before any fix | 3 usable | 0 by navigating | Most "reached" were site-search / newsletter / translate / feedback forms |
+| Goal-detector, visibility, retry fixes | 5 of 17 | 3 | Delaware entity search, data.gov dataset search, Library of Congress catalog; Houston and EPO were site-search false positives |
+| + feedback links excluded, evidence floor after hop 1 | 4 of 17 | 2 | Stopped wandering through content pages, but lost the one-box catalog search |
+| + search-term-and-keyword rule after hop 1, one-box search after deliberate navigation, link-rich "Sign in" not a login wall | 5 of 17 | 3 | Same genuine hits as before; drift gone on SF, Chicago, Portland, Austin, gov.uk |
+| + scoped site search rejected, wait for client-rendered forms, landing test fixed | re-run on the 8 affected sites | Delaware, data.gov, LOC | EPO false positive removed |
+
+What the sweep says honestly:
+
+- **True reach did not grow beyond three sites.** What changed is precision:
+  false positives were removed and the crawler no longer wanders through content
+  pages.
+- **The remaining misses are mostly outside the navigation logic.** On the
+  national trademark-search app the page loads (HTTP 200, title present) but renders
+  nothing in headless Chromium here; a university catalog failed with
+  `ERR_TOO_MANY_RETRIES`; a state business-search site errored on every hop; several
+  large municipal and transit portals return 403 to automated visits. Treat these as
+  "needs an interactive capture or a different network", not as bugs to chase.
+- **Real lookups often live in a separate application** (another host or an
+  embedded app). `find_click` can reach the link; the destination may be a
+  JavaScript app that needs its own capture.
+- Loopback tests cover each rule, but only live sweeps showed that a one-box
+  search on a dedicated subdomain is legitimate and that a header "Sign in" box
+  must not stop navigation. Keep re-running a sweep after changing the heuristics.
 
 ## 7. Open items
 
