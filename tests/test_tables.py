@@ -33,8 +33,8 @@ BOLD_HEADER = """
 
 LABEL_VALUE = """
 <table>
-<tr><th>Owner Name</th><td>Secret Person</td></tr>
-<tr><th>Parcel</th><td>000-111</td></tr>
+<tr><th>Holder Name</th><td>Secret Person</td></tr>
+<tr><th>Item</th><td>000-111</td></tr>
 <tr><th>Status</th><td>Active</td></tr>
 </table>
 """
@@ -93,7 +93,7 @@ def test_bold_first_row_headers():
 def test_label_value_table_reports_labels_only():
     (t,) = extract_tables(LABEL_VALUE)
     assert t["kind"] == "label_value"
-    assert t["labels"] == ["Owner Name", "Parcel", "Status"]
+    assert t["labels"] == ["Holder Name", "Item", "Status"]
     blob = json.dumps(t)
     assert "Secret Person" not in blob and "000-111" not in blob
 

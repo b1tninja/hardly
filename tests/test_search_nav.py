@@ -60,8 +60,8 @@ def test_search_form_reached_skips_login_and_site_search():
     )
     hit = search_form_reached(real)
     assert hit and set(hit["fields"]) == {"name", "cat"}
-    single = extract_html_structure('<form><input type="text" name="parcel_id"></form>')
-    assert search_form_reached(single)["fields"] == ["parcel_id"]  # one specific field counts
+    single = extract_html_structure('<form><input type="text" name="inventory_id"></form>')
+    assert search_form_reached(single)["fields"] == ["inventory_id"]  # one specific field counts
 
 
 def test_gateway_words_use_link_text_only():
@@ -92,7 +92,7 @@ def test_goal_detector_ignores_utility_forms_seen_on_real_sites():
     assert reached(s('<form action="/x"><input type="text" name="entity_name"><input type="submit"></form>'))
     assert reached(s('<form action="/x"><input type="text" name="q"><input type="submit"></form>'), keywords=["q"]) is not None
     # specific one-field lookup rejected when keywords are given and do not match
-    assert reached(s('<form action="/x"><input type="text" name="entity_name"><input type="submit"></form>'), keywords=["parcel"]) is None
+    assert reached(s('<form action="/x"><input type="text" name="entity_name"><input type="submit"></form>'), keywords=["inventory"]) is None
 
 
 def test_hidden_mobile_triggers_are_not_candidates():
@@ -110,9 +110,9 @@ def test_generic_keywords_cannot_vouch_for_site_search():
 
     box = extract_html_structure('<form action="/x"><input type="text" name="search"><input type="submit"></form>')
     assert reached(box, keywords=["search", "records"]) is None
-    assert reached(box, keywords=["search", "parcel"]) is None       # name does not mention parcel
-    spec = extract_html_structure('<form action="/x"><input type="text" name="parcel_search"><input type="submit"></form>')
-    assert reached(spec, keywords=["parcel"]) is not None
+    assert reached(box, keywords=["search", "inventory"]) is None       # name does not mention inventory
+    spec = extract_html_structure('<form action="/x"><input type="text" name="inventory_search"><input type="submit"></form>')
+    assert reached(spec, keywords=["inventory"]) is not None
 
 
 def test_feedback_links_are_never_candidates():
@@ -153,7 +153,7 @@ def test_site_search_with_scope_selector_is_not_a_lookup():
     assert reached(scoped) is None
     assert reached(scoped, allow_site_search=True) is not None  # deliberately navigated here
     real = extract_html_structure(
-        '<form action="/results"><select name="county"><option>a</option></select>'
+        '<form action="/results"><select name="region"><option>a</option></select>'
         '<input type="text" name="owner_name"><input type="submit"></form>'
     )
     assert reached(real) is not None

@@ -54,7 +54,7 @@ def test_personal_data_flags_use_tokens_not_substrings():
     flag = lambda n: "personal_data_like" in arcgis.flag_field(n, "esriFieldTypeString")
     for yes in ("OWNER", "owner_name", "OwnerName", "PHONE", "email", "SITUS_ADDRESS", "CREATED_USER", "last_edited_user", "FIRST_NAME", "dob"):
         assert flag(yes), yes
-    for no in ("CITY_NAME", "STATE_NAME", "NAME", "OWNER_OCC", "county_name", "ADDRESS_TYPE_ID_X" if False else "SHAPE_Length"):
+    for no in ("CITY_NAME", "STATE_NAME", "NAME", "OWNER_OCC", "region_name", "ADDRESS_TYPE_ID_X" if False else "SHAPE_Length"):
         assert not flag(no), no
 
 

@@ -55,7 +55,7 @@ def _pii_like(name: str) -> bool:
     if _PII_TOKENS & set(toks):
         return True
     return "name" in toks and bool(_PERSON_PREFIX & set(toks))
-_ID_RE = re.compile(r"(^|_)(id|key|oid|fid|guid|uuid|objectid|pin|apn|parcel)$|^(id|oid|fid)(_|$)", re.I)
+_ID_RE = re.compile(r"(^|_)(id|key|oid|fid|guid|uuid|objectid)$|^(id|oid|fid)(_|$)", re.I)
 
 _SERVICE_URL_RE = re.compile(
     r"https?://[A-Za-z0-9.\-]+(?::\d+)?/[A-Za-z0-9_\-./%%~]*?/(?:%s)(?:/\d+)?(?=[/?#\"'\s\\<>)]|$)"

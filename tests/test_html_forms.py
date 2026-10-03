@@ -110,14 +110,14 @@ def test_extract_labeled_fields_mptsweb_and_kofile():
     </tr>
     <tr>
       <td align="right"><span id="fc2span" class="base">Document Type:</span></td>
-      <td>DEED</td>
+      <td>MEMO</td>
     </tr>
     </table>
     """
     out = extract_html_structure(kofile)
     labels = {row["label"]: row["value"] for row in out["labels"]}
     assert labels.get("Document Number") == "2023-0014772"
-    assert labels.get("Document Type") == "DEED"
+    assert labels.get("Document Type") == "MEMO"
     assert all(row["source"] == "td/span.base" for row in out["labels"])
 
 

@@ -17,7 +17,7 @@ SERVICE = {
 }
 LAYER = {
     "id": 0,
-    "name": "Parcels",
+    "name": "Features",
     "type": "Feature Layer",
     "geometryType": "esriGeometryPolygon",
     "displayField": "SITUS",
@@ -29,7 +29,7 @@ LAYER = {
     "fields": [
         {"name": "OBJECTID", "alias": "OBJECTID", "type": "esriFieldTypeOID"},
         {"name": "OWNER_NAME", "alias": "Owner", "type": "esriFieldTypeString", "length": 80},
-        {"name": "APN", "alias": "APN", "type": "esriFieldTypeString", "length": 12},
+        {"name": "ITEM_KEY", "alias": "ITEM_KEY", "type": "esriFieldTypeString", "length": 12},
         {
             "name": "USE_CODE",
             "alias": "Use",
@@ -44,7 +44,7 @@ QUERY = {
     "exceededTransferLimit": True,
     "fields": [{"name": "OBJECTID"}, {"name": "OWNER_NAME"}],
     "features": [
-        {"attributes": {"OBJECTID": 1234, "OWNER_NAME": "Zelda Quimby", "APN": "123-45-678"}, "geometry": {"rings": []}}
+        {"attributes": {"OBJECTID": 1234, "OWNER_NAME": "Zelda Quimby", "ITEM_KEY": "123-45-678"}, "geometry": {"rings": []}}
     ],
 }
 TOKEN = {"error": {"code": 499, "message": "Token Required", "details": []}}
@@ -60,7 +60,7 @@ def test_parse_service_and_layer():
     assert lay["supportedQueryFormats"] == ["JSON", "geoJSON", "PBF"]
     by = {f["name"]: f for f in lay["fields"]}
     assert "personal_data_like" in by["OWNER_NAME"]["flags"]
-    assert "id_or_key" in by["OBJECTID"]["flags"] and "id_or_key" in by["APN"]["flags"]
+    assert "id_or_key" in by["OBJECTID"]["flags"] and "id_or_key" in by["ITEM_KEY"]["flags"]
     assert by["USE_CODE"]["domain"]["coded_value_count"] == 1
     assert lay["personal_data_fields"] == ["OWNER_NAME"]
 
@@ -76,7 +76,7 @@ def test_summarise_query_masks_values():
     text = json.dumps(out)
     assert out["first_row_shapes"]["OBJECTID"] == "9999"
     assert out["first_row_shapes"]["OWNER_NAME"] == "aaaaa aaaaaa"
-    assert out["first_row_shapes"]["APN"] == "999-99-999"
+    assert out["first_row_shapes"]["ITEM_KEY"] == "999-99-999"
     assert out["geometry_present"] and out["exceededTransferLimit"] and "paging_note" in out
     assert "Zelda" not in text and "Quimby" not in text and "1234" not in text and "123-45" not in text
     assert "personal_data_like" in out["flags"]["OWNER_NAME"]
@@ -99,7 +99,7 @@ def test_find_service_urls_experience_builder():
     cfg = json.dumps(
         {
             "dataSources": {
-                "ds1": {"type": "FEATURE_LAYER", "url": "https://gis.example.org/arcgis/rest/services/Land/Parcels/FeatureServer/0", "itemId": item},
+                "ds1": {"type": "FEATURE_LAYER", "url": "https://gis.example.org/arcgis/rest/services/Land/Features/FeatureServer/0", "itemId": item},
                 "ds2": {"type": "WEB_MAP", "itemId": "b" * 32, "portalUrl": "https://www.arcgis.com"},
             },
             "widgets": {},
@@ -107,7 +107,7 @@ def test_find_service_urls_experience_builder():
     ).replace("/", "\\/")
     r = arcgis.find_service_urls(cfg)
     assert r["kind"] == "experience_builder_config"
-    assert r["urls"] == ["https://gis.example.org/arcgis/rest/services/Land/Parcels/FeatureServer/0"]
+    assert r["urls"] == ["https://gis.example.org/arcgis/rest/services/Land/Features/FeatureServer/0"]
     assert item in r["item_ids"] and "b" * 32 in r["item_ids"]
     assert "sharing/rest/content/items/<item_id>/data?f=json" in r["item_data_url_template"]
 
@@ -130,7 +130,7 @@ def _session():
     conn.row_factory = sqlite3.Row
     init_db(conn)
     ins = "INSERT INTO entries(entry_id,method,host,path,path_template,query_json,status) VALUES(?,?,?,?,?,?,?)"
-    base = "/arcgis/rest/services/Land/Parcels/MapServer"
+    base = "/arcgis/rest/services/Land/Features/MapServer"
     conn.execute(ins, (1, "GET", "gis.example.org", base, base, json.dumps({"f": "json"}), 200))
     conn.execute(ins, (2, "GET", "gis.example.org", base + "/0/query", base, json.dumps({"where": "1=1", "outFields": "*", "resultOffset": "0", "resultRecordCount": "100", "f": "json"}), 200))
     conn.execute(ins, (3, "GET", "other.example.org", "/index.html", "/index.html", None, 200))
@@ -143,7 +143,7 @@ def test_summarize_session():
     out = arcgis.summarize_session(_session())
     assert out["service_count"] == 1
     s = out["services"][0]
-    assert s["service_root"] == "gis.example.org/arcgis/rest/services/Land/Parcels/MapServer"
+    assert s["service_root"] == "gis.example.org/arcgis/rest/services/Land/Features/MapServer"
     assert s["layers_queried"] == [0] and s["layer_ids_seen"] == [0]
     assert "where" in s["param_names"] and "resultOffset" in s["paging_evidence"]
     assert s["exceededTransferLimit_seen"] is True

@@ -191,7 +191,7 @@ def test_cms_and_site_builders(run):
 
 def test_gis_stacks(run):
     r = run([
-        _entry("https://gis.test/arcgis/rest/services/Parcels/FeatureServer/0/query?where=1%3D1&f=json",
+        _entry("https://gis.test/arcgis/rest/services/Features/FeatureServer/0/query?where=1%3D1&f=json",
                mime="application/json", body='{"objectIdFieldName":"OBJECTID","spatialReference":{}}'),
         _entry("https://exp.test/", body='<script src="https://experience.arcgis.com/x.js"></script>'),
         _entry("https://l.test/", body='<div class="leaflet-container"><div class="leaflet-pane"></div></div>'),

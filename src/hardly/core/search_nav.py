@@ -1,7 +1,7 @@
 """Rank links in captured HTML that likely lead to a search / lookup UI.
 
 Content-neutral: built-in signals are generic (search, lookup, find, viewer...).
-Domain vocabulary (e.g. "parcel", "docket", "inventory") comes from the caller
+Domain vocabulary (e.g. "docket", "inventory", "catalog") comes from the caller
 via ``keywords`` so no site category is baked into hardly.
 """
 

@@ -96,9 +96,9 @@ _PORTAL_HEADER_LOGIN = (
 # Client-rendered lookup: the form only exists after a script runs.
 _PORTAL_SPA = """<!doctype html><html><body><div id="app">Loading…</div>
 <script>setTimeout(function(){document.getElementById('app').innerHTML=
-'<form action="/portal/results"><input type="text" name="owner_name"><input type="text" name="parcel_number">'+
+'<form action="/portal/results"><input type="text" name="holder_name"><input type="text" name="item_number">'+
 '<input type="submit" value="Go"></form>';},700);</script></body></html>"""
-_PORTAL_SPA_HOME = """<!doctype html><html><body><a href="/portal/spa">Parcel search</a></body></html>"""
+_PORTAL_SPA_HOME = """<!doctype html><html><body><a href="/portal/spa">Inventory search</a></body></html>"""
 
 # --- /nav2/: iframe, shadow DOM, hover menus, consent dialogs, slow loads -----
 _NAV2_LOOKUP = """<!doctype html><html><body><h1>Widget lookup</h1>
