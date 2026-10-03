@@ -76,6 +76,7 @@ include = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 markers = [
     "browser: needs a real Playwright browser (run by the nightly workflow, not the PR matrix)",
     "live: touches the public internet (opt-in via HARDLY_LIVE_CAPTURE=1)",
