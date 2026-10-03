@@ -275,14 +275,36 @@ def run_job(job: dict) -> int:
                             },
                         )
                         return data if isinstance(data, dict) else {"elements": data}
+                    if op == "goto":
+                        from hardly.capture import _goto_with_retry
+
+                        _goto_with_retry(
+                            target,
+                            str(args.get("url") or ""),
+                            wait_until=str(args.get("wait_until") or "domcontentloaded"),
+                            timeout=int(args.get("timeout_ms") or 60_000),
+                        )
+                        return {"ok": True, "url": target.url, "title": target.title()}
+                    if op == "find_click":
+                        from hardly.capture import _find_click
+
+                        return _find_click(target, args)
+                    if op == "dismiss_consent":
+                        from hardly.capture import _dismiss_consent
+
+                        return _dismiss_consent(target, args)
                     if op == "click":
+                        from hardly.capture import _after_click_wait
+
                         locator = _resolve_locator(target, args)
-                        locator.click(timeout=int(args.get("timeout_ms") or 10_000))
+                        click_to = int(args.get("timeout_ms") or 10_000)
+                        locator.click(timeout=click_to)
                         target.wait_for_timeout(300)
                         return {
                             "ok": True,
                             "url": target.url,
                             "title": target.title(),
+                            **_after_click_wait(target, str(args.get("wait_until") or ""), click_to),
                         }
                     if op == "fill":
                         locator = _resolve_locator(target, args)
