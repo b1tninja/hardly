@@ -195,7 +195,17 @@ def detect_grids(
         }
         for style, names in sorted(param_hits.items(), key=lambda kv: -sum(kv[1].values()))
     ][:limit]
+    from hardly.core.export_links import export_links
+
+    exports = export_links(conn, host)
+    result_exports: dict[str, Any] = {"export_links": exports}
+    if exports:
+        result_exports["export_note"] = (
+            "Built-in exports return the whole result set in one response: "
+            "prefer them over paging the grid."
+        )
     return {
+        **result_exports,
         "host": host,
         "entries_scanned": len(rows),
         "html_grids": pack(html_hits),
