@@ -103,7 +103,7 @@ expecting a HAR path.
 - Prefer **live soak** over private HAR fixtures when checking stacks:
   `hardly soak-live --list`, then `hardly soak-live` (or
   `python -m hardly.soak_live`). Catalog in `hardly.live_targets` — ASP.NET
-  VIEWSTATE (wyobiz), HTML forms, login password fields, SPA, GraphQL
+  VIEWSTATE (local-webforms), HTML forms, login password fields, SPA, GraphQL
   (`countries-gql` recipe `fetch`), JSON/OpenAPI. Optional
   `--write-fixtures DIR` for small redacted snippets (not full HARs).
   Headless one-shots use in-process `capture_headless` (set

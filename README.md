@@ -306,13 +306,13 @@ the cache dir and are never committed.
 pip install -e ".[capture]"
 playwright install chromium
 hardly soak-live --list
-hardly soak-live --ids example,wyobiz,countries-gql,jsonplaceholder
+hardly soak-live --ids example,local-webforms,countries-gql,jsonplaceholder
 hardly soak-live --write-fixtures tmp/live-fixtures
 # or: python -m hardly.soak_live
 HARDLY_LIVE_CAPTURE=1 pytest tests/test_live_soak.py -q
 ```
 
-Catalog: `hardly.live_targets` — ASP.NET (`wyobiz`), HTML forms, login,
+Catalog: `hardly.live_targets` — ASP.NET (`local-webforms`), HTML forms, login,
 GraphQL (in-page `fetch` recipe), JSON/OpenAPI. `--write-fixtures` saves small
 redacted HTML/JSON snippets (not full HARs) for offline unit tests.
 Archive soak against local HARs remains `python scripts/soak.py`.

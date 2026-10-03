@@ -23,14 +23,14 @@ from hardly.live_targets import TARGETS, catalog_summary, list_targets, target_b
 def test_live_target_catalog_shape():
     assert len(TARGETS) >= 8
     ids = {t.id for t in TARGETS}
-    assert "wyobiz" in ids
+    assert "local-webforms" in ids
     assert "example" in ids
     assert "countries-gql" in ids
     assert "jsonplaceholder" in ids
     assert "petstore-openapi" in ids
     rows = catalog_summary()
     assert all("url" in r and "tech" in r for r in rows)
-    assert target_by_id("wyobiz") is not None
+    assert target_by_id("local-webforms") is not None
     assert list_targets(ids=["example"])[0].id == "example"
     gql = target_by_id("countries-gql")
     assert gql and any(s.get("op") == "fetch" for s in gql.recipe)
@@ -57,7 +57,7 @@ def test_live_soak_example_and_aspnet(tmp_path, monkeypatch):
     summary = run_soak(
         ids=[
             "example",
-            "wyobiz",
+            "local-webforms",
             "httpbin-form",
             "the-internet-login",
             "countries-gql",
@@ -67,8 +67,8 @@ def test_live_soak_example_and_aspnet(tmp_path, monkeypatch):
     )
     by_id = {r["id"]: r for r in summary["results"]}
     assert by_id["example"]["ok"], by_id["example"]
-    assert by_id["wyobiz"]["ok"], by_id["wyobiz"]
-    assert by_id["wyobiz"]["aspnet_pages"] >= 1
+    assert by_id["local-webforms"]["ok"], by_id["local-webforms"]
+    assert by_id["local-webforms"]["aspnet_pages"] >= 1
     assert by_id["httpbin-form"]["ok"], by_id["httpbin-form"]
     assert by_id["the-internet-login"]["ok"], by_id["the-internet-login"]
     assert by_id["the-internet-login"]["password_fields"] >= 1
@@ -103,3 +103,20 @@ def test_capture_headless_writes_har(tmp_path, monkeypatch):
     assert har.is_file()
     assert har.stat().st_size > 100
     assert (out.get("entry_count_hint") or 0) >= 1
+
+
+@pytest.mark.skipif(not playwright_available(), reason="playwright not installed")
+def test_local_synthetic_soak(tmp_path, monkeypatch):
+    """Loopback targets need a browser but no network."""
+    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    if not playwright_status().get("ready"):
+        pytest.skip("Playwright browser not ready")
+
+    from hardly.soak_live import run_soak
+
+    summary = run_soak(ids=["local-webforms", "local-token-login"])
+    by_id = {r["id"]: r for r in summary["results"]}
+    assert by_id["local-webforms"]["ok"], by_id["local-webforms"]
+    assert by_id["local-webforms"]["aspnet_pages"] >= 1
+    assert by_id["local-token-login"]["ok"], by_id["local-token-login"]
+    assert by_id["local-token-login"]["password_fields"] >= 1
