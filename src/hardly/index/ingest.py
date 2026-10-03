@@ -168,6 +168,14 @@ def _store_body(
         preview = redacted["text"]
         sha = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
         size = redacted["size"] or size
+    if text is not None and side == "response" and mime and "html" in str(mime).lower() and len(text) > HTML_PREVIEW_CHARS:
+        from hardly.core.grids import html_grid_signals
+
+        for name in html_grid_signals(text):
+            conn.execute(
+                "INSERT INTO body_signals (entry_id, kind, name) VALUES (?, 'grid', ?)",
+                (entry_id, name),
+            )
     conn.execute(
         """
         INSERT OR REPLACE INTO bodies (entry_id, side, content_type, size, preview_text, sha256)

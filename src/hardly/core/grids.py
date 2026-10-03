@@ -8,6 +8,7 @@ never row data or parameter values.
 
 from __future__ import annotations
 
+import html
 import json
 import re
 import sqlite3
@@ -17,12 +18,14 @@ from urllib.parse import parse_qsl
 
 # --- HTML grid libraries: (name, regex on markup/scripts) -------------------
 _HTML_GRIDS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("datatables", re.compile(r"dataTables_wrapper|jquery\.dataTables|\.DataTable\s*\(|class=\"[^\"]*\bdataTable\b", re.I)),
+    ("datatables", re.compile(r"dataTables_wrapper|jquery\.dataTables|\bnew\s+DataTable\s*\(|\.DataTable\s*\(|cdn\.datatables\.net|dataTables(\.[\w-]+)*\.(min\.)?(js|css)|class=\"[^\"]*\bdataTable\b|\bdt-(container|layout-row|paging|search)\b", re.I)),
     ("jqgrid", re.compile(r"ui-jqgrid|jqGrid\s*\(|\bjqgrow\b", re.I)),
     ("ag-grid", re.compile(r"\bag-root\b|ag-grid|ag-theme-", re.I)),
-    ("kendo-grid", re.compile(r"\bk-grid\b|kendoGrid\s*\(", re.I)),
-    ("telerik-radgrid", re.compile(r"\bRadGrid\b|rgMasterTable|\brgRow\b", re.I)),
-    ("devexpress", re.compile(r"\bdxgvControl|\bdxgvTable|dx-datagrid|DevExpress", re.I)),
+    ("kendo-grid", re.compile(r"\bk-grid\b|kendoGrid\s*\(|kendo\.(all|web)(\.min)?\.js", re.I)),
+    ("telerik-radgrid", re.compile(r"\bRadGrid\d*\b|rgMasterTable|\brgRow\b|\brgPager\b|\brgCurrentPage\b|\brgNumPart\b|Telerik\.Web\.UI|RadAjaxPanel", re.I)),
+    ("devextreme", re.compile(r"\bdxDataGrid\b|dx-data-?grid|DevExpress\.ui\.dxDataGrid|\bdx\.all\b", re.I)),
+    # case-sensitive on purpose: the host name js.devexpress.com must not match
+    ("devexpress-aspx", re.compile(r"\bdxgvControl|\bdxgvTable|ASPxGridView")),
     ("syncfusion", re.compile(r"\be-grid\b|\bejGrid\b", re.I)),
     ("aspnet-gridview", re.compile(r"id=\"[^\"]*GridView[^\"]*\"|__doPostBack\(\s*'[^']*GridView[^']*'", re.I)),
     ("tabulator", re.compile(r"\btabulator\b", re.I)),
@@ -43,6 +46,22 @@ _HTML_GRIDS: tuple[tuple[str, re.Pattern[str]], ...] = (
 )
 # WebForms pager/sort commands travel inside __doPostBack arguments.
 _POSTBACK_CMD = re.compile(r"__doPostBack\(\s*'[^']*'\s*,\s*'(Page\$[^']*|Sort\$[^']*|Select\$\d+|Edit\$\d+)'", re.I)
+# Telerik/Infragistics-style pagers: the grid control id is the target and the
+# argument is empty.
+_POSTBACK_CONTROL_PAGER = re.compile(r"__doPostBack\(\s*'[^']*\$ctl\d+\$ctl\d+\$ctl\d+[^']*'\s*,\s*''", re.I)
+# Library script/stylesheet names seen as request paths.
+_URL_LIBS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("datatables", re.compile(r"dataTables(\.[\w-]+)*\.(min\.)?(js|css)|datatables\.net", re.I)),
+    ("jqgrid", re.compile(r"jquery\.jqGrid|jqgrid", re.I)),
+    ("ag-grid", re.compile(r"ag-grid", re.I)),
+    ("kendo-grid", re.compile(r"kendo\.(all|web|grid)", re.I)),
+    ("telerik-radgrid", re.compile(r"Telerik\.Web\.UI\.WebResource|RadGrid", re.I)),
+    ("devextreme", re.compile(r"/dx\.all|devextreme", re.I)),
+    ("tabulator", re.compile(r"tabulator", re.I)),
+    ("handsontable", re.compile(r"handsontable", re.I)),
+    ("bootstrap-table", re.compile(r"bootstrap-table", re.I)),
+    ("syncfusion", re.compile(r"syncfusion|ej2", re.I)),
+)
 
 # --- JSON envelope conventions: (name, required top-level keys, any-of) ------
 _JSON_ENVELOPES: tuple[tuple[str, frozenset[str], frozenset[str]], ...] = (
@@ -115,15 +134,20 @@ def detect_grids(
         eid = int(row["entry_id"])
         body = row["resp"] or ""
         ct = (row["resp_ct"] or row["mime"] or "").lower()
-        if body and ("html" in ct or body.lstrip().startswith("<")):
+        json_like = body.lstrip().startswith(("{", "[")) if body else False
+        if body and not json_like and ("html" in ct or body.lstrip().startswith("<")):
+            body = html.unescape(body)
             for name, pat in _HTML_GRIDS:
                 if pat.search(body):
                     html_hits.setdefault(name, []).append(eid)
             for m in _POSTBACK_CMD.finditer(body):
                 postback_cmds[re.sub(r"\d+", "N", m.group(1))] += 1
+            n_ctrl = len(_POSTBACK_CONTROL_PAGER.findall(body))
+            if n_ctrl:
+                postback_cmds["control-id pager (empty argument)"] += n_ctrl
             for m in _DATA_ATTR.finditer(body):
                 data_attrs[m.group(1).lower()] += 1
-        elif body and ("json" in ct or body.lstrip().startswith(("{", "["))):
+        elif body and (json_like or "json" in ct):
             keys = _top_keys(body)
             for name, name_req, any_of in _JSON_ENVELOPES:
                 if name_req <= keys and (not any_of or keys & any_of):
@@ -140,6 +164,20 @@ def detect_grids(
                 if pat.match(n):
                     param_hits.setdefault(style, Counter())[n] += 1
                     param_entries.setdefault(style, []).append(eid)
+
+    # Libraries named in request URLs (scripts are separate HAR entries).
+    for row in rows:
+        target = f"{row['path']}"
+        for name, pat in _URL_LIBS:
+            if pat.search(target):
+                html_hits.setdefault(name, []).append(int(row["entry_id"]))
+    # Signals computed at ingest on the full body (markers often sit beyond
+    # the stored preview). Absent in sessions indexed by older versions.
+    try:
+        for r in conn.execute("SELECT entry_id, name FROM body_signals WHERE kind = 'grid'"):
+            html_hits.setdefault(r["name"], []).append(int(r["entry_id"]))
+    except sqlite3.Error:
+        pass
 
     def pack(hits: dict[str, list[int]]) -> list[dict[str, Any]]:
         return [
@@ -171,6 +209,12 @@ def detect_grids(
             "need the param style replayed (e.g. start/length or page/pageSize)."
         ),
     }
+
+
+def html_grid_signals(text: str) -> list[str]:
+    """Grid library names found anywhere in a (possibly very large) HTML body."""
+    text = html.unescape(text)
+    return [name for name, pat in _HTML_GRIDS if pat.search(text)]
 
 
 def _top_keys(text: str) -> frozenset[str]:
