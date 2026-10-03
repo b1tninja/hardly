@@ -78,7 +78,7 @@ JWT_RE = re.compile(
 )
 LONG_HEX_RE = re.compile(r"\b[0-9a-fA-F]{32,}\b")
 # URL-safe or std base64-ish blob (not a pure word); length keeps noise down.
-BASE64_RE = re.compile(r"\b(?:[A-Za-z0-9+/_-]{24,}={0,2})\b")
+BASE64_RE = re.compile(r"(?<![A-Za-z0-9+/_=-])[A-Za-z0-9+/_-]{24,}={0,2}(?![A-Za-z0-9+/_=-])")
 BEARER_RE = re.compile(r"^\s*Bearer\s+(\S+)\s*$", re.I)
 BASIC_RE = re.compile(r"^\s*Basic\s+(\S+)\s*$", re.I)
 
@@ -113,12 +113,26 @@ def classify_value_shape(value: str | None) -> str | None:
     ):
         return "hex"
     # Base64: long, alphabet-ish, not a plain English word.
-    if len(text) >= 24 and BASE64_RE.fullmatch(text) and not text.isalpha():
+    if len(text) >= 24 and BASE64_RE.fullmatch(text) and _looks_like_base64(text):
         # Prefer hex when the charset is only hex.
         if re.fullmatch(r"[0-9a-fA-F]+", text) and len(text) >= 32:
             return "hex"
         return "base64"
     return None
+
+
+def _looks_like_base64(text: str) -> bool:
+    """Reject kebab/snake/camel *words* (e.g. 'strict-origin-when-cross-origin')."""
+    if text.isalpha() or text.islower() and "-" in text:
+        return False
+    if text.endswith("="):
+        return True
+    has_digit = any(c.isdigit() for c in text)
+    has_upper = any(c.isupper() for c in text)
+    has_lower = any(c.islower() for c in text)
+    if "-" in text and re.fullmatch(r"[A-Za-z]+(?:-[A-Za-z]+)+", text):
+        return False  # hyphenated words
+    return has_digit and (has_upper or has_lower) or (has_upper and has_lower and len(text) >= 32)
 
 
 def is_sensitive_header(name: str) -> bool:
