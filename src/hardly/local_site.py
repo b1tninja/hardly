@@ -74,6 +74,23 @@ _PORTAL_BROKEN = """<!doctype html><html><body>
 <a href="/portal/feedback">Did you find what you needed?</a>
 </body></html>"""
 
+# Hop 2 has several keyword-only content links; only the one that names a search is eligible.
+_PORTAL_W1 = """<!doctype html><html><body><a href="/portal/w2">Permit services</a></body></html>"""
+_PORTAL_W2 = """<!doctype html><html><body>
+<a href="/portal/guide">Permit application guide</a> <a href="/portal/forms">Fire permit forms</a>
+<a href="/portal/lookup">Permit search</a></body></html>"""
+# A page whose only candidates are keyword-only: navigation must stop, not wander.
+_PORTAL_DEAD = """<!doctype html><html><body><a href="/portal/w3">Permit services</a></body></html>"""
+_PORTAL_W3 = """<!doctype html><html><body><a href="/portal/guide">Permit application guide</a>
+<a href="/portal/forms">Fire permit forms</a></body></html>"""
+# A header "Sign in" box on an otherwise ordinary, link-rich page is not a login wall.
+_PORTAL_HEADER_LOGIN = (
+    "<!doctype html><html><body><header><form action=\"/login.action\" method=\"post\">"
+    "<input name=\"u\"><input type=\"password\" name=\"p\"><button>Sign in</button></form></header>"
+    + "".join(f'<a href="/portal/p{i}">Info page {i}</a> ' for i in range(18))
+    + '<a href="/portal/lookup">Widget lookup</a></body></html>'
+)
+
 _INDEX = """<!doctype html><html><head><title>Local demo</title></head><body>
 <a href="/directory.aspx">Widget directory search</a> <a href="/login">Sign in</a>
 <a href="/api/items">items</a></body></html>"""
@@ -110,6 +127,16 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(_LOGIN, cookie="JSESSIONID=localdemo0002; path=/; HttpOnly; SameSite=Lax")
         elif path == "/portal":
             self._send(_PORTAL)
+        elif path == "/portal/w1":
+            self._send(_PORTAL_W1)
+        elif path == "/portal/w2":
+            self._send(_PORTAL_W2)
+        elif path == "/portal/dead":
+            self._send(_PORTAL_DEAD)
+        elif path == "/portal/w3":
+            self._send(_PORTAL_W3)
+        elif path == "/portal/hl":
+            self._send(_PORTAL_HEADER_LOGIN)
         elif path == "/portal/broken":
             self._send(_PORTAL_BROKEN)
         elif path == "/portal/traps":

@@ -228,3 +228,40 @@ def test_find_click_recovers_from_error_page_and_skips_feedback(tmp_path, monkey
     errors = [h for h in result["hops"] if h.get("error")]
     assert errors and "browser error page" in errors[0]["error"]      # stepped back from the dead link
     assert not any("Did you find" in str(h.get("clicked")) for h in result["hops"])
+
+
+def _find_click_on(tmp_path, monkeypatch, start_path, keywords, max_hops=4):
+    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    from hardly.capture import capture_headless
+    from hardly.local_site import serve
+
+    with serve() as base:
+        recipe = [
+            {"op": "goto", "url": f"{base}{start_path}"},
+            {"op": "find_click", "keywords": keywords, "max_hops": max_hops},
+        ]
+        cap = capture_headless(
+            f"{base}{start_path}", wait_seconds=0.3, recipe=recipe, open_session=False, brief=False
+        )
+    return next(s for s in cap["discover"]["recipe"]["steps"] if s["op"] == "find_click")["result"]
+
+
+@pytest.mark.skipif(not playwright_available(), reason="playwright not installed")
+def test_find_click_after_first_hop_requires_a_search_term_and_keyword(tmp_path, monkeypatch):
+    if not playwright_status().get("ready"):
+        pytest.skip("Playwright browser not ready")
+    ok = _find_click_on(tmp_path, monkeypatch, "/portal/w1", ["permit"])
+    assert ok["reached"], ok
+    assert [h["clicked"] for h in ok["hops"]] == ["Permit services", "Permit search"]
+    dead = _find_click_on(tmp_path, monkeypatch, "/portal/dead", ["permit"])
+    assert not dead["reached"]
+    assert [h["clicked"] for h in dead["hops"]] == ["Permit services"]   # stopped; did not wander to guides/forms
+
+
+@pytest.mark.skipif(not playwright_available(), reason="playwright not installed")
+def test_header_login_box_does_not_stop_navigation(tmp_path, monkeypatch):
+    if not playwright_status().get("ready"):
+        pytest.skip("Playwright browser not ready")
+    res = _find_click_on(tmp_path, monkeypatch, "/portal/hl", ["widget"])
+    assert "blocked" not in res, res
+    assert res["reached"] and res["url"].endswith("/portal/lookup")

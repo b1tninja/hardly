@@ -130,3 +130,14 @@ def test_keyword_vouches_by_field_name_not_action_url():
     assert reached(extract_html_structure(form), keywords=["permit"]) is None      # action only
     named = '<form action="/lookup"><input type="text" name="permit_number"><input type="submit"></form>'
     assert reached(extract_html_structure(named), keywords=["permit"]) is not None
+
+
+def test_one_box_search_accepted_only_after_deliberate_navigation():
+    from hardly.core.search_nav import has_search_term, search_form_reached as reached
+
+    box = extract_html_structure('<form action="/x"><input type="text" name="query"><input type="submit"></form>')
+    assert reached(box) is None
+    assert reached(box, allow_site_search=True) is not None          # we followed "Search Online Catalog" to get here
+    newsletter = extract_html_structure('<form action="/subscribe"><input type="email" name="email"></form>')
+    assert reached(newsletter, allow_site_search=True) is None       # utility forms stay rejected
+    assert has_search_term("Search Online Catalog") and not has_search_term("Tanks - fire permit application")

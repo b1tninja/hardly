@@ -1507,7 +1507,12 @@ def _page_gate_classes(page: Any, html: str) -> list[str]:
         gates = classify_response(200, {}, html or "", getattr(page, "url", "") or "")
     except Exception:  # noqa: BLE001
         return []
-    return sorted({g["class"] for g in gates if g["class"] in _STOP_GATES})
+    classes = {g["class"] for g in gates if g["class"] in _STOP_GATES}
+    # A full site page with a header "Sign in" box is not a login wall; only a
+    # page that is essentially the login form stops navigation.
+    if "login" in classes and (html or "").lower().count("<a ") >= 15:
+        classes.discard("login")
+    return sorted(classes)
 
 
 def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
@@ -1519,7 +1524,7 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
     ``target=_blank`` links and failed clicks fall back to navigating straight
     to the link's ``href``.
     """
-    from hardly.core.search_nav import page_candidates, search_form_reached
+    from hardly.core.search_nav import has_search_term, page_candidates, search_form_reached
 
     keywords = [str(k) for k in (raw.get("keywords") or [])]
     max_hops = min(max(int(raw.get("max_hops") or 4), 1), 8)
@@ -1527,6 +1532,8 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
     visited: set[str] = set()
     hops: list[dict[str, Any]] = []
     form = None
+    last_strong = False  # the last successful hop followed a link that named a search
+    kw_lower = [k.lower() for k in keywords if k.strip()]
     for _ in range(max_hops + 1):
         html = _settled_content(page)
         blocked = _page_gate_classes(page, html)
@@ -1539,17 +1546,30 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
                 "blocked": blocked,
             }
         cands, structure = page_candidates(html, base_url=page.url, keywords=keywords)
-        form = search_form_reached(structure, min_fields=min_fields, keywords=keywords)
+        form = search_form_reached(
+            structure, min_fields=min_fields, keywords=keywords, allow_site_search=last_strong
+        )
         if form:
             break
         if len(hops) >= max_hops:
             break
-        # After the first hop, only follow links with real evidence (a caller
-        # keyword or a strong search/lookup phrase), not generic gateway words.
-        floor = 1 if not hops else 5
-        pick = next(
-            (c for c in cands if c["click"]["css"] not in visited and c["score"] >= floor), None
-        )
+        # After the first successful hop only follow links that name a search
+        # action AND (when keywords were given) mention a keyword: generic
+        # gateway words and keyword-only links ("Tanks - fire permit
+        # application") lead to content pages, not to the lookup.
+        ok_hops = [h for h in hops if not h.get("error")]
+
+        def _eligible(c: dict[str, Any]) -> bool:
+            if c["click"]["css"] in visited:
+                return False
+            if not ok_hops:
+                return c["score"] >= 1
+            text = (c.get("text") or "").lower()
+            if not has_search_term(text):
+                return False
+            return (not kw_lower) or any(k in text for k in kw_lower)
+
+        pick = next((c for c in cands if _eligible(c)), None)
         if pick is None:
             break
         visited.add(pick["click"]["css"])
@@ -1590,6 +1610,9 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
             continue
         hops.append(
             {"from": before, "clicked": pick["text"], "css": pick["click"]["css"], "to": page.url, "via": via}
+        )
+        last_strong = has_search_term(pick["text"]) and (
+            not kw_lower or any(k in (pick["text"] or "").lower() for k in kw_lower)
         )
     return {"reached": form is not None, "form": form, "hops": hops, "url": page.url}
 

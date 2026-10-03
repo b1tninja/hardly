@@ -138,11 +138,17 @@ _ENTRY_TYPES = frozenset(
 )
 
 
+def has_search_term(text: str) -> bool:
+    """True when link text itself names a search/lookup action."""
+    return bool(_GENERIC.search(text or ""))
+
+
 def search_form_reached(
     structure: dict[str, Any],
     *,
     min_fields: int = 2,
     keywords: tuple[str, ...] | list[str] = (),
+    allow_site_search: bool = False,
 ) -> dict[str, Any] | None:
     """First form that looks like a real search/lookup form, else ``None``.
 
@@ -153,6 +159,9 @@ def search_form_reached(
     """
     # Generic words ("search", "records"...) match every site-search box, so
     # only the caller's domain terms can vouch for a form.
+    # ``allow_site_search``: we got here by deliberately following a link that
+    # itself named a search (e.g. "Search Online Catalog"), so a one-box form on
+    # THIS page is the search, not a site-wide header widget.
     kw = [k.lower() for k in keywords if k and k.lower().strip() not in _GENERIC_KEYWORDS]
     for form in structure.get("forms") or []:
         fields = form.get("fields") or []
@@ -179,7 +188,7 @@ def search_form_reached(
         # single named field: needs a specific name (and a keyword when given)
         name = names[0]
         if _SITE_SEARCH_NAME.match(name) or "search" in name.lower():
-            if not kw_hit:
+            if not kw_hit and not allow_site_search:
                 continue
         elif kw and not kw_hit:
             continue
