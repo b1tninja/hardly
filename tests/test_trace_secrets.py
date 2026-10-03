@@ -54,7 +54,7 @@ def test_locate_secrets(tmp_path, monkeypatch):
 def test_recommend_portal():
     result = recommend_tools("guest portal csrf tokens")
     tools = {t for s in result["suggestions"] for t in s["tools"]}
-    assert "hardly_correlate" in tools or "hardly_brief" in tools
+    assert "hardly_session_trace_value" in tools or "hardly_session_site_brief" in tools
 
 
 def test_export_postman(tmp_path, monkeypatch):

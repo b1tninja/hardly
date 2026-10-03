@@ -308,7 +308,7 @@ def hardly_guide_mode(
 
 
 @_tool
-def hardly_guide_task_plan(goal: str, har_path: str | None = None, url: str | None = None) -> str:
+def hardly_guide_task_plan(goal: str | None = None, har_path: str | None = None, url: str | None = None) -> str:
     """FIRST CALL for a new task: ordered plan of hardly tool calls with example arguments, environment state and recommended tools for the goal. Example: hardly_guide_task_plan(goal='reverse engineer the login flow', har_path='/data/capture.har').
 
     Pass what you know: goal (free text, e.g. 'build a client SDK'), har_path, url. Small output
@@ -414,7 +414,9 @@ def hardly_write_har_scrubbed(har_path: str, output_path: str, overwrite: bool =
 
 @_tool
 def hardly_write_har_split(har_path: str, output_dir: str, by: str = "host", overwrite: bool = False) -> str:
-    """Writes files: split a HAR into one file per host (by='host') or per page (by='page') inside output_dir, streaming. Use for huge captures, then hardly_session_open each part. Example: hardly_write_har_split(har_path='/data/a.har', output_dir='/data/parts').
+    """Writes files: split a HAR into one file per host (by='host') or per page (by='page') inside output_dir, streaming. Example: hardly_write_har_split(har_path='/data/a.har', output_dir='/data/parts').
+
+    Use for huge captures, then hardly_session_open each part. Refuses to overwrite existing parts unless overwrite=true.
     """
     from hardly.core.har_tools import split_har
 
@@ -483,6 +485,7 @@ def hardly_write_catalog_record(
 ) -> str:
     """Writes a file: add or update one target in a catalog file in place (atomic, no network). URLs are redacted and validated. create=true makes the file if missing. Example: hardly_write_catalog_record(catalog_path='/data/targets.json', target={'id':'t1','endpoints':[{'role':'api','url':'https://example.com/api'}]}, create=true).
 
+    Only that one target changes (there is no overwrite flag; merge=false replaces the target).
     ``target`` is {id, name, tags[], groups{}, endpoints:[{role, url, kind?, status?, gate_classes?,
     stack?, notes?, capture?:{recipe_ref, har_ref}}]}. merge=true unions tags, overlays groups and
     merges endpoints by (role, url); merge=false replaces the target.
@@ -860,7 +863,9 @@ def hardly_session_overview(
     from hardly.core.overview import session_overview
 
     conn = sess.require_conn(session_id)
-    return _ok(session_overview(conn, host=host, exclude_noise=exclude_noise, limit=_lim(limit, 50, 200)))
+    res = session_overview(conn, host=host, exclude_noise=exclude_noise, limit=_lim(limit, 50, 200))
+    res["index_path"] = sess.get_saved_to(session_id)
+    return _ok(res)
 
 
 @_tool
@@ -871,7 +876,7 @@ def hardly_session_traffic_stats(
     limit: int | None = None,
     kind: str | None = None,
 ) -> str:
-    """DISTRIBUTIONS of a capture: MIME mix, status classes, body sizes, initiator types, timing and payload_kinds (json, csv, html_table, pdf, ...) with sample entry_ids. Example: hardly_session_traffic_stats(session_id='S', host='app.example.com').
+    """DISTRIBUTIONS of a capture: MIME mix, status classes, body sizes, initiator types, timing and payload_kinds. Each has sample entry_ids. Example: hardly_session_traffic_stats(session_id='S', host='app.example.com').
 
     Counts per server/method/status are hardly_session_overview; slow requests
     hardly_session_slow_requests; repeated calls hardly_session_duplicates. ``kind`` filters the
@@ -1301,7 +1306,7 @@ def hardly_entry_outline(
     max_depth: int = 8,
     side: str = "response",
 ) -> str:
-    """Offline outline of an HTML/XML body from a HAR entry: format markdown (headings/tables/forms/links), tree (tag tree) or aria (approximate YAML); omit format for all three. Redacted. Example: hardly_entry_outline(session_id='S', entry_id=5, format='markdown').
+    """Offline outline of an HTML/XML body from a HAR entry. format: markdown (headings/tables/forms/links), tree (tag tree) or aria (YAML); omit for all three. Example: hardly_entry_outline(session_id='S', entry_id=5, format='markdown').
 
     Use instead of reading raw HTML; for the live tab use hardly_browser_inspect(sections=['aria']).
     """
@@ -1364,7 +1369,7 @@ def hardly_endpoint_schema(
     sections: list[str] | None = None,
     limit: int | None = None,
 ) -> str:
-    """Request/response shapes of one endpoint template; sections: schema (default; JSON field names and types) and param_roles (each query/body field static, dynamic or sensitive). Example: hardly_endpoint_schema(session_id='S', method='GET', path_template='/api/items/{id}').
+    """Request/response shapes of one endpoint template. Sections: schema (default; JSON field names and types), param_roles (each field static, dynamic or sensitive). Example: hardly_endpoint_schema(session_id='S', method='GET', path_template='/api/items/{id}').
 
     Use after hardly_endpoint_list. param_roles decides which parameters a client must compute versus
     hard-code. host defaults to the main host. Names and types only.
@@ -1407,7 +1412,7 @@ def hardly_tech_stack(
     limit: int | None = None,
     explain: bool = False,
 ) -> str:
-    """Fingerprint web frameworks, CMS, GIS stacks, UI toolkits and data-grid widgets (envelope and paging/sorting parameter styles) from header/cookie names, paths and body previews. Absent technology gives count 0. Example: hardly_tech_stack(session_id='S', explain=true).
+    """Fingerprint web frameworks, CMS, GIS stacks, UI toolkits and data-grid widgets from header/cookie names, paths and body previews. Absent technology gives count 0. Example: hardly_tech_stack(session_id='S', explain=true).
 
     explain=true adds SDK implications. Data-grid frameworks, JSON envelope conventions (OData,
     JSON:API, HAL, Relay) and paging/sort styles are under ``data_grids``. For CDN/WAF products use
@@ -1550,7 +1555,7 @@ def hardly_page_ui(
     limit: int | None = None,
     offset: int | None = None,
 ) -> str:
-    """Inventory UI controls: sections links, handlers (onclick/onsubmit, handler_functions), labels (default: all three) and search_links (ranked links likely to lead to a search page plus a suggested next click). Example: hardly_page_ui(session_id='S', sections=['search_links'], keywords=['search']).
+    """Inventory UI controls. Sections: links, handlers (onclick/onsubmit), labels (default all three), search_links (ranked links likely to lead to a search page). Example: hardly_page_ui(session_id='S', sections=['search_links'], keywords=['search']).
 
     Same scan as hardly_page_forms, projected to the UI parts; handler_functions names feed
     hardly_page_embedded_routes. entry_id inventories one response, omit it to scan the session.
@@ -1593,7 +1598,7 @@ def hardly_page_embedded_routes(
     limit: int | None = None,
     offset: int | None = None,
 ) -> str:
-    """Mine endpoints the page embeds; sections: script_routes (URL path literals in JavaScript bodies) and data_attrs (endpoints, config and framework hints in HTML data-* attributes); default both. Example: hardly_page_embedded_routes(session_id='S', sections=['data_attrs'], entry_id=5).
+    """Mine endpoints the page embeds. Sections: script_routes (URL path literals in JavaScript), data_attrs (endpoints and config in HTML data-* attributes); default both. Example: hardly_page_embedded_routes(session_id='S', sections=['data_attrs'], entry_id=5).
 
     Use when search works but the detail URL is unknown, or on JS-heavy pages to find where the page
     gets its data; then hardly_entry_around on the click entry. data_attrs reports dataset keys,
@@ -1687,7 +1692,7 @@ def hardly_gate_bot_protection(
     limit: int | None = None,
     explain: bool = False,
 ) -> str:
-    """Detect gates in a capture: bot walls, captcha, login, rate limits, 401/403/429 challenges and the CDN/WAF bot-protection products hit; sections barriers, http_challenges, bot_protection (default all). Never evades. Example: hardly_gate_bot_protection(session_id='S', explain=true).
+    """Detect gates in a capture: bot walls, captcha, login, rate limits, 401/403/429 challenges and CDN/WAF bot-protection products. Never evades. Example: hardly_gate_bot_protection(session_id='S', explain=true).
 
     Call when requests are blocked, before any retry: every gate is a STOP sign (re-capture
     interactively with a person). barriers: each barrier (environment_blocked, bot_wall, captcha,
@@ -1824,7 +1829,7 @@ def hardly_send_entry_series(
     allow_unsafe: bool = False,
     allow_gates: list[str] | None = None,
 ) -> str:
-    """LIVE (confirm-gated): replay an ordered series (entry_ids, or the steps behind entry_id) and report the first step whose status, content-type or body shape diverges. Without confirm=true it returns the dry-run plan and missing inputs. Example: hardly_send_entry_series(session_id='S', entry_id=20, confirm=true).
+    """LIVE (confirm-gated): replay an ordered series and report the first step whose status, content-type or body shape diverges. Without confirm=true it returns the dry-run plan and missing inputs. Example: hardly_send_entry_series(session_id='S', entry_id=20, confirm=true).
 
     Use to verify a client flow works. Secrets only via ``env`` {name: value} or HARDLY_INPUT_<NAME>
     env vars; values are never printed. GET/HEAD only unless allow_unsafe; halts on 429/Retry-After/

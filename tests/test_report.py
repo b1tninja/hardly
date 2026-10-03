@@ -92,7 +92,7 @@ def test_full_has_drill_pointers_and_more_than_standard(opened):
     conn, har = opened
     full = R.build_report(conn, har, detail="full")
     gate = next(f for f in full["findings"] if f["kind"] == "gate")
-    assert gate["drill"]["tool"] == "hardly_gates"
+    assert gate["drill"]["tool"] == "hardly_gate_bot_protection"
     assert all("drill" in f for f in full["findings"] if f["kind"] != "run")
     assert "drill" not in next(f for f in R.build_report(conn, har, detail="standard")["findings"])
 
@@ -181,7 +181,7 @@ def test_mcp_tool(tmp_path, monkeypatch):
                                         "entries": _entries()}}))
     monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     sid = sess.open_har(str(path), force=True)["session_id"]
-    out = json.loads(server.hardly_report(sid, sections_json='["access","forms"]', detail="standard",
-                                          output_path=str(tmp_path / "rep.md")))
-    assert set(out["sections"]) == {"access", "forms"} and (tmp_path / "rep.md").is_file()
-    assert "error" in json.loads(server.hardly_report(sid, detail="bad"))
+    out = json.loads(server.hardly_write_export(sid, "report", str(tmp_path / "rep.md"),
+                                                categories=["access", "forms"], detail="standard"))
+    assert "error" not in out and (tmp_path / "rep.md").is_file()
+    assert "error" in json.loads(server.hardly_session_report(sid, detail="bad"))

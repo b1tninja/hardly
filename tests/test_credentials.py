@@ -99,7 +99,7 @@ def test_brief_includes_credentials(tmp_path, monkeypatch):
     )
     assert "credentials" in brief
     assert brief["credentials"]["password_field_count"] >= 1
-    assert "hardly_credentials" in (brief.get("next") or "")
+    assert "hardly_auth_report" in (brief.get("next") or "")
 
 
 def test_ingest_stores_value_shapes(tmp_path, monkeypatch):

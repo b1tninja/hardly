@@ -21,14 +21,14 @@ def test_list_modes_has_three():
 def test_pick_har_is_archive():
     result = pick_mode(har_path="D:/code/captures/portal.har")
     assert result["mode"] == MODE_ARCHIVE
-    assert result["playbook"]["calls"][0]["tool"] == "hardly_open"
+    assert result["playbook"]["calls"][0]["tool"] == "hardly_session_open"
 
 
 def test_pick_url_is_headless():
     result = pick_mode(url="https://portal.example.com/search")
     assert result["mode"] == MODE_HEADLESS
     tools = {c["tool"] for c in result["playbook"]["calls"]}
-    assert "hardly_discover" in tools
+    assert "hardly_browser_capture_discover" in tools
 
 
 def test_pick_interactive_goal():

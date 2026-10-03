@@ -28,4 +28,4 @@ def test_policy_refuses_password_evaluate():
 def test_redirect_diag_registered():
     from hardly import capabilities
 
-    assert "hardly_redirect_diag" in capabilities.TOOLS
+    assert "hardly_send_redirect_walk" in capabilities.TOOLS
