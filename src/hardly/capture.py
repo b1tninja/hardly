@@ -24,6 +24,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from hardly.core.browser_detect import (
+    expected_chromium_build,
+    pick_executable,
+    pin_hint,
+    scan_chromium_builds,
+)
+from hardly.core.capture_errors import TRANSIENT_NAV, with_error_class
+from hardly.core.slots import SlotTimeoutError, acquire_slot, capture_slot
 from hardly.session import resolve_path
 
 _BANNER_JS = """
@@ -94,6 +102,16 @@ _SAME_TAB_JS = """
 class CaptureError(RuntimeError):
     """Browser capture failed or Playwright is not installed."""
 
+    @property
+    def classification(self) -> dict[str, Any]:
+        from hardly.core.capture_errors import classify_capture_error
+
+        return classify_capture_error(str(self))
+
+    def to_dict(self) -> dict[str, Any]:
+        """Error dict with ``error_class`` / ``error_advice`` for tool results."""
+        return with_error_class({"status": "error", "error": str(self)})
+
 
 @dataclass
 class CaptureHandle:
@@ -143,7 +161,16 @@ def playwright_status() -> dict[str, Any]:
         },
         "env": {
             "HARDLY_BROWSER_CHANNEL": default_channel() or None,
+            "HARDLY_BROWSER_EXECUTABLE": (
+                os.environ.get("HARDLY_BROWSER_EXECUTABLE") or None
+            ),
         },
+        "installed_builds": [],
+        "expected_build": None,
+        "mismatch": False,
+        "suggested_executable": None,
+        "browser_executable_source": None,
+        "pin_hint": None,
         "install": [
             'pip install -e ".[capture]"',
             "playwright install chromium",
@@ -196,17 +223,30 @@ def playwright_status() -> dict[str, Any]:
             "Try: playwright install chromium"
         )
         out["browsers"] = browsers
+        _annotate_browser_detection(out, chromium_ok=False, channel=default_channel())
         return out
 
     out["browsers"] = browsers
     chromium_ok = bool((browsers.get("chromium") or {}).get("installed"))
     channel = default_channel()
-    # channel=chrome uses system Chrome — no playwright browser download needed
-    out["ready"] = chromium_ok or bool(channel)
+    _annotate_browser_detection(out, chromium_ok=chromium_ok, channel=channel)
+    exe_override = bool(out.get("browser_executable_source") in ("env", "autodetect"))
+    exe_ok = exe_override and bool(out.get("suggested_executable"))
+    # channel=chrome uses system Chrome - no playwright browser download needed
+    out["ready"] = chromium_ok or bool(channel) or exe_ok
     if not out["ready"]:
         out["hint"] = (
             "Chromium browser binary missing. Run: playwright install chromium "
-            "(or set HARDLY_BROWSER_CHANNEL=chrome to use system Chrome)"
+            "(or set HARDLY_BROWSER_CHANNEL=chrome to use system Chrome, or "
+            "HARDLY_BROWSER_EXECUTABLE=/path/to/chromium)"
+        )
+        if out.get("pin_hint"):
+            out["hint"] += f" {out['pin_hint']}"
+    elif exe_ok and not chromium_ok and not channel:
+        out["hint"] = (
+            f"Ready via {out['browser_executable_source']} executable "
+            f"{out['suggested_executable']}."
+            + (" Playwright build mismatch: " + out["pin_hint"] if out.get("mismatch") and out.get("pin_hint") else "")
         )
     elif channel:
         out["hint"] = (
@@ -218,6 +258,36 @@ def playwright_status() -> dict[str, Any]:
             "channel=chrome (system Chrome)."
         )
     return out
+
+
+def _annotate_browser_detection(
+    out: dict[str, Any], *, chromium_ok: bool, channel: str
+) -> None:
+    """Fill installed_builds / expected_build / mismatch / source fields."""
+    builds = scan_chromium_builds()
+    out["installed_builds"] = [
+        {"build": b["build"], "kind": b["kind"], "path": b["path"]} for b in builds
+    ]
+    own = (out.get("browsers", {}).get("chromium") or {}).get("executable")
+    expected = expected_chromium_build(own)
+    out["expected_build"] = expected
+    have = {str(b["build"]) for b in builds}
+    out["mismatch"] = bool(builds) and (expected not in have) and not chromium_ok
+    picked = pick_executable(builds, headless=True)
+    out["suggested_executable"] = picked["path"] if picked else None
+    out["pin_hint"] = pin_hint(builds, expected) if (builds and out["mismatch"]) else None
+    env_exe = (os.environ.get("HARDLY_BROWSER_EXECUTABLE") or "").strip()
+    if env_exe:
+        out["browser_executable_source"] = "env"
+        out["suggested_executable"] = env_exe
+    elif channel:
+        out["browser_executable_source"] = "channel"
+    elif chromium_ok:
+        out["browser_executable_source"] = "playwright"
+    elif picked:
+        out["browser_executable_source"] = "autodetect"
+    else:
+        out["browser_executable_source"] = "playwright"
 
 
 def require_playwright(*, need_browser: bool = True) -> dict[str, Any]:
@@ -250,6 +320,90 @@ def default_har_path(label: str = "capture") -> Path:
 
 def default_channel() -> str:
     return (os.environ.get("HARDLY_BROWSER_CHANNEL") or "").strip()
+
+
+# Navigation errors worth another try (list lives in core.capture_errors).
+_TRANSIENT_NAV = TRANSIENT_NAV
+
+
+def _sync_playwright() -> Any:
+    from playwright.sync_api import sync_playwright
+
+    return sync_playwright()
+
+
+def _playwright_expected_path() -> str | None:
+    """Path Playwright's own chromium would use (starts the driver once)."""
+    try:
+        with _sync_playwright() as pw:
+            return str(pw.chromium.executable_path)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def resolve_browser_executable(
+    *,
+    channel: str = "",
+    headless: bool = True,
+    playwright_path: str | None = None,
+) -> dict[str, Any]:
+    """Decide which browser binary to launch.
+
+    Returns ``{"executable": str | None, "source": env|autodetect|playwright|channel}``.
+    ``executable`` is None when Playwright should pick its own (channel or
+    bundled chromium). Precedence: HARDLY_BROWSER_EXECUTABLE, channel,
+    Playwright's bundled chromium when present, then on-disk autodetect.
+    """
+    env_exe = (os.environ.get("HARDLY_BROWSER_EXECUTABLE") or "").strip()
+    if env_exe:
+        return {"executable": str(Path(env_exe).expanduser()), "source": "env"}
+    if (channel or default_channel()).strip():
+        return {"executable": None, "source": "channel"}
+    if playwright_path is None:
+        playwright_path = _playwright_expected_path()
+    if playwright_path and Path(str(playwright_path)).is_file():
+        return {"executable": None, "source": "playwright"}
+    picked = pick_executable(scan_chromium_builds(), headless=headless)
+    if picked:
+        return {"executable": picked["path"], "source": "autodetect", "build": picked["build"]}
+    return {"executable": None, "source": "playwright"}
+
+
+def default_executable(
+    *, channel: str = "", headless: bool = True, playwright_path: str | None = None
+) -> str:
+    """Chromium executable to pass to Playwright, or '' to let Playwright choose.
+
+    Uses HARDLY_BROWSER_EXECUTABLE when set; otherwise, when Playwright's own
+    chromium is missing, scans PLAYWRIGHT_BROWSERS_PATH, /opt/pw-browsers and
+    ~/.cache/ms-playwright for a usable build.
+    """
+    return (
+        resolve_browser_executable(
+            channel=channel, headless=headless, playwright_path=playwright_path
+        ).get("executable")
+        or ""
+    )
+
+
+def apply_executable(
+    launch_kwargs: dict[str, Any],
+    playwright: Any,
+    *,
+    channel: str,
+    headless: bool,
+) -> str:
+    """Add ``executable_path`` to launch kwargs when needed; return the source."""
+    try:
+        pw_path: str | None = str(playwright.chromium.executable_path)
+    except Exception:  # noqa: BLE001
+        pw_path = ""
+    info = resolve_browser_executable(
+        channel=channel, headless=headless, playwright_path=pw_path or ""
+    )
+    if info.get("executable"):
+        launch_kwargs["executable_path"] = info["executable"]
+    return str(info["source"])
 
 
 def start_capture(
