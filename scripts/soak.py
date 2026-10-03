@@ -27,13 +27,16 @@ from hardly.core.tree import entry_tree
 from hardly.core.wall import detect_walls
 from hardly.index import query as q
 
-HARS = [
-    Path(r"D:\code\jason\recordersdocumentindex.saccounty.gov.har"),
-    Path(r"D:\code\i-doxs\secure8.i-doxs.net2.har"),
-    Path(r"D:\code\jason\app.jobtread.com.har"),
-    Path(r"D:\code\jason\aca-prod.accela.com.har"),
-    Path(r"D:\code\payhoa\app.payhoa.com.har"),
-    Path(r"D:\code\jason\assessorparcelviewer.saccounty.gov.har"),
+# (path, preferred_host substring that must win — guards CDN/payment seed bugs)
+HARS: list[tuple[Path, str | None]] = [
+    (Path(r"D:\code\jason\recordersdocumentindex.saccounty.gov.har"), "saccounty"),
+    (Path(r"D:\code\i-doxs\secure8.i-doxs.net2.har"), "i-doxs"),
+    (Path(r"D:\code\jason\app.jobtread.com.har"), "jobtread"),
+    (Path(r"D:\code\jason\aca-prod.accela.com.har"), "accela"),
+    (Path(r"D:\code\payhoa\app.payhoa.com.har"), "payhoa"),
+    (Path(r"D:\code\jason\assessorparcelviewer.saccounty.gov.har"), "saccounty"),
+    (Path(r"D:\code\jason\countyfusion4.kofiletech.us.har"), "kofile"),
+    (Path(r"D:\code\jason\common1.mptsweb.com.har"), "mptsweb"),
 ]
 
 # Patterns that must never appear in soak JSON (values from fixtures / live HARs).
@@ -42,7 +45,7 @@ _LEAK_RE = __import__("re").compile(
 )
 
 
-def run_one(path: Path) -> dict:
+def run_one(path: Path, *, expect_host: str | None = None) -> dict:
     t0 = time.perf_counter()
     out: dict = {"har": str(path), "size_mb": round(path.stat().st_size / 1e6, 1)}
     try:
@@ -58,7 +61,15 @@ def run_one(path: Path) -> dict:
 
         host = q.preferred_host(conn)
         out["preferred_host"] = host
+        out["expect_host"] = expect_host
         out["busiest_host"] = out["hosts"][0] if out["hosts"] else None
+        if expect_host and (not host or expect_host.lower() not in host.lower()):
+            out["ok"] = False
+            out["error"] = (
+                f"preferred_host {host!r} does not contain expected {expect_host!r}"
+            )
+            out["total_s"] = round(time.perf_counter() - t0, 2)
+            return out
         summary = q.summary(conn)
         out["api"] = summary.get("api")
         out["noise"] = summary.get("noise")
@@ -158,7 +169,7 @@ def run_one(path: Path) -> dict:
         gql = detect_graphql(conn, host=host, limit=10)
         out["graphql_ops"] = gql.get("operation_count")
 
-        forms = q.list_forms(conn, host=host, exclude_noise=True, limit=5)
+        forms = q.list_forms(conn, host=host, exclude_noise=True, limit=20)
         out["form_pages"] = forms.get("count")
         asp = sum(
             1
@@ -166,6 +177,25 @@ def run_one(path: Path) -> dict:
             if (e.get("webforms") or {}).get("aspnet")
         )
         out["aspnet_pages"] = asp
+        label_total = sum(int(e.get("label_count") or 0) for e in forms.get("entries") or [])
+        out["label_rows"] = label_total
+        sample_labels = []
+        for e in forms.get("entries") or []:
+            for row in e.get("labels") or []:
+                lab = row.get("label")
+                if lab and lab not in sample_labels:
+                    sample_labels.append(lab)
+                if len(sample_labels) >= 8:
+                    break
+            if len(sample_labels) >= 8:
+                break
+        out["label_sample"] = sample_labels
+        # Placer detail HARs should expose label rows without custom scripts.
+        if expect_host in {"kofile", "mptsweb"} and label_total == 0:
+            out["ok"] = False
+            out["error"] = f"expected label rows for {expect_host}, got 0"
+            out["total_s"] = round(time.perf_counter() - t0, 2)
+            return out
 
         t1 = time.perf_counter()
         cred = map_credentials(
@@ -210,12 +240,12 @@ def main() -> int:
     print("help categories", len(tool_help()["categories"]))
     print("modes", [m["id"] for m in list_modes()["modes"]])
     results = []
-    for path in HARS:
+    for path, expect_host in HARS:
         if not path.is_file():
             print("MISSING", path)
             continue
         print("==>", path.name, flush=True)
-        r = run_one(path)
+        r = run_one(path, expect_host=expect_host)
         results.append(r)
         print(json.dumps({k: v for k, v in r.items() if k != "trace"}, indent=2))
         if r.get("trace"):

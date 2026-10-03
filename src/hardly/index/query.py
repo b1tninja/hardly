@@ -504,7 +504,9 @@ def list_forms(
         "(b.content_type LIKE '%html%' OR b.preview_text LIKE '%<form%' "
         "OR b.preview_text LIKE '%<input%' OR b.preview_text LIKE '%<a %' "
         "OR b.preview_text LIKE '%onclick%' OR b.preview_text LIKE '%onsubmit%' "
-        "OR b.preview_text LIKE '%detailLabel%' OR b.preview_text LIKE '%<th%')",
+        "OR b.preview_text LIKE '%detailLabel%' OR b.preview_text LIKE '%<th%' "
+        "OR b.preview_text LIKE '%font-weight-bolder%' "
+        "OR b.preview_text LIKE '%fc%span%' OR b.preview_text LIKE '%class=\"base\"%')",
         "b.preview_text IS NOT NULL",
     ]
     params: list[Any] = [side]
@@ -514,6 +516,9 @@ def list_forms(
     if exclude_noise:
         clauses.append("e.is_noise = 0")
     where = " AND ".join(clauses)
+    # Oversample then rank by label_count so detail pages (KoFile transAddDoc,
+    # MPTSWEB AsrMain) beat early login/search shells within the first page.
+    scan = min(150, max(min(limit, 100) * 5, min(limit, 100) + offset + 10))
     rows = conn.execute(
         f"""
         SELECT e.entry_id, e.method, e.scheme, e.host, e.path, e.query_raw,
@@ -521,10 +526,19 @@ def list_forms(
         FROM entries e
         JOIN bodies b ON b.entry_id = e.entry_id
         WHERE {where}
-        ORDER BY e.entry_id
-        LIMIT ? OFFSET ?
+        ORDER BY
+          CASE
+            WHEN b.preview_text LIKE '%detailLabel%' THEN 0
+            WHEN b.preview_text LIKE '%font-weight-bolder%' THEN 0
+            WHEN b.preview_text LIKE '%fc%span%' THEN 0
+            WHEN b.preview_text LIKE '%Document Number:%' THEN 0
+            WHEN b.preview_text LIKE '%<th%' OR b.preview_text LIKE '%<dt%' THEN 1
+            ELSE 2
+          END,
+          e.entry_id
+        LIMIT ?
         """,
-        [*params, min(limit, 100), offset],
+        [*params, scan],
     ).fetchall()
     entries: list[dict] = []
     for row in rows:
@@ -590,16 +604,22 @@ def list_forms(
                 ][:40],
             }
         )
+    entries.sort(
+        key=lambda e: (-int(e.get("label_count") or 0), int(e.get("entry_id") or 0))
+    )
+    page = entries[offset : offset + min(limit, 100)]
     return {
         "side": side,
-        "count": len(entries),
+        "count": len(page),
+        "scanned": len(entries),
         "limit": limit,
         "offset": offset,
-        "entries": entries,
+        "entries": page,
         "next": (
             "Call hardly_forms or hardly_ui with entry_id for full field / "
             "link / handler lists (values redacted / truncated). Cross-check "
-            "handler_functions against hardly_routes."
+            "handler_functions against hardly_routes. Entries with labels "
+            "are sorted first."
         ),
     }
 

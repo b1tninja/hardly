@@ -85,6 +85,42 @@ def test_extract_labeled_fields_detail_page():
     assert out["label_count"] >= 3
 
 
+def test_extract_labeled_fields_mptsweb_and_kofile():
+    mpts = """
+    <table>
+      <tr><td class="font-weight-bolder">Assessment Number</td>
+          <td>328-060-025-000</td></tr>
+      <tr><td class="font-weight-bolder">Current Document Number</td>
+          <td>2023R0014772</td></tr>
+      <tr><td class="font-weight-bolder">Bedrooms</td><td>4</td></tr>
+    </table>
+    """
+    out = extract_html_structure(mpts)
+    labels = {row["label"]: row["value"] for row in out["labels"]}
+    assert labels.get("Assessment Number") == "328-060-025-000"
+    assert labels.get("Current Document Number") == "2023R0014772"
+    assert labels.get("Bedrooms") == "4"
+    assert all(row["source"] == "td/bolder" for row in out["labels"])
+
+    kofile = """
+    <table>
+    <tr>
+      <td align="right"><span id="fc1span" class="base">Document Number:</span></td>
+      <td width="50%" style="padding-left: 5px">2023-0014772</td>
+    </tr>
+    <tr>
+      <td align="right"><span id="fc2span" class="base">Document Type:</span></td>
+      <td>DEED</td>
+    </tr>
+    </table>
+    """
+    out = extract_html_structure(kofile)
+    labels = {row["label"]: row["value"] for row in out["labels"]}
+    assert labels.get("Document Number") == "2023-0014772"
+    assert labels.get("Document Type") == "DEED"
+    assert all(row["source"] == "td/span.base" for row in out["labels"])
+
+
 def test_forms_query_on_sample_har(tmp_path, monkeypatch):
     monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)

@@ -158,7 +158,7 @@ under `$ASSPY_HOME/samples/`).
 | Modes | `modes`, `mode`, `capabilities`, `help`, `recommend` |
 | Session | `open`, `reopen`, `list_sessions`, `close`, `summary`, `stats`, `coverage` |
 | Discovery | `summary`, `stats`, `hosts` (`preferred_host`), `endpoints`, `content`, `search`, `entry`, `compare_entries` |
-| Portal / HTML | `brief`, `story`, `forms`, `ui`, `outline`, `pages`, `wall` |
+| Portal / HTML | `brief`, `story`, `forms` / `ui` (incl. Acclaim / MPTSWEB / KoFile labels), `outline`, `pages`, `wall` |
 | Tokens / credentials | `credentials` (login map + jwt/hex/base64 shapes), `correlate`, `trace`, `cookies`, `secrets`, `redirects` |
 | Structure | `routes`, `around`, `tree`, `params`, `graphql`, `duplicates`, `slow` |
 | Quality | `coverage`, `issues`, `diff`, `recommend` |

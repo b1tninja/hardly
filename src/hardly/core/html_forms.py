@@ -67,7 +67,8 @@ _INTERACTIVE_RE = re.compile(
     re.I,
 )
 _DETAIL_RE = re.compile(
-    r"detailLabel|docDetailRow|listDocDetails|formInput|<th\b|<dt\b",
+    r"detailLabel|docDetailRow|listDocDetails|formInput|<th\b|<dt\b|"
+    r"font-weight-bolder|fc\d+span|\bclass=\"[^\"]*\bbase\b",
     re.I,
 )
 
@@ -83,6 +84,19 @@ _TH_TD = re.compile(
 )
 _DT_DD = re.compile(
     r"<dt\b[^>]*>\s*(.*?)\s*</dt>\s*<dd\b[^>]*>\s*(.*?)\s*</dd>",
+    re.I | re.S,
+)
+# MPTSWEB / Bootstrap detail tables: bold label cell → value cell
+_TD_BOLDER = re.compile(
+    r'<td\b[^>]*\bclass="[^"]*\bfont-weight-bolder\b[^"]*"[^>]*>\s*(.*?)\s*</td>\s*'
+    r"<td\b[^>]*>\s*(.*?)\s*</td>",
+    re.I | re.S,
+)
+# KoFile CountyFusion: <td><span class="base" id="fcNspan">Label:</span></td><td>value</td>
+# (ids are fc1span / fc2span / …; allow attributes in either order)
+_TD_SPAN_BASE = re.compile(
+    r"<td\b[^>]*>\s*<span\b(?=[^>]*\b(?:class=\"[^\"]*\bbase\b[^\"]*\"|id=\"fc\d+span\"))[^>]*>"
+    r"\s*(.*?)\s*</span>\s*</td>\s*<td\b[^>]*>\s*(.*?)\s*</td>",
     re.I | re.S,
 )
 _TAG = re.compile(r"<[^>]+>")
@@ -243,6 +257,10 @@ def extract_labeled_fields(html: str) -> list[dict[str, Any]]:
         add(label, value, source="th/td")
     for label, value in _DT_DD.findall(html):
         add(label, value, source="dt/dd")
+    for label, value in _TD_BOLDER.findall(html):
+        add(label, value, source="td/bolder")
+    for label, value in _TD_SPAN_BASE.findall(html):
+        add(label, value, source="td/span.base")
     return found
 
 

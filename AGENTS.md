@@ -56,8 +56,10 @@ Prefer MCP/CLI helpers over reading the HAR:
    `hardly_endpoints` / `hardly_content` for API surface and payload kinds
 3. HTML portals: `hardly_brief` first (includes a credentials summary +
    cookie flags), then `hardly_story` / `hardly_forms` / `hardly_ui` /
-   `hardly_outline`. Live tab: `hardly_capture_aria` for Playwright
-   accessibility YAML + `refs[]`
+   `hardly_outline`. `hardly_forms` labels cover Acclaim detailLabel,
+   th/td, dt/dd, MPTSWEB bold cells, and KoFile `span.base` rows — prefer
+   those over scraping bodies. Live tab: `hardly_capture_aria` for
+   Playwright accessibility YAML + `refs[]`
 4. Credentials / login: `hardly_credentials` for the full map (password +
    username/email pairing, session cookies + HttpOnly/Secure/SameSite flags,
    CSRF, OAuth params, jwt/hex/base64 *shapes*, login_flow — never values).
