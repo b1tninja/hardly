@@ -74,13 +74,15 @@ pytest                                  # offline; fixtures are synthetic
 HARDLY_LIVE_CAPTURE=1 pytest            # + live Playwright tests
 hardly soak-live --list                 # public technology demos
 hardly soak-live                        # headless soak against them
-HARDLY_SOAK_HARS="a.har=host:b.har" python scripts/soak.py   # archive soak on your own HARs
+python scripts/soak.py "~/captures/*.har"       # archive soak on your own HARs (globs)
 ```
 
-`HARDLY_SOAK_HARS` holds `path[=host_substring]` entries separated by the OS
-path separator (`:` on POSIX, `;` on Windows); the optional host asserts which
-host hardly picks as `preferred_host`. Soak output is checked for leaked
-secrets. The checked-in `tests/fixtures/sample.har` is synthetic.
+`scripts/soak.py` takes globs (`~` and `**` work) as arguments, or
+`HARDLY_SOAK_GLOB` (patterns separated by the OS path separator). With neither
+it runs the synthetic fixtures. Soak output is checked for leaked secrets.
+Private captures are inputs to this script, not fixtures: keep them outside
+the repo.
+The checked-in `tests/fixtures/sample.har` is synthetic.
 
 ## Contributing a detector
 
