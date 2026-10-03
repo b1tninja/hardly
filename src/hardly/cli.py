@@ -470,6 +470,22 @@ def cmd_challenges(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_data_attrs(args: argparse.Namespace) -> int:
+    from hardly.core.data_attrs import scan_session
+
+    result = sess.open_har(args.har)
+    if "error" in result:
+        _print(result)
+        return 1
+    conn = sess.require_conn(result["session_id"])
+    _print(
+        scan_session(
+            conn, host=args.host, entry_id=args.entry_id, limit=args.limit
+        )
+    )
+    return 0
+
+
 def cmd_recipe_plan(args: argparse.Namespace) -> int:
     from hardly.core.recipe_plan import recipe_from_story
 
@@ -1463,6 +1479,16 @@ def build_parser() -> argparse.ArgumentParser:
     challenges_p.add_argument("--host")
     challenges_p.add_argument("--limit", type=int, default=20)
     challenges_p.set_defaults(func=cmd_challenges)
+
+    data_attrs_p = sub.add_parser(
+        "data-attrs",
+        help="Interpret HTML data-* attributes (dataset keys, endpoints, JSON, frameworks)",
+    )
+    data_attrs_p.add_argument("har")
+    data_attrs_p.add_argument("--host")
+    data_attrs_p.add_argument("--entry-id", type=int)
+    data_attrs_p.add_argument("--limit", type=int, default=20)
+    data_attrs_p.set_defaults(func=cmd_data_attrs)
 
     grids_p = sub.add_parser(
         "grids",

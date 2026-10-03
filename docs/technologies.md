@@ -74,6 +74,33 @@ identifies likely session cookies by name.
 
 Values are never returned; probes take secrets only through overrides.
 
+## HTML data attributes
+
+`hardly_data_attrs` (CLI `hardly data-attrs`) applies the MDN
+[data attributes](https://developer.mozilla.org/en-US/docs/Web/HTML/How_to/Use_data_attributes)
+model to captured HTML: `data-date-of-birth` is read by scripts as
+`element.dataset.dateOfBirth`, and every value is a string. It reports:
+
+- each attribute with its `dataset_key`, count, tags and **value kinds**
+  (`integer`, `uuid`, `url`, `json`, `boolean`, `datetime`, `opaque_token`,
+  `email`, `text`); short enum-like values (`toggle="modal"`) are listed because
+  they are conventions, free text is not;
+- **endpoints** carried in attributes (`data-url`, `data-href`, `data-api`…),
+  resolved against the page URL, query *values* dropped;
+- **embedded JSON** config (`data-config='{"apiBase":…}'`) with its top-level
+  keys;
+- **identifier attributes** (`data-id`, `data-row-key`) that tell you what a row
+  or widget is keyed by;
+- **framework hints**: Bootstrap (`data-bs-*`), Stimulus
+  (`data-controller`, `data-*-target`), Turbo/Rails UJS (`data-remote`,
+  `data-method`, `data-turbo-*`), htmx, Angular/Vue/React markers, test hooks
+  (`data-testid`, `data-cy`), tracking (`data-gtm-*`), captcha widgets
+  (`data-sitekey`), grid/table hints (`data-sort`, `data-page-size`).
+
+SDK consequence: attribute-carried URLs and JSON are often the real API
+configuration (base URLs, page sizes, feature flags) that never shows up in a
+form or a network request until a script uses it.
+
 ## HTTP auth challenges, throttling and captchas
 
 `hardly_challenges` (CLI `hardly challenges`) reports:

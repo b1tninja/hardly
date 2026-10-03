@@ -98,6 +98,10 @@ List HAR pageref groups (browser page loads) with document hints.
 
 Detect data-grid frameworks, JSON envelope conventions and paging params.
 
+### `hardly_data_attrs(session_id, host=None, entry_id=None, limit=20)`
+
+Interpret HTML data-* attributes (MDN dataset model).
+
 ## HTML, forms and labels
 
 ### `hardly_brief(session_id, host=None)`

@@ -1106,6 +1106,30 @@ def hardly_challenges(
 
 
 @mcp.tool
+def hardly_data_attrs(
+    session_id: str,
+    host: str | None = None,
+    entry_id: int | None = None,
+    limit: int = 20,
+) -> str:
+    """Interpret HTML data-* attributes (MDN dataset model).
+
+    Per attribute: dataset key (data-foo-bar -> fooBar), counts, tags, value
+    kinds (id/uuid/url/json/boolean/...), enum-like values, plus endpoint URLs
+    and embedded JSON config the page hands to scripts, and framework hints
+    (Bootstrap, Stimulus, Rails UJS, htmx, test hooks, tracking). Free text is
+    never echoed.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.data_attrs import scan_session
+
+    return _ok(scan_session(conn, host=host, entry_id=entry_id, limit=min(limit, 60)))
+
+
+@mcp.tool
 def hardly_grids(
     session_id: str,
     host: str | None = None,
