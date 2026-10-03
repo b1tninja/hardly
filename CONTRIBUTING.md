@@ -22,4 +22,7 @@ commands, conventions, safety rules). The short version:
 - No captcha, bot-wall or access-control evasion.
 - Tests use neutral, synthetic data; `tests/test_neutrality.py` passes.
 
+Maintainers cutting a release: [docs/releasing.md](docs/releasing.md). Add a `browser` marker to tests
+that launch a real browser (they run nightly, not in the PR matrix).
+
 Security issues: see [SECURITY.md](SECURITY.md). Release notes: [CHANGELOG.md](CHANGELOG.md).

@@ -7,12 +7,17 @@ All notable changes are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Release engineering: tag-driven `release.yml` (build once, PyPI trusted publishing with attestations,
+  GitHub Release with checksums and CycloneDX SBOM, multi-arch GHCR image, MCP Registry via
+  `server.json`), nightly real-browser workflow, CodeQL, Dependabot, pip-audit and workflow lint,
+  `docs/releasing.md`, `browser`/`live` pytest markers, `tests/test_packaging.py`.
 - Repository documentation and tooling: `CONTRIBUTING.md`, `SECURITY.md`, this changelog,
   `docs/architecture.md`, `docs/troubleshooting.md`, a docs link-check test, ruff configuration,
   pre-commit config, GitHub Actions CI and PR/issue templates.
 - Package metadata: keywords, classifiers and project URLs.
 
 ### Changed
+- Dockerfile copies `docs/` and `skills/` (required by the wheel build).
 - `AGENTS.md` and `README.md` rewritten to be concise; every doc now opens with a purpose line.
 - Lint auto-fixes (import order, unused imports, deprecated typing forms); no behaviour change.
 

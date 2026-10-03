@@ -228,6 +228,7 @@ def test_stop_capture_stopped_without_har_is_error(tmp_path, monkeypatch):
     assert out["status"] == "error" and out["har_exists"] is False and out["error"]
 
 
+@pytest.mark.browser
 @pytest.mark.skipif(not capture.playwright_available(), reason="playwright not installed")
 def test_live_budget_and_noise(tmp_path, monkeypatch):
     monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))

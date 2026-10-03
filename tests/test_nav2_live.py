@@ -98,7 +98,11 @@ def test_live_runner_knows_new_ops():
 
 # --- real browser ------------------------------------------------------------
 
-needs_browser = pytest.mark.skipif(not playwright_available(), reason="playwright not installed")
+_skip_no_browser = pytest.mark.skipif(not playwright_available(), reason="playwright not installed")
+
+
+def needs_browser(fn):
+    return pytest.mark.browser(_skip_no_browser(fn))
 
 
 def _run(tmp_path, monkeypatch, path, recipe):

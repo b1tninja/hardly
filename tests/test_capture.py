@@ -170,6 +170,7 @@ def test_capture_rpc_requires_running(tmp_path, monkeypatch):
         capture_rpc(None, "elements")
 
 
+@pytest.mark.browser
 @pytest.mark.skipif(not playwright_available(), reason="playwright not installed")
 @pytest.mark.skipif(
     not __import__("os").environ.get("HARDLY_LIVE_CAPTURE"),
@@ -193,6 +194,7 @@ def test_headless_capture_elements(tmp_path, monkeypatch):
         (active_dir() / f"{info['capture_id']}.stop").write_text("stop\n", encoding="utf-8")
 
 
+@pytest.mark.browser
 @pytest.mark.skipif(not playwright_available(), reason="playwright not installed")
 @pytest.mark.skipif(
     not __import__("os").environ.get("HARDLY_LIVE_CAPTURE"),

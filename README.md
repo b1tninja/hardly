@@ -1,5 +1,7 @@
 # hardly
 
+<!-- mcp-name: io.github.b1tninja/hardly -->
+
 A generic, content-neutral CLI and MCP server for **reading and capturing HAR files** and turning
 them into what a client SDK needs: endpoints, forms and labels, data and media kinds, and how
 credentials and authentication work.
@@ -51,6 +53,26 @@ After any capture, continue in archive mode on the returned `session_id`. hardly
 captchas or bot walls: it identifies them and tells you to stop, ask a person, or re-run elsewhere
 ([docs/gate-policy.md](docs/gate-policy.md)). Details: [docs/capture.md](docs/capture.md).
 
+## Install and run without cloning
+
+```bash
+uvx hardly serve                              # MCP server over stdio (archive mode)
+uvx --from 'hardly[capture]' hardly capture --help   # with the Playwright capture extra
+pipx install 'hardly[capture]'                # or install the CLI permanently
+hardly skill install                          # copy the Agent Skill into ~/.claude/skills/hardly
+```
+
+MCP client config for the published package:
+
+```json
+{ "mcpServers": { "hardly": { "command": "uvx", "args": ["hardly", "serve"] } } }
+```
+
+Browser capture needs a local install (`[capture]` extra, then `python -m playwright install chromium`;
+headed capture needs a display). The container image `ghcr.io/b1tninja/hardly` (multi-arch, built on each
+release) is for archive/headless analysis only; mount your working directory at `/workspace`.
+Release and verification details: [docs/releasing.md](docs/releasing.md).
+
 ## MCP setup (Cursor and others)
 
 Local venv (recommended; headed capture needs a display):
@@ -89,7 +111,8 @@ python scripts/build_image.py       # builds hardly-mcp:latest (Windows: scripts
 }
 ```
 
-Host paths under the mount map to `/workspace/...`.
+Host paths under the mount map to `/workspace/...`. To skip building locally, use the published
+image `ghcr.io/b1tninja/hardly:latest` in place of `hardly-mcp:latest`.
 
 ## Agent onboarding
 
