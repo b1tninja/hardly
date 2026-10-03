@@ -1134,6 +1134,29 @@ def cmd_capabilities(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_start(args: argparse.Namespace) -> int:
+    from hardly.core.start import build_plan
+
+    _print(build_plan(goal=args.goal, har_path=args.har, url=args.url))
+    return 0
+
+
+def cmd_skill(args: argparse.Namespace) -> int:
+    from hardly import resources
+
+    action = getattr(args, "skill_action", None) or "print"
+    try:
+        if action == "print":
+            sys.stdout.write(resources.skill_text())
+            return 0
+        dest = resources.install_skill(args.dest or None)
+    except (FileNotFoundError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"installed hardly skill to {dest}")
+    return 0
+
+
 def cmd_modes(args: argparse.Namespace) -> int:
     from hardly.core.modes import list_modes, mode_playbook, pick_mode
 
@@ -1577,6 +1600,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show version / features (detect stale MCP installs)",
     )
     caps_p.set_defaults(func=cmd_capabilities)
+
+    start_p = sub.add_parser(
+        "start",
+        help="First-use plan: ordered tool calls plus environment state",
+    )
+    start_p.add_argument("--goal", default="", help="Free-text goal, e.g. 'build a client SDK'")
+    start_p.add_argument("--har", default="", help="Existing HAR path")
+    start_p.add_argument("--url", default="", help="Target URL")
+    start_p.set_defaults(func=cmd_start)
+
+    skill_p = sub.add_parser(
+        "skill",
+        help="Agent Skill: install into ~/.claude/skills/hardly or print SKILL.md",
+    )
+    skill_sub = skill_p.add_subparsers(dest="skill_action")
+    skill_install_p = skill_sub.add_parser("install", help="Write SKILL.md + references/")
+    skill_install_p.add_argument(
+        "--dest",
+        default="",
+        help="Skill directory to write (default ~/.claude/skills/hardly)",
+    )
+    skill_install_p.set_defaults(func=cmd_skill)
+    skill_print_p = skill_sub.add_parser("print", help="Print SKILL.md to stdout")
+    skill_print_p.set_defaults(func=cmd_skill)
+    skill_p.set_defaults(func=cmd_skill, dest="")
 
     modes_p = sub.add_parser(
         "modes",

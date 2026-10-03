@@ -29,5 +29,9 @@ capture = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/hardly"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"docs" = "hardly/_data/docs"
+"skills" = "hardly/_data/skills"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

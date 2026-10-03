@@ -16,7 +16,7 @@ OUT = ROOT / "docs" / "tools.md"
 
 # Display order and grouping; tools not listed land in "Other".
 GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Orientation", ("modes", "mode", "capabilities", "help", "recommend", "report")),
+    ("Orientation", ("start", "modes", "mode", "capabilities", "help", "recommend", "report")),
     ("Sessions", ("open", "reopen", "list_sessions", "close", "summary", "stats", "coverage")),
     ("Endpoints and content", ("streams", "body_query", "contract_check", "hosts", "endpoints", "content", "search", "entry", "compare_entries", "flow", "schema", "pages", "grids", "data_attrs", "arcgis")),
     ("HTML, forms and labels", ("brief", "story", "forms", "ui", "outline", "routes", "around", "tree", "params", "find_search", "stack", "tables", "auth_patterns", "pagination")),
@@ -76,13 +76,35 @@ def render() -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+SKILL_REFS = ("cheatsheet", "concepts", "sdk-workflow", "capture", "gate-policy", "reporting", "tools")
+REFS_DIR = ROOT / "skills" / "hardly" / "references"
+
+
+def refs_current() -> bool:
+    """True when skills/hardly/references/*.md match docs/*.md."""
+    return all(
+        (REFS_DIR / f"{n}.md").exists()
+        and (REFS_DIR / f"{n}.md").read_text(encoding="utf-8")
+        == (ROOT / "docs" / f"{n}.md").read_text(encoding="utf-8")
+        for n in SKILL_REFS
+    )
+
+
+def sync_refs() -> None:
+    REFS_DIR.mkdir(parents=True, exist_ok=True)
+    for n in SKILL_REFS:
+        text = (ROOT / "docs" / f"{n}.md").read_text(encoding="utf-8")
+        (REFS_DIR / f"{n}.md").write_text(text, encoding="utf-8")
+
+
 def main() -> int:
     text = render()
     if "--check" in sys.argv:
         return 0 if OUT.exists() and OUT.read_text(encoding="utf-8") == text else 1
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(text, encoding="utf-8")
-    print(f"wrote {OUT} ({text.count('### ')} tools)")
+    sync_refs()
+    print(f"wrote {OUT} ({text.count('### ')} tools) and skills/hardly/references")
     return 0
 
 

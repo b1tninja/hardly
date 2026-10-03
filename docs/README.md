@@ -19,6 +19,7 @@ SDK you build with it.
 | [gate-policy.md](gate-policy.md) | What to do at each kind of gate: accept, stop, or re-run elsewhere |
 | [crawl-handoff.md](crawl-handoff.md) | Crawl strategy, budgets, and a catalogue of traps hit during live testing |
 | [catalog.md](catalog.md) | Tracking many targets with several endpoints each; subclassing `TargetAdapter`; polite batch verify |
+| [cheatsheet.md](cheatsheet.md) | One-page quick reference (also MCP resource `hardly://cheatsheet`) |
 | [tools.md](tools.md) | Generated reference for every MCP tool |
 
 Setup (venv, Docker, Cursor MCP) lives in the top-level [README](../README.md);

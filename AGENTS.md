@@ -38,6 +38,22 @@ hardly serve
 Docker deploy for Cursor: `powershell -File scripts\deploy-docker.ps1` (see
 README). Headed capture needs the **local venv** MCP entry (not Docker).
 
+## First use
+
+- `hardly_start(goal, har_path, url)` returns an ordered plan plus environment
+  state; read resource `hardly://cheatsheet` (or `docs/cheatsheet.md`).
+- MCP prompts: `reverse_engineer_api`, `build_client_sdk`,
+  `diagnose_blocked_capture`, `verify_client` (plus `analyze_har`,
+  `discover_apis`, `capture_portal`, `document_api`, `find_auth_flow`).
+- MCP resources: `hardly://docs/<concepts|sdk-workflow|capture|gate-policy|tools|reporting|catalog|crawl-handoff>`.
+- Agent Skill: `skills/hardly/SKILL.md`; `hardly skill install [--dest DIR]`
+  (default `~/.claude/skills/hardly`) / `hardly skill print`. Its
+  `references/*.md` are copies of `docs/`; `python scripts/gen_tool_docs.py`
+  refreshes them and `docs/tools.md`.
+- Tool docstrings are prompts: first sentence = the point (<=160 chars), say when
+  to use it and which sibling to prefer, include an `Example:` call, mark live
+  tools `LIVE` and confirm-gated. `tests/test_agent_onboarding.py` lints this.
+
 ## Three modes (pick one first)
 
 Call `hardly_modes` / `hardly_mode` (or `hardly modes` / `hardly help-tools archive`):

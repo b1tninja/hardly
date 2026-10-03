@@ -99,9 +99,14 @@ FEATURES = (
     "capture_recipe",
     "offline_xpath",
     "catalog",
+    "start",
+    "prompts",
+    "resources",
+    "skill",
 )
 
 TOOLS = (
+    "hardly_start",
     "hardly_capabilities",
     "hardly_modes",
     "hardly_mode",

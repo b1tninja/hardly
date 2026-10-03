@@ -129,7 +129,19 @@ hardly modes headless --url https://portal.example.com
 hardly modes --goal "ask the user to search the portal"
 ```
 
-MCP prompts: `analyze_har`, `discover_apis`, `capture_portal`.
+MCP prompts: `analyze_har`, `discover_apis`, `capture_portal`, `document_api`,
+`find_auth_flow`, `reverse_engineer_api(har_path)`, `build_client_sdk(session_id)`,
+`diagnose_blocked_capture(url)`, `verify_client(session_id, entry_id)`.
+
+### First time using hardly (agents)
+
+- Call `hardly_start(goal, har_path, url)` (CLI: `hardly start --goal ...`) for an
+  ordered plan with example arguments and the current environment state.
+- MCP resources (read-only docs): `hardly://cheatsheet` and
+  `hardly://docs/{concepts,sdk-workflow,capture,gate-policy,tools,reporting,catalog,crawl-handoff}`.
+- Agent Skill: `hardly skill install` writes `SKILL.md` + `references/` to
+  `~/.claude/skills/hardly` (`--dest DIR` to choose the skill directory);
+  `hardly skill print` shows it. Source: [skills/hardly](skills/hardly/SKILL.md).
 
 ### Archive — existing HAR file
 
