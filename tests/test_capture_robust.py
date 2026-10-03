@@ -246,6 +246,7 @@ def test_live_budget_and_noise(tmp_path, monkeypatch):
             block_noise=True,
             recipe=[{"op": "wait", "ms": 1200}] * 3,
         )
-    assert out["status"] == "stopped" and out["har_exists"]
+    # no output path: the HAR is ephemeral (discarded after the run), the results remain
+    assert out["status"] == "stopped" and out["ephemeral"] is True and not out["har_exists"]
     assert out["budget"]["exceeded"] is True and out["budget"]["skipped_steps"] >= 1
     assert "blocked_requests" in out and "waited_s" in out["slot"]

@@ -1457,18 +1457,19 @@ def capture_headless(url: str, har_path: str | Path | None = None, **kwargs: Any
         out = _capture_headless_impl(url, har_path, **kwargs)
         out.setdefault("ephemeral", False)
         return out
-    if not kwargs.get("open_session", True):
-        raise CaptureError(
-            "open_session=false needs an output path (har_path / -o): without one the HAR is "
-            "ephemeral and would be deleted with nothing to show for it."
-        )
     label = (kwargs.get("label") or _host_label(str(url or "")) or "capture").strip()
     target = new_ephemeral_har(label)
     try:
         out = _capture_headless_impl(url, target, _ephemeral=True, **kwargs)
     finally:
         discard_ephemeral(target)
-    return _mark_ephemeral(out)
+    out = _mark_ephemeral(out)
+    if not kwargs.get("open_session", True):
+        out.setdefault("warnings", []).append(
+            "open_session=false and no output path: the HAR was discarded after the capture "
+            "(recipe results are still returned). Pass har_path / -o to keep it."
+        )
+    return out
 
 
 def _capture_headless_impl(

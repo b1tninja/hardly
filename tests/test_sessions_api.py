@@ -407,12 +407,13 @@ def test_capture_output_path_is_kept(tmp_path, monkeypatch):
     assert target.is_file() and out["har_path"] == str(target) and out["ephemeral"] is False
 
 
-def test_no_session_without_output_path_is_refused(monkeypatch):
+def test_no_session_without_output_path_warns_that_har_is_discarded(monkeypatch):
     from hardly import capture
 
     _fake_impl(monkeypatch)
-    with pytest.raises(capture.CaptureError, match="output path"):
-        capture.capture_headless("https://example.com/", open_session=False)
+    out = capture.capture_headless("https://example.com/", open_session=False)
+    assert out["ephemeral"] is True and out.get("har_path") is None
+    assert any("discarded" in w for w in out["warnings"])
 
 
 def test_startup_sweep_removes_only_old_orphans():
