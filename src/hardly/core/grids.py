@@ -16,6 +16,8 @@ from collections import Counter
 from typing import Any
 from urllib.parse import parse_qsl
 
+from hardly.core.previews import is_truncated, preview_warnings
+
 # --- HTML grid libraries: (name, regex on markup/scripts) -------------------
 _HTML_GRIDS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("datatables", re.compile(r"dataTables_wrapper|jquery\.dataTables|\bnew\s+DataTable\s*\(|\.DataTable\s*\(|cdn\.datatables\.net|dataTables(\.[\w-]+)*\.(min\.)?(js|css)|class=\"[^\"]*\bdataTable\b|\bdt-(container|layout-row|paging|search)\b", re.I)),
@@ -113,7 +115,7 @@ def detect_grids(
     rows = conn.execute(
         f"""
         SELECT e.entry_id, e.method, e.path_template, e.path, e.query_raw,
-               e.mime, sb.preview_text AS resp, sb.content_type AS resp_ct,
+               e.mime, sb.preview_text AS resp, sb.content_type AS resp_ct, sb.size AS resp_size,
                rb.preview_text AS req
         FROM entries e
         LEFT JOIN bodies sb ON sb.entry_id = e.entry_id AND sb.side = 'response'
@@ -130,6 +132,7 @@ def detect_grids(
     param_entries: dict[str, list[int]] = {}
     postback_cmds: Counter[str] = Counter()
     data_attrs: Counter[str] = Counter()
+    truncated: list[dict[str, Any]] = []
 
     for row in rows:
         eid = int(row["entry_id"])
@@ -137,6 +140,8 @@ def detect_grids(
         ct = (row["resp_ct"] or row["mime"] or "").lower()
         json_like = body.lstrip().startswith(("{", "[")) if body else False
         if body and not json_like and ("html" in ct or body.lstrip().startswith("<")):
+            if is_truncated(row["resp_size"], body):
+                truncated.append({"entry_id": eid})
             body = html.unescape(body)
             for name, pat in _HTML_GRIDS:
                 if pat.search(body):
@@ -202,10 +207,15 @@ def detect_grids(
         }
         for style, names in sorted(param_hits.items(), key=lambda kv: -sum(kv[1].values()))
     ][:limit]
-    from hardly.core.export_links import export_links
+    from hardly.core.export_links import export_links_report
 
-    exports = export_links(conn, host)
+    rep = export_links_report(conn, host)
+    exports = rep["export_links"]
     result_exports: dict[str, Any] = {"export_links": exports}
+    warnings = preview_warnings(truncated, "grid markers/links") + rep.get("warnings", [])
+    if warnings:
+        result_exports["warnings"] = warnings
+        result_exports["truncated_previews"] = len(set(t["entry_id"] for t in truncated))
     if exports:
         result_exports["export_note"] = (
             "Built-in exports return the whole result set in one response: "

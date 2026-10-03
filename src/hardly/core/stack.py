@@ -16,6 +16,7 @@ import json
 import re
 import sqlite3
 from typing import Any
+from urllib.parse import urlsplit
 
 from hardly.core.cookies import cookie_timeline
 
@@ -43,6 +44,11 @@ def H(pattern: str, weight: int, label: str):
 def U(pattern: str, weight: int, label: str):
     """URL fragment; also matched inside bodies (script/link references)."""
     return _sig("url", pattern, weight, label)
+
+
+def R(pattern: str, weight: int, label: str):
+    """Request-URL only: never matched inside bodies (outbound links would false-positive)."""
+    return _sig("requrl", pattern, weight, label)
 
 
 def B(pattern: str, weight: int, label: str):
@@ -73,7 +79,7 @@ CATALOG: list[dict[str, Any]] = [
         B(r"__VIEWSTATEGENERATOR|__EVENTTARGET", 1, "__VIEWSTATEGENERATOR/__EVENTTARGET"),
         C(r"ASP\.NET_SessionId", 1, "cookie:ASP.NET_SessionId"),
         H(r"x-aspnet-version:", 1, "header:X-AspNet-Version"),
-        U(r"\.aspx?(?:[?\"'\s]|$)", 1, "url:.aspx"),
+        R(r"\.aspx?(?:[?#]|$)", 1, "url:.aspx"),
     ),
     _tech(
         "aspnet-antiforgery", "ASP.NET MVC/Core antiforgery", "auth_stack",
@@ -154,7 +160,7 @@ CATALOG: list[dict[str, Any]] = [
         "Keep PHPSESSID in the cookie jar; flows are usually plain form posts replayable with cookie plus form fields.",
         C(r"PHPSESSID", 3, "cookie:PHPSESSID"),
         H(r"x-powered-by:\s*php", 3, "header:X-Powered-By: PHP"),
-        U(r"\.php(?:[?\"'\s]|$)", 1, "url:.php"),
+        R(r"\.php(?:[?#]|$)", 1, "url:.php"),
     ),
     _tech(
         "nextjs", "Next.js", "frontend",
@@ -190,7 +196,7 @@ CATALOG: list[dict[str, Any]] = [
     _tech(
         "angularjs", "AngularJS", "frontend",
         _JS_BUNDLE,
-        B(r"""\sng-app\b""", 3, "attr:ng-app"),
+        B(r"""\sng-app(?=[\s=>/])""", 3, "attr:ng-app"),
         U(r"/angular(?:\.min)?\.js", 3, "angular.js"),
         B(r"""\sng-(?:controller|repeat|model)\b""", 2, "ng-* directives"),
     ),
@@ -201,7 +207,6 @@ CATALOG: list[dict[str, Any]] = [
         B(r"\b_ng(?:host|content)-", 3, "_nghost/_ngcontent"),
         B(r"<app-root\b", 2, "<app-root>"),
         B(r"\sng-reflect-", 2, "ng-reflect-*"),
-        U(r"polyfills(?:[.\-]\w+)?\.js", 1, "polyfills bundle"),
     ),
     _tech(
         "salesforce-aura", "Salesforce Experience Cloud / Aura", "frontend",
@@ -340,7 +345,7 @@ CATALOG: list[dict[str, Any]] = [
         B(r"swagger-ui", 3, "swagger-ui"),
         U(r"/(?:openapi|swagger)\.(?:json|ya?ml)\b|/v[23]/api-docs", 3, "openapi/swagger spec path"),
         B(r""""(?:openapi|swagger)"\s*:\s*"[23]""", 3, "openapi/swagger version key"),
-        B(r"redoc(?:\.standalone)?", 1, "redoc"),
+        B(r"<redoc\b|redoc(?:\.standalone)?(?:\.min)?\.js|\bRedoc\.init\b", 1, "redoc"),
     ),
 ]
 
@@ -450,6 +455,9 @@ class _Acc:
                 elif kind == "header":
                     if any(rx.search(t) for t in texts):
                         hit_kind = "header"
+                elif kind == "requrl":
+                    if url and rx.search(urlsplit(url).path + ("?" if "?" in url else "")):
+                        hit_kind = "url"
                 elif kind == "url":
                     if url and rx.search(url):
                         hit_kind = "url"

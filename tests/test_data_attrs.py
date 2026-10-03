@@ -2,7 +2,7 @@
 
 import json
 
-from hardly.core.data_attrs import classify_value, dataset_key, extract_data_attributes
+from hardly.core.data_attrs import classify_value, dataset_key, extract_data_attributes, scan_session
 
 HTML = (
     '<table data-toggle="table" data-url="/api/rows?token=SECRET" data-page-size="25">'
@@ -82,3 +82,26 @@ def test_scan_session_over_har(tmp_path, monkeypatch):
     assert out["endpoints"][0]["entry_id"] is not None
     assert any(a["name"] == "data-id" for a in out["attributes"])
     assert "Some private free text" not in json.dumps(out)
+
+
+def test_single_sitekey_gives_captcha_hint_without_echoing_value():
+    out = extract_data_attributes('<div class="w" data-sitekey="PUBLICKEY1234567890abcdef"></div>')
+    fw = [f for f in out["frameworks"] if f["id"] == "captcha-widget"]
+    assert fw and "person" in fw[0]["hint"]
+    assert "PUBLICKEY" not in json.dumps(out["frameworks"])
+
+
+def test_scan_session_warns_on_truncated_html_preview():
+    import sqlite3
+
+    c = sqlite3.connect(":memory:")
+    c.row_factory = sqlite3.Row
+    c.executescript(
+        "CREATE TABLE entries (entry_id INTEGER, scheme TEXT, host TEXT, path TEXT);"
+        "CREATE TABLE bodies (entry_id INTEGER, side TEXT, content_type TEXT, preview_text TEXT, size INTEGER);"
+    )
+    body = '<div data-x="1"></div>'
+    c.execute("INSERT INTO entries VALUES (1,'https','a.test','/p')")
+    c.execute("INSERT INTO bodies VALUES (1,'response','text/html',?,?)", (body, 500000))
+    out = scan_session(c)
+    assert out["truncated_previews"] == 1 and "truncated" in out["warnings"][0]

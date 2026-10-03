@@ -38,15 +38,33 @@ MAX_REDIRECTS = 5
 _LINKS_PER_PAGE = 60
 _MAX_BODY_CHARS = 400_000
 _STOP_ACTIONS = frozenset({"stop", "unknown_rerun"})
-_USER_AGENT = (
+from hardly import __version__ as _VERSION
+
+# Honest by default: the crawler says what it is. ``user_agent="browser"`` opts
+# into a browser-like string (only where the site's terms allow it).
+HONEST_USER_AGENT = f"hardly/{_VERSION} (+https://github.com/b1tninja/hardly; polite HAR-analysis crawler)"
+BROWSER_USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/124.0.0.0 Safari/537.36"
 )
-_HEADERS = {
-    "User-Agent": _USER_AGENT,
+_USER_AGENT = HONEST_USER_AGENT  # back-compat alias
+_ACCEPT = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
 }
+_HEADERS = {"User-Agent": HONEST_USER_AGENT, **_ACCEPT}
+_MAX_EXTERNAL_ROWS = 500
+_AVOID_LINK_RE = re.compile(r"log-?out|sign-?out|signoff|/delete\b|/remove\b|unsubscribe", re.I)
+
+
+def resolve_user_agent(user_agent: str | None) -> str:
+    """None/"" -> honest default; "browser" -> browser-like; else the given string."""
+    ua = (user_agent or "").strip()
+    if not ua or ua.lower() in ("honest", "default"):
+        return HONEST_USER_AGENT
+    if ua.lower() == "browser":
+        return BROWSER_USER_AGENT
+    return re.sub(r"[\r\n]+", " ", ua)[:200]
 _SESSION_PARAMS = frozenset(
     {"jsessionid", "sid", "sessionid", "session_id", "phpsessid", "sessid", "aspsessionid",
      "cfid", "cftoken", "sessionkey", "session"}
@@ -158,7 +176,11 @@ def _stack(status: int, headers: dict[str, str], body: str, url: str) -> list[st
         techs = _fingerprint_response(status, headers, body, url) or []
     except Exception:  # noqa: BLE001
         return []
-    names = [str(t.get("name") or t.get("id")) for t in techs if isinstance(t, dict)]
+    names = [
+        str(t.get("name") or t.get("id"))
+        for t in techs
+        if isinstance(t, dict) and t.get("confidence") != "low"  # one weak signal is noise
+    ]
     return sorted({n for n in names if n})[:6]
 
 
@@ -186,36 +208,56 @@ def _needs_browser(html: str, structure: dict[str, Any]) -> str | None:
     return None
 
 
-def _form_rows(structure: dict[str, Any], hit: dict[str, Any] | None) -> list[dict[str, Any]]:
+def _form_rows(structure: dict[str, Any], keywords: tuple[str, ...] = ()) -> list[dict[str, Any]]:
+    """Per-form rows; ``looks_like_search`` uses the same test as the page-level flag."""
     rows = []
     for f in (structure.get("forms") or [])[:5]:
         names = [str(n) for n in (f.get("field_names") or []) if n][:12]
+        one = search_form_reached({"forms": [f]}, keywords=keywords)
         rows.append(
             {
                 "action": _safe(f.get("action") or ""),
                 "method": f.get("method") or "",
                 "fields": names,
-                "looks_like_search": bool(
-                    hit
-                    and _safe(hit.get("action") or "") == _safe(f.get("action") or "")
-                    and set(hit.get("fields") or []) <= set(names)
-                ),
+                "looks_like_search": one is not None,
+                "_hit": one,
             }
         )
     return rows
+
+
+def _all_links(structure: dict[str, Any], ranked: list[dict[str, Any]], keywords: tuple[str, ...]) -> list[dict[str, Any]]:
+    """Ranked links first, then every other absolute http(s) link at score 0."""
+    out = list(ranked)
+    seen = {r.get("href") for r in out}
+    for ln in structure.get("links") or []:
+        href = ln.get("href") or ""
+        if not href.startswith(("http://", "https://")) or href in seen:
+            continue
+        seen.add(href)
+        if _AVOID_LINK_RE.search(href) or _AVOID_LINK_RE.search(ln.get("text") or ""):
+            continue
+        score, matched = score_link((ln.get("text") or "").strip(), href, keywords)
+        out.append({"href": href, "text": (ln.get("text") or "").strip(), "score": max(score, 0),
+                    "matched_keywords": matched})
+        if len(out) >= 400:
+            break
+    return out
 
 
 # -------------------------------------------------------------------- core
 
 
 class _Host:
-    __slots__ = ("robots", "last", "halted", "delay")
+    __slots__ = ("robots", "last", "halted", "delay", "robots_status", "robots_policy")
 
     def __init__(self) -> None:
         self.robots: urllib.robotparser.RobotFileParser | None = None
         self.last = 0.0
         self.halted: str | None = None
         self.delay = 0.0
+        self.robots_status: int | None = None
+        self.robots_policy = "unknown"
 
 
 def crawl(
@@ -229,8 +271,15 @@ def crawl(
     timeout_s: float = 15.0,
     client: httpx.Client | None = None,
     respect_robots: bool = True,
+    user_agent: str | None = None,
 ) -> dict[str, Any]:
-    """Polite breadth-first crawl from ``start_url`` following only fetched links."""
+    """Polite breadth-first crawl from ``start_url`` following only fetched links.
+
+    ``user_agent``: None -> honest hardly UA; ``"browser"`` -> browser-like UA;
+    any other string is sent as given.
+    """
+    ua = resolve_user_agent(user_agent)
+    headers_out = {"User-Agent": ua, **_ACCEPT}
     kw = tuple(k.strip() for k in keywords if k and k.strip())
     max_pages = max(1, min(int(max_pages), MAX_PAGES_HARD))
     depth = max(0, min(int(depth), MAX_DEPTH_HARD))
@@ -242,7 +291,7 @@ def crawl(
     home = registrable_domain(parts.hostname or "")
 
     own = client is None
-    http = client or httpx.Client(timeout=timeout_s, follow_redirects=False, headers=_HEADERS)
+    http = client or httpx.Client(timeout=timeout_s, follow_redirects=False, headers=headers_out)
     hosts: dict[str, _Host] = {}
     pages: list[dict[str, Any]] = []
     robots_disallowed: list[str] = []
@@ -263,7 +312,7 @@ def crawl(
         last_exc: Exception | None = None
         for attempt in range(2):  # one retry, transient network errors only
             try:
-                resp = http.get(url, headers=_HEADERS, follow_redirects=follow, timeout=timeout_s)
+                resp = http.get(url, headers=headers_out, follow_redirects=follow, timeout=timeout_s)
                 hs.last = _now()
                 return resp
             except httpx.TransportError as exc:
@@ -285,15 +334,22 @@ def crawl(
             resp = polite_get(robots_url, follow=True)
         except httpx.HTTPError:
             rp.parse([])  # unreachable robots.txt: nothing disallowed
+            hs.robots_policy = "unreachable_allow_all"
         else:
             _check_halt(hs, resp)
-            if resp.status_code >= 500:
+            hs.robots_status = resp.status_code
+            if resp.status_code >= 500 or resp.status_code in (401, 403):
+                # Server error, or access to robots.txt itself refused (often a bot gate):
+                # the conservative reading is "no crawling", not "nothing disallowed".
                 rp.parse(["User-agent: *", "Disallow: /"])
+                hs.robots_policy = "forbidden_disallow_all" if resp.status_code < 500 else "error_disallow_all"
             elif resp.status_code >= 400:
                 rp.parse([])
+                hs.robots_policy = "missing_allow_all"
             else:
                 rp.parse(resp.text.splitlines())
-                cd = rp.crawl_delay(_USER_AGENT) or rp.crawl_delay("*")
+                hs.robots_policy = "parsed"
+                cd = rp.crawl_delay(ua) or rp.crawl_delay("*")
                 if cd:
                     hs.delay = min(float(cd), 30.0)
         hs.robots = rp
@@ -308,7 +364,7 @@ def crawl(
     def allowed(url: str) -> bool:
         if not respect_robots:
             return True
-        return robots_for(url).can_fetch(_USER_AGENT, url)  # type: ignore[union-attr]
+        return robots_for(url).can_fetch(ua, url)  # type: ignore[union-attr]
 
     def fetch(url: str, *, external_hop: bool) -> dict[str, Any]:
         """GET with manual redirects (chain recorded). Returns page record + body."""
@@ -382,10 +438,13 @@ def crawl(
             page["title"] = _title(body)
             ranked, structure = page_candidates(body, base_url=final, keywords=kw, limit=_LINKS_PER_PAGE)
             hit = search_form_reached(structure, keywords=kw)
-            page["forms"] = _form_rows(structure, hit)
-            if hit:
+            page["forms"] = _form_rows(structure, kw)
+            hit = next((f["_hit"] for f in page["forms"] if f["_hit"]), None) or hit
+            for f in page["forms"]:
+                f.pop("_hit", None)
+            if hit or any(f["looks_like_search"] for f in page["forms"]):
                 page["looks_like_search"] = True
-                page["evidence"].append("search-like form: " + ",".join(hit.get("fields") or []))
+                page["evidence"].append("search-like form: " + ",".join((hit or {}).get("fields") or []))
             page["grids"] = html_grid_signals(body)[:5]
             if page["grids"]:
                 page["evidence"].append("grid library: " + ",".join(page["grids"]))
@@ -407,7 +466,7 @@ def crawl(
                 s, m = score_link(page["title"], urlsplit(final).path, kw)
                 page["score"], page["matched_keywords"] = s, m
             if not stops and 200 <= status < 300:
-                links = ranked
+                links = _all_links(structure, ranked, kw)
         if stops:
             page["stop"] = [{"class": g["class"], "action": g.get("action")} for g in stops]
             page["evidence"].append("gate: " + ",".join(sorted({str(g["class"]) for g in stops})))
@@ -445,7 +504,7 @@ def crawl(
                 if got["note"]:
                     page["note"] = got["note"]
                 pages.append(page)
-                if item["external"] or level >= depth:
+                if item["external"]:
                     continue
                 for link in links:
                     href = link.get("href") or ""
@@ -471,7 +530,7 @@ def crawl(
                         )
                         if not follow_external:
                             continue
-                    if key in seen:
+                    if key in seen or level >= depth:
                         continue
                     cand = nxt.get(key)
                     if cand is None or link["score"] > cand["score"]:
@@ -506,6 +565,7 @@ def crawl(
         start, kw, pages, robots_disallowed, errors, external, hosts,
         max_pages=max_pages, depth=depth, delay_s=delay_s,
         follow_external=follow_external, respect_robots=respect_robots,
+        user_agent=ua,
     )
 
 
@@ -523,6 +583,7 @@ def _summarise(
     delay_s: float,
     follow_external: bool,
     respect_robots: bool,
+    user_agent: str = HONEST_USER_AGENT,
 ) -> dict[str, Any]:
     blocked: list[dict[str, Any]] = []
     env_blocked: list[dict[str, Any]] = []
@@ -546,7 +607,19 @@ def _summarise(
     ]
     needs_browser = [p["final_url"] for p in pages if p["needs_browser"]]
     halted = [{"host": h, "reason": st.halted} for h, st in sorted(hosts.items()) if st.halted]
-    ext_rows = sorted(external.values(), key=lambda r: (-r["score"], r["host"], r["url"]))[:30]
+    ext_all = sorted(external.values(), key=lambda r: (-r["score"], r["host"], r["url"]))
+    ext_rows = ext_all[:_MAX_EXTERNAL_ROWS]
+    robots_rows = [
+        {
+            "host": h,
+            "status": st.robots_status,
+            "policy": st.robots_policy,
+            "crawl_delay_s": st.delay or None,
+            "effective_delay_s": max(delay_s, st.delay),
+        }
+        for h, st in sorted(hosts.items())
+        if st.robots is not None
+    ]
     nxt: list[str] = []
     searchy = [c for c in candidates if c["looks_like_search"]]
     if searchy:
@@ -571,6 +644,11 @@ def _summarise(
         nxt.append("host rate-limited (429/Retry-After): wait before re-running; crawl halted for that host.")
     if robots_disallowed:
         nxt.append("robots.txt disallowed some links; they were not fetched.")
+    if any(r["policy"] == "forbidden_disallow_all" for r in robots_rows):
+        nxt.append(
+            "robots.txt itself returned 401/403 (often a bot gate); treated as disallow-all. "
+            "Do not evade: ask the site owner, or use an interactive capture with a person."
+        )
     if ext_rows and not follow_external:
         nxt.append("external links were recorded but not fetched; pass follow_external to take one hop.")
     return {
@@ -579,7 +657,9 @@ def _summarise(
         "limits": {
             "max_pages": max_pages, "depth": depth, "delay_s": delay_s,
             "follow_external": follow_external, "respect_robots": respect_robots,
+            "user_agent": user_agent,
         },
+        "robots": robots_rows,
         "pages_fetched": len(pages),
         "candidates": candidates,
         "pages": pages,
@@ -588,6 +668,7 @@ def _summarise(
         "halted_hosts": halted,
         "robots_disallowed": sorted(set(robots_disallowed)),
         "external_links": ext_rows,
+        "external_links_total": len(ext_all),
         "needs_browser": needs_browser,
         "errors": errors,
         "next": nxt,

@@ -63,3 +63,10 @@ def test_redirects_redacts_location(tmp_path, monkeypatch):
     blob = json.dumps(out)
     assert "AUTHCODESECRET" not in blob and "S1&" not in blob
     assert "lang=en" in blob and out["chains"][0]["target"]["follow_entry_id"] is not None
+
+
+def test_redact_url_keeps_len_truncation_marker_intact():
+    out = redact_url("/a?authtoken_value_long…(len=900)&q=2…(len=5)")
+    assert out == "/a?authtoken_value_long…(len=900)&q=2…(len=5)"
+    out = redact_url("/a?token=abc…(len=900)")
+    assert "abc" not in out and out.endswith("…(len=900)") and REDACTED in out

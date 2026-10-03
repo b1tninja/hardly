@@ -190,6 +190,15 @@ def redact_query_dict(query: dict[str, Any] | None) -> dict[str, Any] | None:
     return {k: (REDACTED if _is_secret_param(str(k)) else v) for k, v in query.items()}
 
 
+_LEN_MARKER_RE = re.compile(r"…\(len=\d+\)$")
+
+
+def _split_len_marker(chunk: str) -> tuple[str, str]:
+    """Split a trailing ``…(len=N)`` truncation marker off a query chunk."""
+    m = _LEN_MARKER_RE.search(chunk)
+    return (chunk[: m.start()], m.group(0)) if m else (chunk, "")
+
+
 def redact_url(url: str) -> str:
     """Hide secret-bearing query values and ``;jsessionid=`` style path params.
 
@@ -209,15 +218,16 @@ def redact_url(url: str) -> str:
             return qs
         pieces = []
         for chunk in qs.split("&"):
+            chunk, marker = _split_len_marker(chunk)
             name, sep, val = chunk.partition("=")
             lowered = name.lower().replace("-", "_")
             bare = lowered.replace("_", "")
             if sep and (
                 lowered in URL_SECRET_PARAMS or bare in URL_SECRET_PARAMS or is_sensitive_key(name)
             ):
-                pieces.append(f"{name}={REDACTED}")
+                pieces.append(f"{name}={REDACTED}{marker}")
             else:
-                pieces.append(chunk)
+                pieces.append(chunk + marker)
         return "&".join(pieces)
 
     fragment = scrub(parts.fragment) if "=" in parts.fragment else parts.fragment
