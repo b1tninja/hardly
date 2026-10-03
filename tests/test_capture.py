@@ -224,3 +224,28 @@ def test_browser_executable_env(tmp_path, monkeypatch):
     assert default_executable() == str(exe)
     monkeypatch.setenv("HARDLY_BROWSER_EXECUTABLE", str(tmp_path / "missing"))
     assert default_executable() == ""
+
+
+def test_cli_discover_keeps_its_url():
+    from hardly.cli import build_parser
+
+    ns = build_parser().parse_args(
+        ["capture", "discover", "https://site.example/x", "--headless", "--wait", "1"]
+    )
+    assert ns.url == "https://site.example/x" and ns.capture_action == "discover"
+    ns = build_parser().parse_args(["capture", "goto", "https://site.example/y"])
+    assert ns.url == "https://site.example/y"
+
+
+def test_bare_capture_url_means_run():
+    from hardly.cli import build_parser, normalize_argv
+
+    argv = normalize_argv(["capture", "https://a.example", "-o", "x.har", "--headless"])
+    assert argv[:2] == ["capture", "run"]
+    ns = build_parser().parse_args(argv)
+    assert ns.url == "https://a.example" and ns.capture_action == "run" and ns.output == "x.har"
+    # explicit subcommands and unrelated commands are untouched
+    assert normalize_argv(["capture", "discover", "u"]) == ["capture", "discover", "u"]
+    assert normalize_argv(["capture", "list"]) == ["capture", "list"]
+    assert normalize_argv(["summary", "a.har"]) == ["summary", "a.har"]
+    assert normalize_argv(["capture", "-h"]) == ["capture", "-h"]
