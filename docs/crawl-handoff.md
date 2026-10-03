@@ -25,18 +25,19 @@ capture ─▶ index ─▶ analyse ─▶ decide next click/request ─▶ capt
  (HAR)    (SQLite)  (tools)         (find_click / recipe)
 ```
 
-1. **Pick a mode** (`hardly modes`): a HAR already exists → *archive*; a URL an
+1. **Pick a mode** (`hardly guide mode`): a HAR already exists → *archive*; a URL an
    agent can drive → *headless*; a bot wall, CAPTCHA, MFA or complex UI →
    *interactive* (ask a person; never claim to see their screen).
-2. **Capture the landing page**, then run `hardly brief`, `hardly wall`,
-   `hardly challenges`. Decide the mode from what they say before doing more.
+2. **Capture the landing page**, then run `hardly session site-brief` and
+   `hardly gate bot-protection`. Decide the mode from what they say before doing more.
 3. **Navigate toward the data** with `find_click` (see §3) until a real form,
    grid or API appears.
-4. **Characterise it**: `forms`, `grids`, `data-attrs`, `endpoints`, `content`,
-   `credentials`, `correlate`.
-5. **Write the client** in your own repo from `stub` / `export-openapi` plus
-   hand-redacted fixtures. Keep the recipe (`recipe-plan -o`) so the capture can
-   be repeated, and `hardly diff` old vs new when the site changes.
+4. **Characterise it**: `page forms`, `tech stack` (data grids), `page embedded-routes`,
+   `endpoint list`, `session traffic-stats`, `auth report --sections credentials`,
+   `session trace-value`.
+5. **Write the client** in your own repo from `write export --format client_python` / `--format openapi` plus
+   hand-redacted fixtures. Keep the steps (`write export --format plan_steps`) so the capture can
+   be repeated, and `hardly session compare` old vs new when the site changes.
 
 ## 2. Ground rules (read before crawling anything)
 
@@ -122,7 +123,7 @@ Practical guidance:
 ### 4.4 Bot protection and throttling
 
 - **A CDN or WAF header is not a wall.** `Server: cloudflare` on a 200 page is
-  protection *present*. `hardly wall` now reports `state: present` and creates no
+  protection *present*. `hardly gate bot-protection` now reports `state: present` and creates no
   hit; only a block status / challenge wording / clearance flow is a wall.
   (Earlier versions flagged ordinary pages. **Fixed.**)
 - **Plain 403/429 is often just auth or rate limiting.** hardly lists these
@@ -133,7 +134,7 @@ Practical guidance:
 - **Captcha widgets** (reCAPTCHA, hCaptcha, Turnstile, Arkose…) are detected,
   never solved. Their official *test* keys on a page you host are the only
   reliable fixtures.
-- **Honour `Retry-After` and `X-RateLimit-*`.** `hardly challenges` reports
+- **Honour `Retry-After` and `X-RateLimit-*`.** `hardly gate bot-protection HAR --sections http_challenges` reports
   them. Back off; do not retry in a tight loop.
 - **Digest auth needs the 401's nonce** before the retry; a pre-set header will
   not work. hardly shows the challenge and whether a retry followed, never the
@@ -148,7 +149,7 @@ secrets hide when you add a feature:
   query strings.
 - `;jsessionid=…` path parameters inside form actions and links.
 - `api_key`, `sid`, `access_token` query parameters (now redacted **at ingest**,
-  so `entry`, `curl`, `stub` and `params` never see them).
+  so `entry get`, `entry build-curl`, `client build` and `endpoint schema` never see them).
 - Generic key matching: `authenticatorSelection`, `allowCredentials`,
   `Access-Control-Allow-Credentials` are *not* secrets (and were noise).
 - Always grep new output for known fake secrets in a test before you ship it.
@@ -157,13 +158,13 @@ secrets hide when you add a feature:
 
 | Trap | Symptom | Status |
 |------|---------|--------|
-| Bodies stored base64-encoded | `grids` / `content` / `schema` see gibberish | **Fixed** (textual types are decoded at ingest) |
+| Bodies stored base64-encoded | `tech stack` / `session traffic-stats` / `endpoint schema` see gibberish | **Fixed** (textual types are decoded at ingest) |
 | Previews are capped (HTML 64 KB, JSON 8 KB) | grid library marker sits at char 400 000 | **Mitigated** (grid signals are computed on the full body at ingest) |
 | Whole-document "looks like base64/hex" | every page tagged as a token | **Fixed** (shapes come from token-like JSON keys and bare-token bodies) |
 | Padded base64 (`…=`) never matched | real tokens missed | **Fixed** |
 | Entries with status `-1`/`0` | aborted XHRs, capture stopped early, duplicates of finished requests | **Mitigated**: counted in `aborted_entries`; always `wait` before stopping a capture |
 | Stale saved index from an older hardly | old, less-redacted data keeps appearing | **Fixed** (`INDEX_VERSION` forces a rebuild) |
-| `preferred_host` is a beacon / CDN | `brief` reports no credentials | **Fixed** for common beacon hosts; **still check** `hardly hosts` yourself |
+| `main_host` is a beacon / CDN | `session site-brief` reports no credentials | **Fixed** for common beacon hosts; **still check** `hardly session overview` yourself |
 | Entry ids are 0-based | off-by-one when pairing output with a viewer | Know it |
 
 ### 4.7 Logins and sessions
@@ -219,18 +220,18 @@ budget for them up front:
   same session; do not parallelise within one session.
 - **Soft errors:** a 200 with an error message, or a redirect to the home page.
   Compare content kind and size, not just status.
-- **Time-dependent tokens:** nonces and view state expire; a replayed stub fails
+- **Time-dependent tokens:** nonces and view state expire; a replayed client fails
   after minutes.
 
 ## 5. Per-site checklist
 
-Before: environment ready (`hardly capture doctor`), keywords chosen, budget set
+Before: environment ready (`hardly server status --sections browser_setup`), keywords chosen, budget set
 (hops, pages), a per-run `HARDLY_RUNTIME_DIR`, and a place **outside the repo**
 for the HAR.
 
-During: `brief` → `wall` → navigate → `forms` / `grids` / `data-attrs` →
-`credentials` → `correlate`. After every capture check `coverage` and
-`aborted_entries`.
+During: `session site-brief` → `gate bot-protection` → navigate → `page forms` / `tech stack` /
+`page embedded-routes` → `auth report` → `session trace-value`. After every capture check
+`session body-coverage` and `aborted_entries`.
 
 Exit criteria (any one): reached a form or API you can describe; a wall or
 challenge appeared (switch to interactive or stop); budget spent; the same page
@@ -273,13 +274,13 @@ What the sweep says honestly:
 
 ## 7. Open items
 
-- **Done:** a plain-HTTP first pass now exists — `hardly crawl` (curl-first, robots-aware, per-host delay, session-id stripping, gate stop signs, 429 halt). Try it before a headless capture; use a browser only for its `needs_browser` pages.
+- **Done:** a plain-HTTP first pass now exists — `hardly send site-crawl` (curl-first, robots-aware, per-host delay, session-id stripping, gate stop signs, 429 halt). Try it before a headless capture; use a browser only for its `needs_browser` pages.
 
 - Hover menus, iframes, shadow DOM: add handling once a real site shows the need.
 - Consent / cookie / disclaimer banner dismissal as an explicit recipe helper.
 - A per-step timeout override and `wait_until="load"` for heavy pages.
 - `find_click` in the live-session recipe runner (today: headless one-shots only).
-- Partial-response ASP.NET AJAX handling in `stub`.
+- Partial-response ASP.NET AJAX handling in the generated client (`client build`).
 - Remaining minor: `field_count` counts unnamed submit buttons; xpaths on pages
   with two `<html>` elements show `/html[1]/html[1]`.
 - Re-run the full navigation sweep and fold the numbers into §6.

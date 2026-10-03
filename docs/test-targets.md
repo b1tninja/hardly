@@ -10,7 +10,7 @@ never encodes site-specific logic for any of them.
 > every candidate host, so stacks, endpoints, cookie names, demo credentials,
 > rate limits and terms come from search snippets and memory, not from fetching
 > the sites. Before adding a target: (1) read the owner's stated testing policy,
-> (2) run `hardly capture discover <url> --headless` and confirm the signals
+> (2) run `hardly browser capture-discover <url> --analyze --confirm` and confirm the signals
 > below, (3) keep it `soft=True` in the catalog until it has proven stable.
 > Never script against a service that requires an account you don't own or
 > that forbids automation. Demo credentials are not recorded here; use the
@@ -20,7 +20,7 @@ never encodes site-specific logic for any of them.
 
 | Target | Pattern it would exercise | What hardly should report |
 |--------|---------------------------|---------------------------|
-| `dummyjson.com` `/auth/login`, `/auth/me`, `/auth/refresh` | JSON login → JWT access + refresh in body, Bearer reuse | `token_responses`, JWT shape, `login_flow`, correlate (response JSON → `Authorization`) |
+| `dummyjson.com` `/auth/login`, `/auth/me`, `/auth/refresh` | JSON login → JWT access + refresh in body, Bearer reuse | `token_responses`, JWT shape, `login_flow`, trace-value (response JSON → `Authorization`) |
 | `httpbingo.org` / `httpbin.org` `/basic-auth`, `/bearer`, `/digest-auth`, `/cookies` | `WWW-Authenticate` Basic/Bearer/Digest challenges, Digest retry, cookie flags | challenge scheme per 401, `auth_headers`, cookie flags |
 | `postman-echo.com` `/basic-auth`, `/digest-auth`, `/auth/hawk`, `/oauth1` | Signed-header schemes (OAuth1 HMAC, Hawk) | custom `Authorization` scheme names and parameter names (never values) |
 | `api.escuelajs.co/api/v1` `/auth/login`, `/auth/refresh-token`, `/graphql` | Access/refresh pair, GraphQL beside REST auth | refresh hop, GraphQL operations on an authed endpoint |

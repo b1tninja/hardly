@@ -9,24 +9,25 @@ hardly can also record one with Playwright. Capture is optional:
 ```bash
 pip install -e ".[capture]"
 playwright install chromium      # or use system Chrome / a prebuilt browser (below)
-hardly capture doctor            # diagnoses the package, browsers, features
+hardly server status --sections browser_setup   # diagnoses the package, browsers, features
 ```
 
 ## Headless (agent drives)
 
 ```bash
-hardly capture discover https://site.example --headless --wait 5
-hardly capture discover https://site.example --headless --recipe steps.json
+hardly browser capture-discover https://site.example --analyze --wait-seconds 5 --confirm
+hardly browser capture-discover https://site.example --analyze --steps steps.json --confirm
 ```
 
-MCP: `hardly_browser_capture_discover(url, wait_seconds, recipe_json, …)` loads the page,
-runs the recipe, stops, indexes the HAR and returns a `session_id` plus a
-brief, already in archive mode. If the brief shows a wall
-(`hardly_gate_bot_protection`), switch to interactive.
+MCP: `hardly_browser_capture_discover(url, analyze=true, wait_seconds=5, steps=[...], confirm=true)`
+loads the page, runs the steps, stops, indexes the HAR and returns a `session_id` plus a
+brief, already in archive mode. Without `confirm=true` it only returns the plan. If the brief shows
+a wall (`hardly_gate_bot_protection`), switch to interactive. With `analyze=false` it is a plain
+time-boxed capture (`wait_seconds`, default 20) that returns the raw HAR.
 
 ### Recipes
 
-A recipe is a JSON list of steps. Headless one-shots run **in-process**:
+A recipe is a JSON list of steps (the `steps` argument; CLI `--steps FILE`). Headless one-shots run **in-process**:
 
 | op | Fields | Notes |
 |----|--------|-------|
@@ -47,9 +48,9 @@ submenu links (`hover: false` disables; hops report `via: hover+click`). The liv
 additionally supports `elements`, `aria`, `screenshot`, `note`, `url`, and
 selecting by `ref`/`text`/`role` from the accessibility snapshot. Use
 `hardly_browser_inspect` to get Playwright accessibility YAML with `refs[]`, then
-prefer `ref` over fragile CSS. `hardly recipe-plan` drafts a recipe from a
-captured story; `hardly find-search` proposes the next `click` when you are
-still on a landing page.
+prefer `ref` over fragile CSS. `hardly_session_plan_steps` (CLI `hardly session plan-steps`) drafts
+steps from a captured story; `hardly_page_ui(sections=['search_links'])` (CLI `hardly page ui HAR
+--sections search_links`) proposes the next `click` when you are still on a landing page.
 
 Selecting by durable worker (`HARDLY_CAPTURE_SUBPROCESS=1`) is only needed when
 you want a long-lived browser with aria RPC across calls.
@@ -57,45 +58,45 @@ you want a long-lived browser with aria RPC across calls.
 ## Curl-first crawl
 
 Before launching a browser, try a polite plain-HTTP crawl:
-`hardly crawl https://site.example/ -k <domain noun> --yes`. It follows only
+`hardly send site-crawl https://site.example/ --keywords <domain noun> --confirm`. It follows only
 links found in fetched HTML (never guessed hosts or paths), reads robots.txt
 once per host and does not fetch disallowed URLs (`robots_disallowed`), waits
-`--delay` seconds per host, strips session ids, and stops at gates: a bot
+`--delay-seconds` per host, strips session ids, and stops at gates: a bot
 wall/CAPTCHA is recorded and never retried or followed, `environment_blocked`
 (sandbox/egress) is reported apart from site walls, and a 429 or `Retry-After`
 halts that host. Other registrable domains are listed in `external_links` unless
 `--follow-external` (one hop). Output is small and redacted: ranked
 `candidates` (search-like forms first, with field names), grid/data hints,
 `needs_browser` pages (SPA shells, JS-only redirects) and `next` advice. Hand
-the `needs_browser` pages to `hardly capture discover <url>` with a `find_click`
-recipe step. The MCP tool and CLI require explicit confirmation (`confirm=true`
-/ `--yes`) because they perform live GETs.
+the `needs_browser` pages to `hardly browser capture-discover <url> --analyze` with a `find_click`
+step. The MCP tool and CLI require explicit confirmation (`confirm=true`
+/ `--confirm`) because they perform live GETs.
 
 ## Interactive (a person drives)
 
 For bot walls, CAPTCHA, MFA, or UIs an agent cannot script:
 
 ```bash
-hardly capture https://site.example -o capture.har     # browser opens; click; Enter/close to stop
+hardly browser start https://site.example -o capture.har --foreground   # browser opens; click; Enter/close to stop
 ```
 
-MCP: `hardly_browser_start(headed=true, channel="chrome")` → **ask the person
+MCP: `hardly_browser_start(url, headed=true, channel="chrome")` → **ask the person
 what to click** → `hardly_browser_stop`. Headed capture needs a local
 (non-container) MCP server with a display.
 
 ## Useful options
 
-| Option | Purpose |
+| Option (MCP parameter) | Purpose |
 |--------|---------|
-| `--channel chrome\|msedge` | Use installed browser; better against bot detection |
-| `--url-filter GLOB` | Only record matching URLs |
-| `--omit-content` | Smaller HAR without bodies (loses most analysis) |
-| `--profile DIR` | Persistent profile (cookies survive) |
-| `--trace` | Also write a Playwright `.trace.zip` |
-| `--allow-popups` | Keep popup windows |
+| `--channel chrome\|msedge` (`channel`) | Use installed browser; better against bot detection |
+| `--url-filter GLOB` (`url_filter`) | Only record matching URLs |
+| `--omit-content` (`omit_content`) | Smaller HAR without bodies (loses most analysis) |
+| `--profile DIR` (`profile`) | Persistent profile (cookies survive) |
+| `--trace` (`trace`) | Also write a Playwright `.trace.zip` |
+| `--no-same-tab` (`same_tab=false`) | Keep popup windows |
 
 Playwright often leaves `content.size == -1` for XHR; hardly backfills those
-bodies. `hardly coverage` shows what is still empty or truncated.
+bodies. `hardly session body-coverage HAR` shows what is still empty or truncated.
 
 ## Environment variables
 
@@ -106,7 +107,7 @@ bodies. `hardly coverage` shows what is still empty or truncated.
 | `HARDLY_BROWSER_EXECUTABLE` | Path to a Chromium binary to launch instead of Playwright's own download |
 | `HARDLY_CAPTURE_SLOTS` | Max concurrent browser captures across processes (default 4; `0` = unlimited); extra captures queue and report `slot.queue_depth` |
 | `HARDLY_CAPTURE_SLOT_TIMEOUT` | Seconds to wait for a slot (default 300) before failing with "waited Ns for a capture slot" |
-| `HARDLY_CAPTURE_BUDGET` | Default hard per-call budget in seconds for headless capture/discover (`--budget`) |
+| `HARDLY_CAPTURE_BUDGET` | Default hard per-call budget in seconds for headless capture (`--budget-seconds`) |
 | `HARDLY_CAPTURE_SUBPROCESS` | `1` = durable capture worker (aria RPC) for headless |
 | `HARDLY_CAPTURE_TRACE` | `1` = always write a trace |
 | `HARDLY_LIVE_CAPTURE` | `1` = enable live Playwright tests and live soak in pytest |
@@ -114,16 +115,16 @@ bodies. `hardly coverage` shows what is still empty or truncated.
 
 ## Robustness options
 
-- `--budget SECONDS` / `budget_seconds`: remaining recipe steps are skipped once
+- `--budget-seconds` / `budget_seconds`: remaining recipe steps are skipped once
   exceeded; the HAR is still written; the result has
   `budget: {limit_s, used_s, exceeded, skipped_steps}`.
-- `--block-noise` / `block_noise`: abort analytics, ad, font, map-tile and heavy
+- `--exclude-noise` / `exclude_noise`: abort analytics, ad, font, map-tile and heavy
   media requests (reports `blocked_requests`, `blocked_hosts`). Off by default;
   blocking can break sites.
 - Capture errors carry `error_class` (`environment_blocked|transient|cert|dns|
   timeout|refused|unknown`), `error_retryable` and `error_advice`. A capture that
   finishes without a HAR is an error (`har_exists: false`), never a success.
-- `hardly capture doctor` reports installed browser builds, the build Playwright
+- `hardly server status --sections browser_setup` reports installed browser builds, the build Playwright
   expects, `mismatch`, `suggested_executable` and `browser_executable_source`;
   when Playwright's own browser is missing, an installed Chromium under
   `PLAYWRIGHT_BROWSERS_PATH`, `/opt/pw-browsers` or `~/.cache/ms-playwright` is
@@ -134,7 +135,7 @@ bodies. `hardly coverage` shows what is still empty or truncated.
 - Docker deployments are good for archive mode; headed capture needs a local
   MCP server.
 - If a prebuilt browser exists but its build does not match the installed
-  Playwright (`doctor` says the binary is missing), set
+  Playwright (`browser_setup` says the binary is missing), set
   `HARDLY_BROWSER_EXECUTABLE=/path/to/chromium`.
 - Browser traffic uses the environment's egress policy. If navigation fails
   with `ERR_TUNNEL_CONNECTION_FAILED`, the host is not allowed — add it to the
@@ -150,7 +151,7 @@ every HAR as a secret: `*.har` is git-ignored; don't share or commit them.
 `net::ERR_TOO_MANY_RETRIES` / `ERR_TOO_MANY_REDIRECTS` almost always means a redirect loop:
 a bad rewrite rule, an unexpected (non-canonical) domain (www vs apex, http vs https,
 trailing slash), or a redirect that needs a cookie set on an earlier hop. Capture classifies
-it as `redirect_loop` and retries once. Run `hardly redirect-diag <url> --yes`
+it as `redirect_loop` and retries once. Run `hardly send redirect-walk <url> --confirm`
 (MCP `hardly_send_redirect_walk`, `confirm=true`) to follow the chain by hand with and without
 cookies, name the loop shape, and probe the alternate host. Output: statuses, redacted URLs
 and cookie names only.

@@ -2,7 +2,7 @@
 
 > Purpose: How the one-pass `hardly_session_report` evidence index works: sections, severity, detail levels and `explain`.
 
-`hardly report <har>` (MCP: `hardly_session_report`) runs the existing detectors once and
+`hardly session report <har>` (MCP: `hardly_session_report`) runs the existing detectors once and
 returns an **evidence index**: a flat list of findings that say *what was seen
 and where*, never what to do about it. It contains no detection logic of its own;
 it selects, ranks and caps what the detectors return.
@@ -51,21 +51,21 @@ the report is unaffected.
 Detectors return evidence by default. Canned prose (stack `implications` and
 `sdk_notes`, gate `policy`, wall/bot-protection `recommendation`, challenge,
 credential, redirect and grid `next`, crawl `next`, signed-request `replay_hint`)
-is returned only with `explain=true` (`--explain` on the CLI). `report --explain`
+is returned only with `explain=true` (`--explain` on the CLI). `session report --explain`
 adds per-finding `explain` strings and a top-level `explain` block.
 
 ## CLI and files
 
 ```
-hardly report capture.har                      # summary JSON
-hardly report capture.har --detail standard --sections access,auth
-hardly report capture.har --detail full --format md --explain
-hardly report capture.har --write              # capture.report.json next to the HAR
-hardly report capture.har --format md --write  # capture.report.md next to the HAR
-hardly report capture.har --output out/        # directory -> out/capture.report.md
+hardly session report capture.har                      # summary JSON
+hardly session report capture.har --detail standard --categories access,auth
+hardly session report capture.har --detail full --format md --explain
+hardly write export capture.har --format report -o capture.report.json   # .json = JSON, else Markdown
+hardly write export capture.har --format report -o out/                  # directory -> out/capture.report.md
 ```
 
-`hardly_session_report(session_id, sections_json=None, detail="summary", explain=False,
-output_path=None)` does the same over MCP; `.json` paths get JSON, anything else
-Markdown, a directory gets `<har stem>.report.md`. From Python:
-`hardly.core.report.build_report`, `render_markdown`, `write_report`.
+`hardly_session_report(session_id, host=None, categories=None, detail="summary", explain=False)`
+returns the report over MCP and writes nothing; `hardly_write_export(session_id='S', format='report',
+output_path='out/capture.report.md', detail='standard')` saves it (`.json` paths get JSON, anything else
+Markdown, a directory gets `<har stem>.report.md`; an existing file is refused unless
+`overwrite=true`). `categories` selects sections (`access`, `auth`, `stack`, `data`, `forms`).

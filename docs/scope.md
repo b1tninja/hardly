@@ -29,5 +29,6 @@ credentials and authentication are handled. It is also an MCP server so agents c
 2. Does it read facts from the HAR or a live probe rather than restate what a model already knows?
    Prose advice stays behind `explain=true`.
 3. Is it a new tool, or can it extend an existing one (a section of `hardly_session_report`, a detector)?
-   Prefer extending; the tool surface is already large (`docs/tools.md`).
+   Prefer extending; the tool surface is already large (`docs/tools.md`) and every released
+   tool name is permanent ([api-stability.md](api-stability.md)).
 4. Tests use synthetic fixtures with neutral names; `tests/test_neutrality.py` enforces this.

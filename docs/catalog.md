@@ -8,7 +8,7 @@ machinery: hardly assigns no meaning to tags, group keys or roles. A downstream
 project defines those and subclasses [`TargetAdapter`](#the-downstream-subclass-pattern)
 to plug in its own discovery.
 
-Code: `hardly.core.catalog`. CLI: `hardly catalog ...`. MCP:
+Code: `hardly.core.catalog`. CLI: `hardly catalog ...`, `hardly write catalog-record`, `hardly send catalog-verify`. MCP:
 `hardly_catalog_list`, `hardly_write_catalog_record`, `hardly_send_catalog_verify`.
 
 ## Schema (version 1)
@@ -66,20 +66,21 @@ Files are written atomically (temp file in the same directory, then rename).
 
 ```bash
 hardly catalog init catalog.json --name example
-hardly catalog add catalog.json --id target-1 --name "Example target" \
-    --tag example-a --group region=r1 --group subregion=s1 \
+hardly write catalog-record catalog.json --id target-1 --name "Example target" \
+    --tags example-a --group region=r1 --group subregion=s1 \
     --endpoint search=https://one.example/find,form --endpoint api=https://one.example/api,api
 hardly catalog list catalog.json --tag example-a --role search --status unverified
-hardly catalog list catalog.json --summary          # counts by tag/group/role/status/gate/stack
+hardly catalog list catalog.json --detail summary    # counts by tag/group/role/status/gate/stack
 hardly catalog show catalog.json target-1
-hardly catalog verify catalog.json --yes --tag example-a --delay 2 --max-requests 40
+hardly send catalog-verify catalog.json --confirm --write-back --tag example-a --delay-seconds 2 --max-requests 40
 hardly catalog export catalog.json --format csv -o catalog.csv
 ```
 
-`add` merges into an existing target (tags unioned, groups overlaid, endpoints
-merged by `(role, url)`); `--replace` replaces it. `verify` without `--yes`
-prints nothing live (and exits 1). The MCP tools mirror this; `hardly_send_catalog_verify`
-needs `confirm=true`.
+`write catalog-record` (MCP `hardly_write_catalog_record`) merges into an existing target (tags
+unioned, groups overlaid, endpoints merged by `(role, url)`); `--no-merge` replaces it and
+`--create` makes the file if it is missing. `send catalog-verify` (MCP `hardly_send_catalog_verify`)
+without `--confirm` prints the plan and sends nothing; `--write-back` records the statuses in the
+catalog file. `catalog init`, `show` and `export` are CLI-only helpers.
 
 ## Verification
 
@@ -120,6 +121,8 @@ Without `confirm=True` it returns a plan and an error, and makes no request.
 ## The downstream-subclass pattern
 
 hardly stays content-neutral; your project owns the vocabulary and the seed data.
+`hardly.core.catalog` is internal like all of `hardly.core` ([api-stability.md](api-stability.md)): if you
+subclass `TargetAdapter`, pin the hardly version. The file format, the CLI and the three MCP tools are public.
 
 ```python
 from hardly.core import catalog as C

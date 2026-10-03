@@ -25,16 +25,17 @@ This page lists what it detects and what it deliberately does not do.
 
 Detected from `__VIEWSTATE`, `__VIEWSTATEGENERATOR`, `__EVENTVALIDATION`,
 `__EVENTTARGET`/`__EVENTARGUMENT` and `__doPostBack(target, arg)` calls.
-`forms` reports the hidden fields and postback targets. `correlate` shows
-which response a state field came from; `stub` marks them `PLACEHOLDER_*`
+`hardly_page_forms` reports the hidden fields and postback targets. `hardly_session_trace_value` shows
+which response a state field came from; `hardly_client_build` marks them `PLACEHOLDER_*`
 with a correlation note. SDK consequence: GET the page, scrape the hidden
 fields, echo them in the POST, repeat per step.
 
 ## CSRF and anti-forgery tokens
 
 Field/header names containing `csrf`, `xsrf` or `requestverification`
-(including `__RequestVerificationToken`), plus value-based reuse are found by `credentials` and `correlate`; `trace`
-follows any named field or exact value across requests without printing it.
+(including `__RequestVerificationToken`), plus value-based reuse are found by `hardly_auth_report(sections=['credentials'])` and
+`hardly_session_trace_value` (without arguments it lists every reused dynamic value; with `name` or
+`value` it follows any named field or exact value across requests without printing it).
 
 ### Token-name indirection
 
@@ -56,13 +57,13 @@ never the value). Plumbing headers (`Accept`, `User-Agent`, `Content-*`, `Sec-*`
 
 ## Sessions and cookies
 
-`hardly_auth_report` gives a timeline of cookie names set and sent, with values
-omitted. `hardly_auth_report` adds `HttpOnly`, `Secure` and `SameSite` flags,
+`hardly_auth_report(sections=['cookies'])` gives a timeline of cookie names set and sent, with values
+omitted. The `credentials` section adds `HttpOnly`, `Secure` and `SameSite` flags and
 identifies likely session cookies by name.
 
 ## Authentication flows
 
-`hardly_auth_report` and `hardly_auth_report` map:
+`hardly_auth_report` (sections `quick`, `patterns`, `credentials`) maps:
 
 - password fields paired with their username/email fields;
 - login endpoints and a hypothesised `login_flow`
@@ -116,7 +117,7 @@ Server frameworks often answer with a generic error (HTTP 500 or an error page)
 when an implicit precondition is missing: an Ajax marker header
 (`X-Requested-With`), a cookie set by an earlier page load, a paging parameter,
 or a per-form hidden token. Do not guess which matters. `hardly_send_entry_ablation`
-(CLI `hardly replay-check <har> <entry_id…> --yes`) replays the entry, or an
+(CLI `hardly send entry-ablation <har> <entry_id…> --confirm`) replays the entry, or an
 ordered flow of entry ids, with a cookie jar, removes one header, cookie, query
 parameter, body field or prior step at a time, and compares a coarse outcome
 signature (status class, content kind, JSON top-level keys or an HTML size band
@@ -128,7 +129,7 @@ stop. Output is names and findings only.
 
 ## Technology fingerprint (`hardly_tech_stack`)
 
-`hardly stack` / `hardly_tech_stack` scores framework tells from cookie *names*,
+`hardly tech stack` / `hardly_tech_stack` scores framework tells from cookie *names*,
 header names, URL paths and HTML/JS previews, and attaches a one-line SDK
 implication to each: server frameworks (ASP.NET WebForms and antiforgery,
 Blazor Server/WASM, Laravel, Django, Rails, Express, Spring/servlet, PHP, JSF),
@@ -167,7 +168,7 @@ returns the whole result set in one response, so prefer it to paging.
 
 ## HTML data attributes
 
-`hardly_page_embedded_routes` (CLI `hardly data-attrs`) applies the MDN
+`hardly_page_embedded_routes(sections=['data_attrs'])` applies the MDN
 [data attributes](https://developer.mozilla.org/en-US/docs/Web/HTML/How_to/Use_data_attributes)
 model to captured HTML: `data-date-of-birth` is read by scripts as
 `element.dataset.dateOfBirth`, and every value is a string. It reports:
@@ -194,7 +195,7 @@ form or a network request until a script uses it.
 
 ### Gate taxonomy and policy
 
-`hardly_gate_bot_protection` (and the `gates` list in `hardly_gate_bot_protection`, a summary in
+`hardly_gate_bot_protection` (section `barriers`; a summary is in
 `hardly_session_site_brief`) classifies each gate: `environment_blocked`, `bot_wall`,
 `captcha`, `proof_of_work`, `waiting_room`, `click_through_terms`, `login`,
 `paywall`, `rate_limit`, with an action `stop`, `accept_click_through` or
@@ -204,7 +205,7 @@ site-WAF fingerprint) means *our* sandbox refused the request: it is reported as
 covers Azure Front Door (`x-azure-ref` alone is informational; the 403 "request
 is blocked" page is a block), F5 (TSPD, `volt-adc`, "Request Rejected"), AWS WAF
 challenges returned as HTTP 202, Imperva blocks returned as 503, and an
-application-level `app-rate-limit` entry. `hardly_gate_bot_protection` captcha widgets add
+application-level `app-rate-limit` entry. The `http_challenges` section's captcha widgets add
 public `sitekeys` (max 3, truncated) and `token_endpoints` (requests whose field
 names include a captcha token field; values never shown). Written policy:
 [gate-policy.md](gate-policy.md). Headless recipes are guarded by
@@ -212,7 +213,7 @@ names include a captcha token field; values never shown). Written policy:
 
 ## HTTP auth challenges, throttling and captchas
 
-`hardly_gate_bot_protection` (CLI `hardly challenges`) reports:
+`hardly_gate_bot_protection(sections=['http_challenges'])` reports:
 
 - **Challenges:** `WWW-Authenticate` / `Proxy-Authenticate` schemes (Basic,
   Bearer, Digest, Negotiate, NTLM, Hawk…), parameter names, and safe values
@@ -237,7 +238,7 @@ so a client can be written without schema introspection.
 
 ## Data grids and data conventions
 
-`hardly_tech_stack` (CLI `hardly grids`) reports, by name and count only (never row
+`hardly_tech_stack` (its `data_grids` key) reports, by name and count only (never row
 data or parameter values):
 
 - **HTML grid libraries:** DataTables, jqGrid, AG Grid, Kendo, Telerik RadGrid,
@@ -273,7 +274,7 @@ endpoint; `hardly_write_export` embeds schemas and `securitySchemes`.
 
 ## Bot walls, WAFs and captchas
 
-`hardly_gate_bot_protection` (CLI `hardly wall`) identifies the bot-protection product(s) in
+`hardly_gate_bot_protection(sections=['bot_protection'])` identifies the bot-protection product(s) in
 use from wire-level evidence — cookie *names*, response headers, request URLs
 and script sources, and challenge-page wording — and reports a **state** for
 each: `blocked`, `challenged`, `clearance_seen` (a clearance cookie such as
@@ -305,7 +306,7 @@ and redirects. Respect the site's terms.
 - No subject-specific vocabulary baked in; pass your own (for example
   `keywords` to `hardly_page_ui`).
 - No secret values in output, ever.
-- No claim that a stub works — it is a sketch to verify against the live site.
+- No claim that a generated client works — it is a sketch to verify against the live site.
 
 Missing a technology (another anti-forgery scheme, a framework's hidden-field
 convention, a token protocol)? Add a detector in `hardly.core` with a synthetic

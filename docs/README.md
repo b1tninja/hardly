@@ -31,6 +31,9 @@ particular website or subject matter; that belongs in the SDK you build with it.
 | Read this | When |
 |-----------|------|
 | [tools.md](tools.md) | Generated reference for every MCP tool |
+| [cli.md](cli.md) | CLI grammar and every command, generated from the parser |
+| [api-stability.md](api-stability.md) | What is public, semver and deprecation rules, how snapshots enforce them |
+| [api-decisions.md](api-decisions.md) | How the v1 names were chosen; old to new name tables |
 | [technologies.md](technologies.md) | What hardly detects per technology, and what it does not |
 | [gate-policy.md](gate-policy.md) | What to do at each kind of gate: accept, stop, or re-run elsewhere |
 | [crawl-handoff.md](crawl-handoff.md) | Crawl strategy, budgets, and traps hit during live testing |
