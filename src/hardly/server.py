@@ -1130,6 +1130,36 @@ def hardly_data_attrs(
 
 
 @mcp.tool
+def hardly_arcgis(session_id: str, host: str | None = None) -> str:
+    """List ArcGIS REST endpoints (MapServer/FeatureServer/ImageServer/GeocodeServer) seen in the session.
+
+    Service roots, layer ids, which layers were queried, parameter NAMES used,
+    paging evidence and whether exceededTransferLimit was seen. Names only; offline.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.arcgis import summarize_session
+
+    return _ok(summarize_session(conn, host=host))
+
+
+@mcp.tool
+def hardly_arcgis_explore(url: str, confirm: bool = False) -> str:
+    """Live, polite exploration of an ArcGIS REST service or layer URL (needs confirm=true).
+
+    At most 1 service doc + 5 layer docs + 1 sample query (resultRecordCount=1),
+    GET only. Returns layers, fields (personal-data-like and id fields FLAGGED),
+    query templates and a one-row sample as field names + masked shapes, never
+    values. Stops on 429 and on token-required (498/499); never guesses tokens.
+    """
+    from hardly.core.arcgis import explore
+
+    return _ok(explore(url, confirm=confirm))
+
+
+@mcp.tool
 def hardly_grids(
     session_id: str,
     host: str | None = None,

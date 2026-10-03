@@ -102,6 +102,10 @@ Detect data-grid frameworks, JSON envelope conventions and paging params.
 
 Interpret HTML data-* attributes (MDN dataset model).
 
+### `hardly_arcgis(session_id, host=None)`
+
+List ArcGIS REST endpoints (MapServer/FeatureServer/ImageServer/GeocodeServer) seen in the session.
+
 ## HTML, forms and labels
 
 ### `hardly_brief(session_id, host=None)`
@@ -245,6 +249,10 @@ Run a read-only SELECT against the session SQLite index.
 ### `hardly_probe(session_id, entry_id, confirm=False, header_overrides_json=None, body_override=None, timeout=30.0)`
 
 Replay a request live. Requires confirm=true. Sensitive HAR headers are skipped unless provided in header_overrides_json (JSON object).
+
+### `hardly_arcgis_explore(url, confirm=False)`
+
+Live, polite exploration of an ArcGIS REST service or layer URL (needs confirm=true).
 
 ## Capture and other
 

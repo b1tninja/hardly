@@ -91,6 +91,23 @@ that are empty client-rendered shells set `spa_login_suspected`, because their
 password inputs only exist after JavaScript runs; entries with no response
 (status -1/0) are counted in `aborted_entries`.
 
+## ArcGIS REST
+
+`hardly_arcgis` lists ArcGIS REST endpoints (`MapServer`, `FeatureServer`,
+`ImageServer`, `GeocodeServer`) in an indexed capture: service roots, layer ids,
+which layers were queried, parameter names used, paging evidence
+(`resultOffset` / `resultRecordCount`) and whether `exceededTransferLimit` was
+seen. `hardly_arcgis_explore(url, confirm=true)` makes at most one service
+document, five layer documents and one one-row sample query, and reports layers,
+fields (name, alias, type, domain), request templates (attribute, count-only,
+distinct values, objectId paging fallback) and the sample as field names plus
+masked shapes (digits 9, letters a) — never row values. Fields whose names look
+like personal data (name, owner, phone, email, address, ssn, dob, birth) are
+flagged, not hidden. A 498/499 response is a token-required gate: stop.
+`find_service_urls` (library) extracts service URLs and item ids from
+Experience Builder / Web AppBuilder configs and page text and shows the item
+data URL pattern without fetching it.
+
 ## HTML data attributes
 
 `hardly_data_attrs` (CLI `hardly data-attrs`) applies the MDN
