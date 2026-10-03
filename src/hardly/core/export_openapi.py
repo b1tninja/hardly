@@ -193,7 +193,7 @@ def export_openapi(
 def _security_from_auth(
     conn: sqlite3.Connection, *, host: str | None
 ) -> tuple[dict[str, Any], list[dict[str, list]]]:
-    """Build OpenAPI securitySchemes from hardly_auth heuristics."""
+    """Build OpenAPI securitySchemes from hardly_auth_report heuristics."""
     from hardly.core.auth import detect_auth
 
     auth = detect_auth(conn, host=host)

@@ -133,7 +133,7 @@ def list_pages(
         synthetic = bool(pages)
 
     note = (
-        "Use first_entry_id with hardly_tree / hardly_around. "
+        "Use first_entry_id with hardly_entry_initiators / hardly_entry_around. "
         "Playwright/DevTools HARs usually set pageref; some exports omit it."
     )
     if synthetic:

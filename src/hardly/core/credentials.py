@@ -182,7 +182,7 @@ def _map_credentials(
             *(
                 [
                     "Client-rendered page(s) with no form markup: login inputs are probably "
-                    "created by JavaScript. Use hardly_capture_aria or a recipe `evaluate` "
+                    "created by JavaScript. Use hardly_browser_inspect or a recipe `evaluate` "
                     "step after load to read the rendered fields."
                 ]
                 if spa_suspected
@@ -198,9 +198,9 @@ def _map_credentials(
             *(auth.get("notes") or []),
         ],
         "next": (
-            "Trace a name with hardly_trace; correlate reuse with "
-            "hardly_correlate; compare pre/post login with "
-            "hardly_compare_entries; stub with placeholders via hardly_stub."
+            "Trace a name with hardly_session_trace_value; correlate reuse with "
+            "hardly_session_trace_value; compare pre/post login with "
+            "hardly_entry_compare; stub with placeholders via hardly_client_build."
         ),
     }
 

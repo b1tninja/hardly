@@ -118,7 +118,7 @@ def detect_walls(
         "recommendation": recommendation,
         "next": (
             "Bot walls need headed Chrome capture (channel=chrome), not urllib. "
-            "Use hardly_capture_start; then continue in archive mode on the saved HAR."
+            "Use hardly_browser_start; then continue in archive mode on the saved HAR."
             if hits
             else f"Environment block: {ENV_MESSAGE}. Not a site wall."
             if env_ids

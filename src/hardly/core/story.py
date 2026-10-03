@@ -194,9 +194,9 @@ def portal_story(
         "steps": steps,
         "correlations": correlations,
         "next": (
-            "Use entry_ids with hardly_entry / hardly_stub. "
-            "Cross-check handler_functions against hardly_routes; "
-            "hardly_correlate for full token reuse detail."
+            "Use entry_ids with hardly_entry_get / hardly_client_build. "
+            "Cross-check handler_functions against hardly_page_embedded_routes; "
+            "hardly_session_trace_value for full token reuse detail."
             + (
                 " related_hosts were merged for SPA API coverage."
                 if related

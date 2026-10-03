@@ -14,18 +14,18 @@ _RULES: tuple[tuple[tuple[str, ...], list[str], str], ...] = (
             "which mode",
             "how to start",
         ),
-        ["hardly_modes", "hardly_mode", "hardly_capabilities"],
-        "Pick archive (HAR file), headless (hardly_discover), or interactive.",
+        ["hardly_guide_mode", "hardly_server_status"],
+        "Pick archive (HAR file), headless (hardly_browser_capture_discover), or interactive.",
     ),
     (
         ("discover", "auto discover", "no har", "headless", "automate"),
         [
-            "hardly_mode",
-            "hardly_discover",
-            "hardly_capture_doctor",
-            "hardly_brief",
+            "hardly_guide_mode",
+            "hardly_browser_capture_discover",
+            "hardly_server_status",
+            "hardly_session_site_brief",
         ],
-        "Headless: hardly_discover(url) or capture_start(headed=false).",
+        "Headless: hardly_browser_capture_discover(url) or hardly_browser_start(headed=false).",
     ),
     (
         (
@@ -37,36 +37,34 @@ _RULES: tuple[tuple[tuple[str, ...], list[str], str], ...] = (
             "human",
         ),
         [
-            "hardly_mode",
-            "hardly_capture_start",
-            "hardly_capture_stop",
-            "hardly_brief",
+            "hardly_guide_mode",
+            "hardly_browser_start",
+            "hardly_browser_stop",
+            "hardly_session_site_brief",
         ],
         "Interactive: start headed chrome, ask the person, then stop + brief.",
     ),
     (
         ("portal", "guest", "search form", "webforms", "viewstate"),
-        ["hardly_brief", "hardly_forms", "hardly_correlate", "hardly_stub"],
+        ["hardly_session_site_brief", "hardly_page_forms", "hardly_session_trace_value", "hardly_client_build"],
         "Start with a portal brief, then forms/CSRF, then a client sketch.",
     ),
     (
         ("csrf", "viewstate", "token", "nonce", "session cookie", "correlate"),
-        ["hardly_correlate", "hardly_trace", "hardly_cookies", "hardly_stub"],
+        ["hardly_session_trace_value", "hardly_auth_report", "hardly_client_build"],
         "Find reused dynamic values, then stub with placeholders.",
     ),
     (
         ("cookie", "set-cookie", "jar"),
-        ["hardly_cookies", "hardly_correlate", "hardly_auth"],
+        ["hardly_auth_report", "hardly_session_trace_value"],
         "Cookie name timeline, then correlate session reuse.",
     ),
     (
         ("login", "auth", "mfa", "2fa", "oauth", "password"),
         [
-            "hardly_credentials",
-            "hardly_auth",
-            "hardly_flow",
-            "hardly_secrets",
-            "hardly_compare_entries",
+            "hardly_auth_report",
+            "hardly_session_timeline",
+            "hardly_entry_compare",
         ],
         "Credential map (passwords/JWT/cookies), then flow and pre/post compare.",
     ),
@@ -81,26 +79,24 @@ _RULES: tuple[tuple[tuple[str, ...], list[str], str], ...] = (
             "password field",
         ),
         [
-            "hardly_credentials",
-            "hardly_secrets",
-            "hardly_cookies",
-            "hardly_trace",
+            "hardly_auth_report",
+            "hardly_session_trace_value",
         ],
         "Map shapes (jwt/hex/base64) and session cookie names — values never returned.",
     ),
     (
         ("detail", "document", "xhr", "ajax", "click"),
-        ["hardly_routes", "hardly_around", "hardly_tree", "hardly_ui"],
+        ["hardly_page_embedded_routes", "hardly_entry_around", "hardly_entry_initiators", "hardly_page_ui"],
         "Mine JS routes, initiator children, then time-neighbors.",
     ),
     (
         ("initiator", "dependency", "tree", "children", "parent"),
-        ["hardly_tree", "hardly_around", "hardly_story"],
+        ["hardly_entry_initiators", "hardly_entry_around", "hardly_session_story"],
         "Initiator parent/children from Chrome _initiator.",
     ),
     (
         ("graphql", "gql", "mutation", "apollo"),
-        ["hardly_graphql", "hardly_schema", "hardly_entry"],
+        ["hardly_endpoint_graphql", "hardly_endpoint_schema", "hardly_entry_get"],
         "List GraphQL operations, then schema the variables/response.",
     ),
     (
@@ -117,7 +113,7 @@ _RULES: tuple[tuple[tuple[str, ...], list[str], str], ...] = (
             "what format",
             "payload kind",
         ),
-        ["hardly_content", "hardly_entry", "hardly_schema", "hardly_forms"],
+        ["hardly_session_traffic_stats", "hardly_entry_get", "hardly_endpoint_schema", "hardly_page_forms"],
         "Classify response kinds (json/jsonl/csv/tables/docs/media), then drill.",
     ),
     (
@@ -131,78 +127,76 @@ _RULES: tuple[tuple[tuple[str, ...], list[str], str], ...] = (
             "aria snapshot",
             "document structure",
         ),
-        ["hardly_outline", "hardly_capture_aria", "hardly_ui", "hardly_forms"],
-        "Offline outline from HAR bodies; live ARIA YAML via capture_aria.",
+        ["hardly_entry_outline", "hardly_browser_inspect", "hardly_page_ui", "hardly_page_forms"],
+        "Offline outline from HAR bodies; live ARIA YAML via hardly_browser_inspect(sections=['aria']).",
     ),
     (
         ("static", "dynamic", "param", "which fields"),
-        ["hardly_params", "hardly_correlate", "hardly_schema"],
+        ["hardly_endpoint_schema", "hardly_session_trace_value"],
         "Classify params across samples of one endpoint template.",
     ),
     (
         ("capture", "record", "playwright", "browser", "recipe", "aria ref"),
         [
-            "hardly_modes",
-            "hardly_capture_doctor",
-            "hardly_discover",
-            "hardly_capture_start",
-            "hardly_capture_aria",
+            "hardly_guide_mode",
+            "hardly_server_status",
+            "hardly_browser_capture_discover",
+            "hardly_browser_start",
+            "hardly_browser_inspect",
         ],
         "Pick a mode first; headless=discover, interactive=ask person + start.",
     ),
     (
         ("akamai", "cloudflare", "bot wall", "captcha", "403", "blocked"),
-        ["hardly_wall", "hardly_mode", "hardly_capture_start", "hardly_issues"],
+        ["hardly_gate_bot_protection", "hardly_guide_mode", "hardly_browser_start", "hardly_session_issues"],
         "Wall — interactive headed channel=chrome; ask the person to click.",
     ),
     (
         ("slow", "latency", "timeout", "waterfall", "performance"),
-        ["hardly_slow", "hardly_issues", "hardly_tree"],
+        ["hardly_session_slow_requests", "hardly_session_issues", "hardly_entry_initiators"],
         "List slowest requests, then inspect entry/tree.",
     ),
     (
         ("duplicate", "polling", "repeat", "retry"),
-        ["hardly_duplicates", "hardly_params", "hardly_compare_entries"],
+        ["hardly_session_duplicates", "hardly_endpoint_schema", "hardly_entry_compare"],
         "Find repeated templates, then compare samples.",
     ),
     (
         ("page load", "pageref", "pages"),
-        ["hardly_pages", "hardly_tree", "hardly_story"],
+        ["hardly_page_list", "hardly_entry_initiators", "hardly_session_story"],
         "Group by browser pageref, then tree the document.",
     ),
     (
         ("empty body", "missing body", "coverage", "size=-1", "truncated"),
-        ["hardly_issues", "hardly_coverage", "hardly_capture_start"],
+        ["hardly_session_issues", "hardly_session_body_coverage", "hardly_browser_start"],
         "Check issues/coverage, then re-capture with body backfill.",
     ),
     (
         ("diff", "compare", "second capture", "new endpoint"),
-        ["hardly_diff", "hardly_compare_entries", "hardly_endpoints"],
+        ["hardly_session_compare", "hardly_entry_compare", "hardly_endpoint_list"],
         "Diff two sessions, or two entries for the same call.",
     ),
     (
         ("openapi", "swagger", "postman", "export", "document"),
         [
-            "hardly_export_openapi",
-            "hardly_export_postman",
-            "hardly_export_md",
-            "hardly_endpoints",
+            "hardly_write_export",
+            "hardly_endpoint_list",
         ],
         "Export a contract, then fill gaps with entry/schema.",
     ),
     (
         ("probe", "replay", "live"),
-        ["hardly_curl", "hardly_probe", "hardly_correlate"],
+        ["hardly_entry_build_curl", "hardly_send_entry", "hardly_session_trace_value"],
         "curl first (redacted), probe only with confirm=true.",
     ),
     (
         ("secret", "leak"),
-        ["hardly_credentials", "hardly_secrets", "hardly_trace", "hardly_issues"],
+        ["hardly_auth_report", "hardly_session_trace_value", "hardly_session_issues"],
         "Credential map + sensitive names; never commit the HAR.",
     ),
     (
         ("redirect", "302", "301", "location"),
-        ["hardly_redirects", "hardly_around", "hardly_story"],
+        ["hardly_session_redirect_history", "hardly_entry_around", "hardly_session_story"],
         "List 3xx hops, then follow matched entry ids.",
     ),
 )
@@ -217,14 +211,14 @@ def recommend_tools(goal: str) -> dict[str, Any]:
             "suggestions": [
                 {
                     "tools": [
-                        "hardly_modes",
-                        "hardly_help",
-                        "hardly_open",
-                        "hardly_discover",
+                        "hardly_guide_mode",
+                        "hardly_guide_help",
+                        "hardly_session_open",
+                        "hardly_browser_capture_discover",
                     ],
                     "reason": (
                         "Pick a mode: open a HAR (archive), "
-                        "hardly_discover(url) (headless), or interactive capture."
+                        "hardly_browser_capture_discover(url) (headless), or interactive capture."
                     ),
                 }
             ],
@@ -243,10 +237,10 @@ def recommend_tools(goal: str) -> dict[str, Any]:
             "suggestions": [
                 {
                     "tools": [
-                        "hardly_summary",
-                        "hardly_endpoints",
-                        "hardly_brief",
-                        "hardly_search",
+                        "hardly_session_overview",
+                        "hardly_endpoint_list",
+                        "hardly_session_site_brief",
+                        "hardly_entry_search",
                     ],
                     "reason": (
                         "No specific match — summarize, list endpoints, "

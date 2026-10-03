@@ -73,7 +73,7 @@ def _redirect_chains(
         "chain_count": len(chains),
         "chains": chains,
         "next": (
-            "Use follow_entry_id with hardly_entry / hardly_around. "
+            "Use follow_entry_id with hardly_entry_get / hardly_entry_around. "
             "Guest portals often 302 through disclaimer → search."
         ),
     }

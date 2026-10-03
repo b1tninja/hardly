@@ -362,12 +362,12 @@ def run_job(job: dict) -> int:
                             "note": (
                                 "Live accessibility tree. "
                                 + (
-                                    "Use refs[].ref with hardly_capture_click/"
+                                    "Use refs[].ref with hardly_browser_interact/"
                                     "fill (ref='e12'). "
                                     if refs
                                     else ""
                                 )
-                                +                             "Offline HAR bodies: hardly_outline."
+                                +                             "Offline HAR bodies: hardly_entry_outline."
                             ),
                         }
                     if op == "screenshot":
@@ -496,7 +496,7 @@ def run_job(job: dict) -> int:
 def _resolve_locator(page, args: dict):
     """Build a Playwright locator from ref / xpath / css / role / text args.
 
-    ``ref`` comes from ``hardly_capture_aria(mode="ai")`` markers like
+    ``ref`` comes from ``hardly_browser_inspect(mode="ai")`` markers like
     ``[ref=e12]`` and is resolved via Playwright's ``aria-ref`` engine.
     """
     from hardly.core.aria_refs import normalize_aria_ref

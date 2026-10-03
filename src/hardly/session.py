@@ -80,8 +80,8 @@ class HarNotFound(SessionError, FileNotFoundError):
 
 MEMORY_NOTE = (
     "Nothing is written to disk: the index lives only in this process and is gone after "
-    f"hardly_close or a restart. {RULE} (hardly_open again with {OUTPUT_PARAM}, or "
-    "hardly_export_har to save the HAR itself)."
+    f"hardly_session_close or a restart. {RULE} (hardly_write_session_copy with format='index' "
+    "saves the index, format='har' the HAR itself)."
 )
 
 
@@ -176,7 +176,7 @@ class _Live:
         self.conn = conn
         self.saved_to: Path | None = None
         self.refs = 0
-        self.pinned = False  # held by the MCP/CLI dict layer until hardly_close
+        self.pinned = False  # held by the MCP/CLI dict layer until hardly_session_close
         self.ephemeral = False  # source HAR was a temporary capture file, already deleted
         self.closed = False
         self.info: dict[str, Any] = {}
@@ -191,8 +191,8 @@ class _Live:
             "saved_to": str(self.saved_to) if self.saved_to else None,
             **summary(self.conn),
             "next": (
-                "Mode=archive. Use hardly_hosts / hardly_brief / "
-                "hardly_endpoints — do not Read the HAR."
+                "Mode=archive. Use hardly_session_overview / hardly_session_site_brief / "
+                "hardly_endpoint_list — do not Read the HAR."
             ),
         }
         if self.ephemeral:
@@ -308,7 +308,7 @@ def _save(live: _Live, output: Path, overwrite: bool) -> None:
         if other is not live and other.input_path == output:
             raise OutputError(
                 f"{output} is open as session {other.sid}; refusing to replace it.",
-                f"Call hardly_close(session_id='{other.sid}') first.",
+                f"Call hardly_session_close(session_id='{other.sid}') first.",
             )
     try:
         persist_connection(live.conn, output)
@@ -328,8 +328,9 @@ def _load(sid: str, path: Path) -> _Live:
             raise IndexOutdated(
                 f"{path} is an index from another hardly version "
                 f"(index_version {version}, this build {INDEX_VERSION}).",
-                "Re-open the original HAR with output_path to rebuild it: "
-                f"hardly_open(har_path='{meta.get('har_path')}', {OUTPUT_PARAM}='{path}', "
+                "Open the original HAR, then rewrite the index: "
+                f"hardly_session_open(har_path='{meta.get('har_path')}') and "
+                f"hardly_write_session_copy(session_id=<id>, format='index', {OUTPUT_PARAM}='{path}', "
                 "overwrite=true).",
             )
         live = _Live(sid, path, open_readonly(path))
@@ -445,11 +446,11 @@ def get_conn(session_id: str) -> sqlite3.Connection | None:
 def unknown_session(session_id: str) -> UnknownSession:
     return UnknownSession(
         f"Unknown session_id: {session_id}",
-        "Session ids do not survive hardly_close or a restart. Call hardly_open again with the "
+        "Session ids do not survive hardly_session_close or a restart. Call hardly_session_open again with the "
         "HAR path - or the saved index path - exactly as before: "
-        "hardly_open(har_path='<path>'). A session from an ephemeral capture (no output path) "
+        "hardly_session_open(har_path='<path>'). A session from an ephemeral capture (no output path) "
         "lived only in memory and its HAR was deleted: capture again and pass har_path to keep "
-        "it. hardly_list_sessions shows what is open.",
+        "it. hardly_session_list shows what is open.",
     )
 
 
@@ -498,7 +499,7 @@ def get_saved_to(session_id: str) -> str | None:
 
 
 def close_session(session_id: str) -> dict:
-    """Close a session for every holder (hardly_close)."""
+    """Close a session for every holder (hardly_session_close)."""
     with _lock:
         live = _sessions.get(session_id)
         if live is None:
@@ -507,7 +508,7 @@ def close_session(session_id: str) -> dict:
         _finalize(live)
     out: dict[str, Any] = {"closed": True, "session_id": session_id}
     if live.saved_to is None and not live.from_index:
-        out["note"] = "Memory session discarded; hardly_open(har_path) rebuilds it."
+        out["note"] = "Memory session discarded; hardly_session_open(har_path) rebuilds it."
     return out
 
 
@@ -526,9 +527,8 @@ def export_har(session_id: str, output_path: str | Path, *, overwrite: bool = Fa
             "error": f"The HAR for session {session_id} was an ephemeral capture and is gone.",
             "code": "har_ephemeral_gone",
             "hint": (
-                "Only the index exists: hardly_open(har_path=<HAR>, output_path=...) saves "
-                "an index. To keep the HAR, capture again with har_path / -o, or pass "
-                "export_path to hardly_capture_stop."
+                "Only the index exists: hardly_write_session_copy(format='index', output_path=...) "
+                "saves it. To keep the HAR, capture again with har_output_path (MCP) or -o (CLI)."
             ),
         }
     src = live.har_path
@@ -559,6 +559,27 @@ def export_har(session_id: str, output_path: str | Path, *, overwrite: bool = Fa
         "saved_to": str(target),
         "size_bytes": size,
         "note": "HAR files contain live secrets: protect this copy.",
+    }
+
+
+def save_index(session_id: str, output_path: str | Path, *, overwrite: bool = False) -> dict:
+    """Save the session's index to ``output_path`` (atomic, never in place; MCP/CLI dict layer)."""
+    with _lock:
+        live = _sessions.get(session_id)
+        if live is None:
+            return unknown_session(session_id).to_dict()
+        output = _resolve(output_path)
+        try:
+            _save(live, output, overwrite)
+        except (SessionError, OSError, sqlite3.Error) as exc:
+            return _err(exc)
+        live.refresh_info()
+    return {
+        "saved": True,
+        "session_id": session_id,
+        "saved_to": str(output),
+        "size_bytes": output.stat().st_size,
+        "note": "Reopen it later with hardly_session_open(har_path=<this path>); no HAR needed.",
     }
 
 

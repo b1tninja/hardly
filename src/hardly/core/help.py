@@ -13,12 +13,10 @@ _CATEGORIES: tuple[dict[str, Any], ...] = (
         "title": "Operating modes",
         "when": "Choose archive / headless / interactive before other tools",
         "tools": [
-            "hardly_start",
-            "hardly_modes",
-            "hardly_mode",
-            "hardly_capabilities",
-            "hardly_help",
-            "hardly_recommend",
+            "hardly_guide_task_plan",
+            "hardly_guide_mode",
+            "hardly_server_status",
+            "hardly_guide_help",
         ],
     },
     {
@@ -26,14 +24,14 @@ _CATEGORIES: tuple[dict[str, Any], ...] = (
         "title": "Session",
         "when": "Open / reattach a HAR; check version after MCP restart",
         "tools": [
-            "hardly_capabilities",
-            "hardly_open",
-            "hardly_list_sessions",
-            "hardly_close",
-            "hardly_export_har",
-            "hardly_summary",
-            "hardly_stats",
-            "hardly_coverage",
+            "hardly_server_status",
+            "hardly_session_open",
+            "hardly_session_list",
+            "hardly_session_close",
+            "hardly_write_session_copy",
+            "hardly_session_overview",
+            "hardly_session_traffic_stats",
+            "hardly_session_body_coverage",
         ],
     },
     {
@@ -41,13 +39,12 @@ _CATEGORIES: tuple[dict[str, Any], ...] = (
         "title": "Discovery",
         "when": "Map hosts, endpoints, search, pages",
         "tools": [
-            "hardly_hosts",
-            "hardly_endpoints",
-            "hardly_search",
-            "hardly_pages",
-            "hardly_flow",
-            "hardly_duplicates",
-            "hardly_slow",
+            "hardly_endpoint_list",
+            "hardly_entry_search",
+            "hardly_page_list",
+            "hardly_session_timeline",
+            "hardly_session_duplicates",
+            "hardly_session_slow_requests",
         ],
     },
     {
@@ -55,17 +52,17 @@ _CATEGORIES: tuple[dict[str, Any], ...] = (
         "title": "HTML guest portals",
         "when": "Server-rendered HTML portals: ASP.NET WebForms, search grids, detail pages",
         "tools": [
-            "hardly_report",
-            "hardly_brief",
-            "hardly_story",
-            "hardly_forms",
-            "hardly_ui",
-            "hardly_outline",
-            "hardly_routes",
-            "hardly_around",
-            "hardly_tree",
-            "hardly_recipe_plan",
-            "hardly_stub",
+            "hardly_session_report",
+            "hardly_session_site_brief",
+            "hardly_session_story",
+            "hardly_page_forms",
+            "hardly_page_ui",
+            "hardly_entry_outline",
+            "hardly_page_embedded_routes",
+            "hardly_entry_around",
+            "hardly_entry_initiators",
+            "hardly_session_plan_steps",
+            "hardly_client_build",
         ],
     },
     {
@@ -73,13 +70,9 @@ _CATEGORIES: tuple[dict[str, Any], ...] = (
         "title": "Tokens & secrets",
         "when": "CSRF, ViewState, cookies, credentials",
         "tools": [
-            "hardly_credentials",
-            "hardly_correlate",
-            "hardly_trace",
-            "hardly_cookies",
-            "hardly_secrets",
-            "hardly_auth",
-            "hardly_params",
+            "hardly_auth_report",
+            "hardly_session_trace_value",
+            "hardly_endpoint_schema",
         ],
     },
     {
@@ -87,62 +80,90 @@ _CATEGORIES: tuple[dict[str, Any], ...] = (
         "title": "Capture quality & walls",
         "when": "Empty bodies, 403/Akamai, redirects, errors",
         "tools": [
-            "hardly_wall",
-            "hardly_issues",
-            "hardly_coverage",
-            "hardly_redirects",
-            "hardly_diff",
+            "hardly_gate_bot_protection",
+            "hardly_session_issues",
+            "hardly_session_body_coverage",
+            "hardly_session_redirect_history",
+            "hardly_session_compare",
+            "hardly_har_file_check",
         ],
     },
     {
         "id": "api",
         "title": "API detail",
-        "when": "JSON APIs, GraphQL, schemas",
+        "when": "JSON APIs, GraphQL, schemas, technology",
         "tools": [
-            "hardly_entry",
-            "hardly_content",
-            "hardly_compare_entries",
-            "hardly_schema",
-            "hardly_graphql",
-            "hardly_sql",
-            "hardly_curl",
-            "hardly_probe",
+            "hardly_entry_get",
+            "hardly_entry_body_query",
+            "hardly_session_traffic_stats",
+            "hardly_entry_compare",
+            "hardly_entry_dependencies",
+            "hardly_endpoint_schema",
+            "hardly_endpoint_graphql",
+            "hardly_endpoint_streams",
+            "hardly_endpoint_pagination",
+            "hardly_endpoint_arcgis",
+            "hardly_tech_stack",
+            "hardly_page_tables",
+            "hardly_spec_contract_check",
+            "hardly_session_sql",
+            "hardly_entry_build_curl",
+        ],
+    },
+    {
+        "id": "live",
+        "title": "Live requests (send_*, confirm-gated)",
+        "when": "Send real requests only after the person agrees; without confirm=true they return a plan",
+        "tools": [
+            "hardly_send_entry",
+            "hardly_send_entry_ablation",
+            "hardly_send_entry_series",
+            "hardly_send_site_crawl",
+            "hardly_send_arcgis_explore",
+            "hardly_send_redirect_walk",
+            "hardly_send_catalog_verify",
         ],
     },
     {
         "id": "export",
-        "title": "Export",
-        "when": "Write docs / collections to disk",
+        "title": "Write files (write_*)",
+        "when": "Write docs / collections / HAR copies to disk; existing files need overwrite=true",
         "tools": [
-            "hardly_export_md",
-            "hardly_export_openapi",
-            "hardly_export_postman",
-            "hardly_export_brief",
-            "hardly_stub",
+            "hardly_write_export",
+            "hardly_write_session_copy",
+            "hardly_write_har_pruned",
+            "hardly_write_har_scrubbed",
+            "hardly_write_har_split",
+            "hardly_write_har_merged",
+            "hardly_write_screenshot",
+            "hardly_write_catalog_record",
         ],
     },
     {
         "id": "capture",
-        "title": "Live capture",
-        "when": "Headless discover or interactive record (prefer channel=chrome)",
+        "title": "Browser capture",
+        "when": "Headless discovery or interactive record (prefer channel=chrome)",
         "tools": [
-            "hardly_discover",
-            "hardly_capture_start",
-            "hardly_capture_stop",
-            "hardly_capture_goto",
-            "hardly_capture_elements",
-            "hardly_capture_click",
-            "hardly_capture_fill",
-            "hardly_capture_press",
-            "hardly_capture_url",
-            "hardly_capture_aria",
-            "hardly_capture_screenshot",
-            "hardly_capture_doctor",
-            "hardly_capture_recipe",
+            "hardly_browser_capture_discover",
+            "hardly_browser_start",
+            "hardly_browser_stop",
+            "hardly_browser_interact",
+            "hardly_browser_inspect",
+            "hardly_browser_run_steps",
+            "hardly_write_screenshot",
             "hardly_capture_list",
-            "hardly_capture_status",
-            "hardly_capture_once",
-            "hardly_recipe_plan",
+            "hardly_server_status",
+            "hardly_session_plan_steps",
+        ],
+    },
+    {
+        "id": "catalog",
+        "title": "Target catalog",
+        "when": "A project-defined list of endpoints to track",
+        "tools": [
+            "hardly_catalog_list",
+            "hardly_write_catalog_record",
+            "hardly_send_catalog_verify",
         ],
     },
     {
@@ -150,11 +171,10 @@ _CATEGORIES: tuple[dict[str, Any], ...] = (
         "title": "Guidance",
         "when": "Not sure which tool to call",
         "tools": [
-            "hardly_modes",
-            "hardly_mode",
-            "hardly_help",
-            "hardly_recommend",
-            "hardly_capabilities",
+            "hardly_guide_task_plan",
+            "hardly_guide_mode",
+            "hardly_guide_help",
+            "hardly_server_status",
         ],
     },
 )
@@ -163,45 +183,49 @@ _WORKFLOWS: tuple[dict[str, str], ...] = (
     {
         "name": "archive",
         "steps": (
-            "hardly_mode(mode=archive, har_path=…) -> hardly_open -> "
-            "hardly_brief / endpoints -> correlate / schema / export"
+            "hardly_guide_mode(mode=archive, har_path=…) -> hardly_session_open -> "
+            "hardly_session_site_brief / hardly_endpoint_list -> hardly_session_trace_value / "
+            "hardly_endpoint_schema / hardly_write_export"
         ),
     },
     {
         "name": "headless",
         "steps": (
-            "hardly_mode(mode=headless, url=…) -> hardly_discover(url) "
-            "(or capture_start headed=false + aria/recipe) -> brief"
+            "hardly_guide_mode(mode=headless, url=…) -> "
+            "hardly_browser_capture_discover(url, analyze=true, confirm=true) "
+            "(or hardly_browser_start headed=false + hardly_browser_inspect/hardly_browser_run_steps) "
+            "-> hardly_session_site_brief"
         ),
     },
     {
         "name": "interactive",
         "steps": (
-            "hardly_mode(mode=interactive, url=…) -> "
-            "capture_start(headed=true, channel=chrome) -> ASK PERSON -> "
-            "capture_stop -> brief"
+            "hardly_guide_mode(mode=interactive, url=…) -> "
+            "hardly_browser_start(headed=true, channel=chrome) -> ASK PERSON -> "
+            "hardly_browser_stop -> hardly_session_site_brief"
         ),
     },
     {
         "name": "guest_portal",
         "steps": (
-            "hardly_open -> hardly_brief (includes credentials summary) -> "
-            "hardly_credentials / hardly_wall -> "
-            "hardly_correlate / hardly_trace -> hardly_stub or hardly_recipe_plan"
+            "hardly_session_open -> hardly_session_site_brief (includes credentials summary) -> "
+            "hardly_auth_report / hardly_gate_bot_protection -> "
+            "hardly_session_trace_value -> hardly_client_build or hardly_session_plan_steps"
         ),
     },
     {
         "name": "login_session",
         "steps": (
-            "hardly_open -> hardly_credentials -> "
-            "hardly_trace / hardly_cookies -> hardly_compare_entries pre/post login"
+            "hardly_session_open -> hardly_auth_report(sections=['credentials']) -> "
+            "hardly_session_trace_value / hardly_auth_report(sections=['cookies']) -> "
+            "hardly_entry_compare pre/post login"
         ),
     },
     {
         "name": "json_api",
         "steps": (
-            "hardly_open -> hardly_endpoints -> hardly_auth -> "
-            "hardly_schema -> hardly_export_openapi"
+            "hardly_session_open -> hardly_endpoint_list -> hardly_auth_report -> "
+            "hardly_endpoint_schema -> hardly_write_export(format=openapi)"
         ),
     },
 )
@@ -230,7 +254,7 @@ def tool_help(topic: str | None = None) -> dict[str, Any]:
                 filtered.append({**cat, "tools": tools})
         cats = filtered or cats
 
-    known = set(TOOLS) | {"hardly_help", "hardly_list_sessions", "hardly_close"}
+    known = set(TOOLS)
     out: dict[str, Any] = {
         "version": __version__,
         "topic": topic,
@@ -240,7 +264,7 @@ def tool_help(topic: str | None = None) -> dict[str, Any]:
         "next": (
             "Pass topic like 'modes', 'archive', 'headless', 'interactive', "
             "'portal', 'tokens', 'capture', or a tool name. "
-            "Or hardly_modes / hardly_recommend(\"guest portal csrf\")."
+            "Or hardly_guide_mode / hardly_guide_task_plan(goal=\"guest portal csrf\")."
         ),
         "note": (
             None

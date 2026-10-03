@@ -56,7 +56,7 @@ def read_doc(filename: str) -> str:
     if d is None or not (d / filename).is_file():
         return (
             f"Documentation file {filename} is not available in this install. "
-            "Use hardly_help(topic) or see the project docs/ directory."
+            "Use hardly_guide_help(topic) or see the project docs/ directory."
         )
     return (d / filename).read_text(encoding="utf-8")
 

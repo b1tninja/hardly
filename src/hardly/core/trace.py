@@ -57,8 +57,8 @@ def trace_field(
         "hit_count": len(hits),
         "hits": hits,
         "next": (
-            "Pair with hardly_correlate for auto-discovered reuse, or "
-            "hardly_entry on hit entry_ids."
+            "Pair with hardly_session_trace_value for auto-discovered reuse, or "
+            "hardly_entry_get on hit entry_ids."
         ),
     }
 

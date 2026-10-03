@@ -19,41 +19,35 @@ MODES: tuple[dict[str, Any], ...] = (
         "needs_playwright": False,
         "needs_user": False,
         "entry_tools": [
-            "hardly_open",
-            "hardly_brief",
-            "hardly_endpoints",
-            "hardly_content",
+            "hardly_session_open",
+            "hardly_session_site_brief",
+            "hardly_endpoint_list",
+            "hardly_session_traffic_stats",
         ],
         "tools": [
-            "hardly_open",
-            "hardly_hosts",
-            "hardly_summary",
-            "hardly_endpoints",
-            "hardly_content",
-            "hardly_brief",
-            "hardly_story",
-            "hardly_forms",
-            "hardly_ui",
-            "hardly_outline",
-            "hardly_correlate",
-            "hardly_trace",
-            "hardly_cookies",
-            "hardly_secrets",
-            "hardly_credentials",
-            "hardly_routes",
-            "hardly_around",
-            "hardly_tree",
-            "hardly_auth",
-            "hardly_schema",
-            "hardly_stub",
-            "hardly_export_brief",
-            "hardly_export_openapi",
+            "hardly_session_open",
+            "hardly_session_overview",
+            "hardly_endpoint_list",
+            "hardly_session_traffic_stats",
+            "hardly_session_site_brief",
+            "hardly_session_story",
+            "hardly_page_forms",
+            "hardly_page_ui",
+            "hardly_entry_outline",
+            "hardly_session_trace_value",
+            "hardly_auth_report",
+            "hardly_page_embedded_routes",
+            "hardly_entry_around",
+            "hardly_entry_initiators",
+            "hardly_endpoint_schema",
+            "hardly_client_build",
+            "hardly_write_export",
         ],
         "steps": [
-            "hardly_open(har_path) -> session_id",
-            "hardly_hosts — note preferred_host (apex HTML)",
-            "Portal: hardly_brief -> forms/outline/correlate/trace",
-            "JSON API: hardly_endpoints -> content -> auth -> schema",
+            "hardly_session_open(har_path) -> session_id",
+            "hardly_session_overview — note main_host (apex HTML)",
+            "Portal: hardly_session_site_brief -> forms/outline/correlate/trace",
+            "JSON API: hardly_endpoint_list -> content -> auth -> schema",
             "Export: stub / export_brief / export_openapi as needed",
             "Never Read the raw HAR into the model",
         ],
@@ -71,35 +65,31 @@ MODES: tuple[dict[str, Any], ...] = (
         "needs_playwright": True,
         "needs_user": False,
         "entry_tools": [
-            "hardly_capture_doctor",
-            "hardly_discover",
-            "hardly_capture_start",
-            "hardly_capture_aria",
-            "hardly_capture_recipe",
+            "hardly_server_status",
+            "hardly_browser_capture_discover",
+            "hardly_browser_start",
+            "hardly_browser_inspect",
+            "hardly_browser_run_steps",
         ],
         "tools": [
-            "hardly_capture_doctor",
-            "hardly_discover",
-            "hardly_capture_once",
-            "hardly_capture_start",
-            "hardly_capture_goto",
-            "hardly_capture_aria",
-            "hardly_capture_click",
-            "hardly_capture_fill",
-            "hardly_capture_press",
-            "hardly_capture_recipe",
-            "hardly_capture_stop",
-            "hardly_brief",
-            "hardly_endpoints",
-            "hardly_content",
+            "hardly_server_status",
+            "hardly_browser_capture_discover",
+            "hardly_browser_start",
+            "hardly_browser_interact",
+            "hardly_browser_inspect",
+            "hardly_browser_run_steps",
+            "hardly_browser_stop",
+            "hardly_session_site_brief",
+            "hardly_endpoint_list",
+            "hardly_session_traffic_stats",
         ],
         "steps": [
-            "hardly_capture_doctor if capture_available is false",
-            "One-shot: hardly_discover(url, recipe=optional steps) "
+            "hardly_server_status if capture_available is false",
+            "One-shot: hardly_browser_capture_discover(url, recipe=optional steps) "
             "-> session_id + brief",
-            "Or loop: hardly_capture_start(url, headed=false) -> "
-            "hardly_capture_aria -> click/fill with ref -> "
-            "hardly_capture_stop(open_session=true)",
+            "Or loop: hardly_browser_start(url, headed=false) -> "
+            "hardly_browser_inspect -> click/fill with ref -> "
+            "hardly_browser_stop(open_session=true)",
             "Then continue in archive mode on the new session",
             "If wall/403: switch to interactive + channel=chrome",
         ],
@@ -117,36 +107,36 @@ MODES: tuple[dict[str, Any], ...] = (
         "needs_playwright": True,
         "needs_user": True,
         "entry_tools": [
-            "hardly_capture_doctor",
-            "hardly_capture_start",
-            "hardly_capture_stop",
-            "hardly_brief",
+            "hardly_server_status",
+            "hardly_browser_start",
+            "hardly_browser_stop",
+            "hardly_session_site_brief",
         ],
         "tools": [
-            "hardly_capture_doctor",
-            "hardly_capture_start",
-            "hardly_capture_status",
-            "hardly_capture_screenshot",
-            "hardly_capture_aria",
-            "hardly_capture_stop",
-            "hardly_brief",
-            "hardly_wall",
-            "hardly_issues",
+            "hardly_server_status",
+            "hardly_browser_start",
+            "hardly_capture_list",
+            "hardly_write_screenshot",
+            "hardly_browser_inspect",
+            "hardly_browser_stop",
+            "hardly_session_site_brief",
+            "hardly_gate_bot_protection",
+            "hardly_session_issues",
         ],
         "steps": [
-            "hardly_capture_doctor if capture_available is false",
-            "hardly_capture_start(url, headed=true, channel='chrome')",
+            "hardly_server_status if capture_available is false",
+            "hardly_browser_start(url, headed=true, channel='chrome')",
             "ASK THE PERSON to use the open browser "
             "(accept cookies, search, open a detail, login, …)",
-            "Optionally hardly_capture_screenshot / _status while they work",
-            "When they are done: hardly_capture_stop -> session_id",
-            "hardly_brief / endpoints — same as archive mode from here",
+            "Optionally hardly_write_screenshot / _status while they work",
+            "When they are done: hardly_browser_stop -> session_id",
+            "hardly_session_site_brief / endpoints — same as archive mode from here",
         ],
         "prompt": "capture_portal",
         "ask_user": (
             "A headed browser window is recording. Ask the person to "
             "complete the portal steps you need traffic for, then call "
-            "hardly_capture_stop when they say they are finished."
+            "hardly_browser_stop when they say they are finished."
         ),
     },
 )
@@ -168,17 +158,17 @@ def list_modes() -> dict[str, Any]:
             for m in MODES
         ],
         "summary": [
-            "archive — open an existing .har (hardly_open); no browser",
-            "headless — hardly_discover(url) or capture_start(headed=false)",
-            "interactive — capture_start(headed=true); ask the person to click",
+            "archive — open an existing .har (hardly_session_open); no browser",
+            "headless — hardly_browser_capture_discover(url) or hardly_browser_start(headed=false)",
+            "interactive — hardly_browser_start(headed=true); ask the person to click",
         ],
         "pick": (
-            "Call hardly_mode(mode) for a full playbook, or "
-            "hardly_mode(goal=…) / hardly_mode(har_path=…, url=…) to pick."
+            "Call hardly_guide_mode(mode) for a full playbook, or "
+            "hardly_guide_mode(goal=…) / hardly_guide_mode(har_path=…, url=…) to pick."
         ),
         "rule": (
             "HAR path known -> archive. "
-            "URL only and scriptable -> headless (hardly_discover). "
+            "URL only and scriptable -> headless (hardly_browser_capture_discover). "
             "Walls / MFA / person needed -> interactive."
         ),
     }
@@ -315,31 +305,31 @@ def mode_playbook(
         if har:
             calls.append(
                 {
-                    "tool": "hardly_open",
+                    "tool": "hardly_session_open",
                     "args": {"har_path": har},
                     "note": "then use returned session_id",
                 }
             )
             calls.append(
                 {
-                    "tool": "hardly_brief",
+                    "tool": "hardly_session_site_brief",
                     "args": {"session_id": "<from open>"},
-                    "note": "or hardly_endpoints for JSON APIs",
+                    "note": "or hardly_endpoint_list for JSON APIs",
                 }
             )
         else:
             calls.append(
                 {
-                    "tool": "hardly_open",
+                    "tool": "hardly_session_open",
                     "args": {"har_path": "<path/to/capture.har>"},
                 }
             )
     elif mode["id"] == MODE_HEADLESS:
-        calls.append({"tool": "hardly_capture_doctor", "args": {}})
+        calls.append({"tool": "hardly_server_status", "args": {}})
         if target:
             calls.append(
                 {
-                    "tool": "hardly_discover",
+                    "tool": "hardly_browser_capture_discover",
                     "args": {
                         "url": target,
                         "wait_seconds": 8,
@@ -347,22 +337,22 @@ def mode_playbook(
                     },
                     "note": (
                         "one-shot headless load (+ optional recipe); "
-                        "or use capture_start(headed=false) for a click loop"
+                        "or use hardly_browser_start(headed=false) for a click loop"
                     ),
                 }
             )
         else:
             calls.append(
                 {
-                    "tool": "hardly_discover",
+                    "tool": "hardly_browser_capture_discover",
                     "args": {"url": "<https://portal.example.com>"},
                 }
             )
     else:  # interactive
-        calls.append({"tool": "hardly_capture_doctor", "args": {}})
+        calls.append({"tool": "hardly_server_status", "args": {}})
         calls.append(
             {
-                "tool": "hardly_capture_start",
+                "tool": "hardly_browser_start",
                 "args": {
                     "url": target or "<https://portal.example.com>",
                     "headed": True,
@@ -373,14 +363,14 @@ def mode_playbook(
         )
         calls.append(
             {
-                "tool": "hardly_capture_stop",
+                "tool": "hardly_browser_stop",
                 "args": {"open_session": True},
                 "note": "after the person finishes",
             }
         )
         calls.append(
             {
-                "tool": "hardly_brief",
+                "tool": "hardly_session_site_brief",
                 "args": {"session_id": "<from stop>"},
             }
         )

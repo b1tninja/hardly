@@ -234,7 +234,7 @@ def _detect_grids(
             {"name": f"data-{n}", "count": c} for n, c in data_attrs.most_common(limit)
         ],
         "next": (
-            "Use hardly_entry / hardly_outline on entry_ids; server-side grids "
+            "Use hardly_entry_get / hardly_entry_outline on entry_ids; server-side grids "
             "need the param style replayed (e.g. start/length or page/pageSize)."
         ),
     }

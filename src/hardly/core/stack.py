@@ -68,7 +68,7 @@ def _tech(tid, name, category, implication, *sigs, cap=None):
     }
 
 
-_JS_BUNDLE = "The API path lives in the JS bundle; use hardly_routes to find it."
+_JS_BUNDLE = "The API path lives in the JS bundle; use hardly_page_embedded_routes to find it."
 
 CATALOG: list[dict[str, Any]] = [
     _tech(
@@ -100,7 +100,7 @@ CATALOG: list[dict[str, Any]] = [
     ),
     _tech(
         "blazor-wasm", "Blazor WebAssembly", "frontend",
-        "Client-side .NET app: data comes from separate API calls, so find them via hardly_routes rather than page HTML.",
+        "Client-side .NET app: data comes from separate API calls, so find them via hardly_page_embedded_routes rather than page HTML.",
         U(r"_framework/blazor\.webassembly\.js", 3, "blazor.webassembly.js"),
         U(r"blazor\.boot\.json", 3, "blazor.boot.json"),
         U(r"_framework/[\w.\-]+\.(?:wasm|dll)", 2, "_framework/*.wasm|dll"),
@@ -165,14 +165,14 @@ CATALOG: list[dict[str, Any]] = [
     ),
     _tech(
         "nextjs", "Next.js", "frontend",
-        "Page data may sit in __NEXT_DATA__ or /_next/data JSON; other API paths live in the JS bundle (hardly_routes).",
+        "Page data may sit in __NEXT_DATA__ or /_next/data JSON; other API paths live in the JS bundle (hardly_page_embedded_routes).",
         B(r"__NEXT_DATA__", 3, "__NEXT_DATA__"),
         U(r"/_next/", 3, "/_next/"),
         H(r"x-powered-by:\s*next\.js", 3, "header:X-Powered-By: Next.js"),
     ),
     _tech(
         "nuxt", "Nuxt", "frontend",
-        "State may sit in window.__NUXT__ or /_nuxt payloads; the API path lives in the JS bundle (hardly_routes).",
+        "State may sit in window.__NUXT__ or /_nuxt payloads; the API path lives in the JS bundle (hardly_page_embedded_routes).",
         B(r"__NUXT__", 3, "__NUXT__"),
         U(r"/_nuxt/", 3, "/_nuxt/"),
     ),
@@ -640,8 +640,8 @@ def fingerprint(
         "by_category": by_category,
         "sdk_notes": notes,
         "next": (
-            "Names, header names and path fragments only (no values). Use hardly_routes "
-            "for JS-bundle APIs, hardly_forms for hidden fields, hardly_credentials for auth."
+            "Names, header names and path fragments only (no values). Use hardly_page_embedded_routes "
+            "for JS-bundle APIs, hardly_page_forms for hidden fields, hardly_auth_report for auth."
         ),
     }
     return finish(out, explain, "sdk_notes", "next")

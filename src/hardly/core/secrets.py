@@ -141,8 +141,8 @@ def locate_secrets(
         "hits": hits,
         "next": (
             "Names only — values are redacted in the index. "
-            "For a login/session map use hardly_credentials; "
-            "trace a name with hardly_trace(name=...)."
+            "For a login/session map use hardly_auth_report; "
+            "trace a name with hardly_session_trace_value(name=...)."
         ),
     }
 

@@ -282,7 +282,7 @@ def _scan_session(conn: Any, *, host: str | None = None, entry_id: int | None = 
         "next": (
             "dataset_key is what page scripts read (element.dataset.<key>); "
             "endpoints/embedded_json show config the page hands to JavaScript — "
-            "use hardly_entry / hardly_outline on entry_id for context."
+            "use hardly_entry_get / hardly_entry_outline on entry_id for context."
         ),
     }
 

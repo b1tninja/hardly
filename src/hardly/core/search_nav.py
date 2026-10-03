@@ -300,7 +300,7 @@ def find_search_entry(
         "candidates": ranked,
         "next_step": ranked[0]["click"] if ranked else None,
         "note": (
-            "Click next_step, then re-capture and run hardly_forms/hardly_story "
+            "Click next_step, then re-capture and run hardly_page_forms/hardly_session_story "
             "on the result page; repeat until a form with input fields appears."
         ),
     }

@@ -39,35 +39,50 @@ _NAME_MAX = 60
 
 # kind -> drill-down tool (the one that returns the full evidence for it)
 _DRILL = {
-    "gate": "hardly_gates",
-    "protection": "hardly_wall",
-    "wall_status": "hardly_wall",
-    "redirects": "hardly_redirects",
-    "redirect_unresolved": "hardly_redirects",
-    "login_form": "hardly_credentials",
-    "session_cookies": "hardly_credentials",
-    "csrf_names": "hardly_credentials",
-    "token_responses": "hardly_credentials",
-    "query_secrets": "hardly_secrets",
-    "oauth": "hardly_credentials",
-    "webauthn": "hardly_credentials",
-    "auth_pattern": "hardly_auth_patterns",
-    "auth_challenge": "hardly_challenges",
-    "throttling": "hardly_challenges",
-    "captcha_widget": "hardly_challenges",
-    "technology": "hardly_stack",
-    "grid": "hardly_grids",
-    "json_envelope": "hardly_grids",
-    "paging_params": "hardly_grids",
-    "tables": "hardly_tables",
-    "data_attrs": "hardly_data_attrs",
-    "data_endpoints": "hardly_data_attrs",
-    "export_link": "hardly_grids",
-    "endpoints": "hardly_endpoints",
-    "schema": "hardly_schema",
-    "forms": "hardly_forms",
-    "search_candidate": "hardly_find_search",
-    "run": "hardly_replay_check",
+    "gate": "hardly_gate_bot_protection",
+    "protection": "hardly_gate_bot_protection",
+    "wall_status": "hardly_gate_bot_protection",
+    "redirects": "hardly_session_redirect_history",
+    "redirect_unresolved": "hardly_session_redirect_history",
+    "login_form": "hardly_auth_report",
+    "session_cookies": "hardly_auth_report",
+    "csrf_names": "hardly_auth_report",
+    "token_responses": "hardly_auth_report",
+    "query_secrets": "hardly_auth_report",
+    "oauth": "hardly_auth_report",
+    "webauthn": "hardly_auth_report",
+    "auth_pattern": "hardly_auth_report",
+    "auth_challenge": "hardly_gate_bot_protection",
+    "throttling": "hardly_gate_bot_protection",
+    "captcha_widget": "hardly_gate_bot_protection",
+    "technology": "hardly_tech_stack",
+    "grid": "hardly_tech_stack",
+    "json_envelope": "hardly_tech_stack",
+    "paging_params": "hardly_tech_stack",
+    "tables": "hardly_page_tables",
+    "data_attrs": "hardly_page_embedded_routes",
+    "data_endpoints": "hardly_page_embedded_routes",
+    "export_link": "hardly_tech_stack",
+    "endpoints": "hardly_endpoint_list",
+    "schema": "hardly_endpoint_schema",
+    "forms": "hardly_page_forms",
+    "search_candidate": "hardly_page_ui",
+    "run": "hardly_send_entry_ablation",
+}
+
+# kind -> the `sections` value that selects the evidence inside a sectioned drill-down tool
+_DRILL_SECTIONS = {
+    "login_form": ["credentials"],
+    "session_cookies": ["credentials"],
+    "csrf_names": ["credentials"],
+    "token_responses": ["credentials"],
+    "oauth": ["credentials"],
+    "webauthn": ["credentials"],
+    "query_secrets": ["secret_names"],
+    "auth_pattern": ["patterns"],
+    "data_attrs": ["data_attrs"],
+    "data_endpoints": ["data_attrs"],
+    "search_candidate": ["search_links"],
 }
 
 _LOOKUP_BY_CATEGORY = {
@@ -420,7 +435,7 @@ def urlpath(href: Any) -> str:
 
 
 def _run(fx: _Findings) -> None:
-    fx.add("run", "run", "info", "no run results attached (placeholder; see hardly_replay_check)")
+    fx.add("run", "run", "info", "no run results attached (placeholder; see hardly_send_entry_ablation)")
 
 
 # --------------------------------------------------------------- build
@@ -503,7 +518,11 @@ def build_report(
                 if detail == "full":
                     tool = _DRILL.get(g["kind"])
                     if tool:
-                        g["drill"] = {"tool": tool, **({"entry_id": g["entry_ids"][0]} if g["entry_ids"] else {})}
+                        g["drill"] = {
+                            "tool": tool,
+                            **({"sections": _DRILL_SECTIONS[g["kind"]]} if g["kind"] in _DRILL_SECTIONS else {}),
+                            **({"entry_id": g["entry_ids"][0]} if g["entry_ids"] else {}),
+                        }
                 findings.append(g)
             if len(mine) > per_section:
                 truncated[name] = len(mine) - per_section

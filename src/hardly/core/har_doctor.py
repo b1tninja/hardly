@@ -1,6 +1,6 @@
 """HAR doctor: diagnose problems in a HAR file itself (not the browser).
 
-``hardly_capture_doctor`` checks the capture *environment*. This module checks
+``hardly_server_status`` checks the capture *environment*. This module checks
 a finished *HAR*: truncated or missing bodies, sanitised headers, broken
 timings, odd encodings, version/creator quirks, a stale index and so on. It
 is content-neutral: it looks at structure, never at what a site is about.
@@ -76,7 +76,7 @@ FIXES: dict[str, tuple[str, dict[str, Any]]] = {
         "'Save as HAR' on very large responses.",
         {"omit_content": False},
     ),
-    "preview_capped": ("Informational: full text stays in the HAR; use hardly_entry/raw read for the rest.", {}),
+    "preview_capped": ("Informational: full text stays in the HAR; use hardly_entry_get/raw read for the rest.", {}),
     "bad_encoding": ("Re-export the HAR; the body encoding field is corrupt.", {}),
     "base64_text": ("Informational: hardly decodes textual base64 bodies at ingest.", {}),
     "request_body_missing": (
@@ -117,7 +117,7 @@ FIXES: dict[str, tuple[str, dict[str, Any]]] = {
     "mixed_hosts": ("Scope analysis with host=... or `hardly har split --by host`.", {}),
     "har_version": ("Re-export as HAR 1.2.", {}),
     "creator_quirk": ("", {}),
-    "index_stale": ("Re-run ingest (hardly_open with force=True).", {}),
+    "index_stale": ("Re-run ingest (hardly_session_open with force=True).", {}),
 }
 
 #: tuning knobs and their defaults
