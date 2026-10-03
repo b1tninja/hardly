@@ -110,3 +110,7 @@ never bodies or values.
   endpoints and credentials behaviour.
 - Keep small, hand-redacted response snippets as unit-test fixtures; do not
   commit HARs. See [integrating.md](integrating.md).
+
+## Stub helpers
+
+Generated stubs retry 429/5xx with backoff and `Retry-After` (`HARDLY_STUB_RETRIES`, `HARDLY_STUB_BACKOFF`), expose `client.pages(entry_id)` (grid paging parameters) and `client.follow(entry_id)` (cursor / next-link / `Link` header), and carry refreshed hidden fields from ASP.NET AJAX partial responses. `hardly pagination <har>` shows the detected paging shapes.

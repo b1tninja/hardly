@@ -1427,6 +1427,18 @@ def hardly_auth_patterns(session_id: str, host: str | None = None, kinds_json: s
 
 
 @mcp.tool
+def hardly_pagination(session_id: str, host: str | None = None, limit: int = 20) -> str:
+    """Recognise cursor / next-link / Link-header pagination. Shapes and entry ids only, never values."""
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.pagination import detect_pagination
+
+    return _ok(detect_pagination(conn, host=host, limit=min(limit, 60)))
+
+
+@mcp.tool
 def hardly_stack(
     session_id: str,
     host: str | None = None,

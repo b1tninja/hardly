@@ -160,6 +160,10 @@ List HTML data tables: headers, row/column counts, masked first row.
 
 Detect generic auth patterns: bearer/refresh JSON login, OIDC/PKCE, SAML POST, double-submit CSRF, signed-request headers.
 
+### `hardly_pagination(session_id, host=None, limit=20)`
+
+Recognise cursor / next-link / Link-header pagination. Shapes and entry ids only, never values.
+
 ## Credentials and auth
 
 ### `hardly_credentials(session_id, host=None, limit=40)`

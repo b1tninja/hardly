@@ -685,6 +685,18 @@ def cmd_auth_patterns(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_pagination(args: argparse.Namespace) -> int:
+    from hardly.core.pagination import detect_pagination
+
+    result = sess.open_har(args.har)
+    if "error" in result:
+        _print(result)
+        return 1
+    conn = sess.require_conn(result["session_id"])
+    _print(detect_pagination(conn, host=args.host, limit=args.limit))
+    return 0
+
+
 def cmd_tables(args: argparse.Namespace) -> int:
     from hardly.core.tables import scan_session
 
@@ -1870,6 +1882,12 @@ def build_parser() -> argparse.ArgumentParser:
     ap_p.add_argument("--host")
     ap_p.add_argument("--kind", action="append", help="Restrict to a detector (repeatable)")
     ap_p.set_defaults(func=cmd_auth_patterns)
+
+    pg_p = sub.add_parser("pagination", help="Recognise cursor / next-link / Link-header pagination")
+    pg_p.add_argument("har")
+    pg_p.add_argument("--host")
+    pg_p.add_argument("--limit", type=int, default=20)
+    pg_p.set_defaults(func=cmd_pagination)
 
     tables_p = sub.add_parser(
         "tables",

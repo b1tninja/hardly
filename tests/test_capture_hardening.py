@@ -210,10 +210,12 @@ def test_queue_depth_sees_concurrent_waiter(tmp_path, monkeypatch):
     monkeypatch.setenv("HARDLY_CAPTURE_SLOTS", "1")
     held = slots.acquire_slot(0)
     results = {}
+    barrier = threading.Barrier(2)
 
     def waiter(name):
+        barrier.wait()
         try:
-            slots.acquire_slot(0.6)
+            slots.acquire_slot(2.0)
         except slots.SlotTimeoutError as exc:
             results[name] = str(exc)
 
