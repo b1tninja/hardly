@@ -69,6 +69,19 @@ def detect_walls(
                 status_only.append(
                     {"entry_id": eid, "path": r["path"], "status": r["status"], "host": r["host"]}
                 )
+    # Environment blocks (our sandbox/proxy refused) are never site walls.
+    from hardly.core.gates import ENV_MESSAGE, classify_gates
+
+    gates = classify_gates(conn, host=host)
+    env = gates["environment_blocked"]
+    env_ids = set(env["entry_ids"])
+    if env_ids:
+        hits = [h for h in hits if h["entry_id"] not in env_ids]
+        status_only = [s for s in status_only if s["entry_id"] not in env_ids]
+    blocking = list(prot["blocking"])
+    if env_ids:
+        site_vendors = {g.get("vendor") for g in gates["gates"] if g["class"] != "environment_blocked"}
+        blocking = [b for b in blocking if b in site_vendors]
     hits = hits[: min(limit, 60)]
     by_kind: dict[str, int] = {}
     for h in hits:
@@ -80,7 +93,10 @@ def detect_walls(
         "hit_count": len(hits),
         "by_kind": by_kind,
         "hits": hits,
-        "blocking": prot["blocking"],
+        "blocking": blocking,
+        "gates": gates["gates"],
+        "gate_summary": {"by_class": gates["by_class"], "by_action": gates["by_action"]},
+        "environment_blocked": env,
         "protection": [
             {k: v[k] for k in ("id", "name", "category", "confidence", "state")}
             for v in prot["vendors"]
@@ -91,6 +107,8 @@ def detect_walls(
             "Bot walls need headed Chrome capture (channel=chrome), not urllib. "
             "Use hardly_capture_start; then continue in archive mode on the saved HAR."
             if hits
+            else f"Environment block: {ENV_MESSAGE}. Not a site wall."
+            if env_ids
             else "No wall observed; protection fingerprints (if any) are informational."
         ),
     }

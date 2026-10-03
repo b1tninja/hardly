@@ -2,12 +2,16 @@
 
 Technology-level: header-based challenge schemes (Basic/Bearer/Digest/Negotiate
 /…), rate-limit and lockout responses, and captcha widget markup. Reports
-scheme and parameter *names*; challenge nonces/opaque values and sitekeys'
-values are never returned.
+scheme and parameter *names*; challenge nonces/opaque values are never
+returned. Captcha widgets also report their public ``sitekeys`` (max 3,
+truncated; a sitekey is published in page markup by design) and
+``token_endpoints``: requests whose body/query field *names* include a captcha
+token field. Token values are never returned.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from typing import Any
@@ -32,6 +36,17 @@ _CAPTCHAS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("image-captcha", re.compile(r"<img[^>]+(captcha|verifycode|validatecode)", re.I)),
 )
 # Only the names a form actually submits; element ids like "captcha-demo-form" are noise.
+_SITEKEY = re.compile(r"""data-sitekey\s*=\s*['"]([A-Za-z0-9_\-]{8,80})['"]""", re.I)
+_TOKEN_FIELDS = frozenset(
+    {
+        "g-recaptcha-response",
+        "h-captcha-response",
+        "cf-turnstile-response",
+        "captchatoken",
+        "captcha_token",
+        "recaptcha_token",
+    }
+)
 _CAPTCHA_FIELD = re.compile(
     r"\bname\s*=\s*[\'\"](g-recaptcha-response|h-captcha-response|cf-turnstile-response|fc-token|"
     r"frc-captcha-solution|geetest_[a-z]+|mtcaptcha-verifiedtoken|captcha(?:_?(?:code|answer|input|text|response))?)[\'\"]",
@@ -174,7 +189,11 @@ def detect_challenges(
         body = row["body"] or ""
         for name, pat in _CAPTCHAS:
             if pat.search(body):
-                info = captcha.setdefault(name, {"name": name, "entry_ids": [], "fields": set()})
+                info = captcha.setdefault(name, {"name": name, "entry_ids": [], "fields": set(), "sitekeys": []})
+                for key in _SITEKEY.findall(body):
+                    short = key[:12] + ("..." if len(key) > 12 else "")
+                    if short not in info["sitekeys"] and len(info["sitekeys"]) < 3:
+                        info["sitekeys"].append(short)
                 info["entry_ids"].append(row["entry_id"])
                 info["fields"].update(m.group(1).lower() for m in _CAPTCHA_FIELD.finditer(body))
                 info["sitekey_attr"] = info.get("sitekey_attr") or ("data-sitekey" in body)
@@ -184,17 +203,58 @@ def detect_challenges(
             "entry_ids": sorted(set(c["entry_ids"]))[:8],
             "response_fields": sorted(c["fields"])[:6],
             "has_sitekey_attr": bool(c.get("sitekey_attr")),
+            "sitekeys": list(c.get("sitekeys") or [])[:3],
         }
         for c in captcha.values()
     ]
+    token_endpoints = _token_endpoints(conn, where, params, limit=limit)
     return {
         "host": host,
         "auth_challenges": challenges[:limit],
         "throttling": throttling[:limit],
         "captcha_widgets": captcha_out[:limit],
+        "token_endpoints": token_endpoints,
         "next": (
             "Challenges: replay with the advertised scheme (Digest needs the "
             "nonce from the 401). Throttling: honour Retry-After and back off. "
             "Captcha: needs a person (interactive mode) — hardly will not solve it."
         ),
     }
+
+
+def _token_endpoints(
+    conn: sqlite3.Connection, where: str, params: list[Any], *, limit: int
+) -> list[dict[str, Any]]:
+    """Requests that submit a captcha token field (field NAMES only)."""
+    from hardly.core.credentials import _request_field_names
+
+    out: list[dict[str, Any]] = []
+    for row in conn.execute(
+        f"""
+        SELECT e.entry_id, e.method, e.path, e.path_template, e.query_json
+        FROM entries e WHERE {where} ORDER BY e.entry_id LIMIT 3000
+        """,
+        params,
+    ):
+        names: list[str] = []
+        if row["query_json"]:
+            try:
+                q = json.loads(row["query_json"])
+            except ValueError:
+                q = {}
+            names += [str(k) for k in q] if isinstance(q, dict) else []
+        names += _request_field_names(conn, row["entry_id"])
+        for field in names:
+            if field.lower() in _TOKEN_FIELDS:
+                out.append(
+                    {
+                        "entry_id": row["entry_id"],
+                        "method": row["method"],
+                        "path": row["path_template"] or row["path"],
+                        "field": field,
+                    }
+                )
+                break
+        if len(out) >= limit:
+            break
+    return out

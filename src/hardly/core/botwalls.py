@@ -25,7 +25,7 @@ _STRONG, _MEDIUM, _WEAK = 3, 2, 1
 class Vendor:
     id: str
     name: str
-    category: str  # cdn_waf | bot_manager | captcha | proof_of_work | waiting_room | generic
+    category: str  # cdn_waf | bot_manager | captcha | proof_of_work | waiting_room | rate_limit | generic
     cookies: tuple[tuple[str, int], ...] = ()
     headers: tuple[tuple[str, int], ...] = ()  # matched against "name: value" (lowercase)
     urls: tuple[tuple[str, int], ...] = ()  # matched against host+path(+query) of requests and script srcs
@@ -34,6 +34,9 @@ class Vendor:
     clearance_cookies: tuple[str, ...] = ()  # cookie present => challenge was passed
     block_statuses: tuple[int, ...] = (403, 429)
     note: str = ""
+    # True when a status alone (with only a header fingerprint) must not count
+    # as a block: the header is informational, the block page wording decides.
+    status_needs_wording: bool = False
     _re: dict[str, list[tuple[re.Pattern[str], int]]] = field(default_factory=dict, compare=False, hash=False)
 
 
@@ -68,7 +71,7 @@ CATALOG: tuple[Vendor, ...] = (
         headers=((r"^x-iinfo:", 3), (r"^x-cdn: (imperva|incapsula)", 3)),
         urls=((r"/_incapsula_resource", 3),),
         block_body=(r"incapsula incident id", r"request unsuccessful"),
-        clearance_cookies=("reese84",), block_statuses=(403,),
+        clearance_cookies=("reese84",), block_statuses=(403, 503),
     ),
     _v(
         id="datadome", name="DataDome", category="bot_manager",
@@ -95,18 +98,22 @@ CATALOG: tuple[Vendor, ...] = (
     ),
     _v(
         id="f5", name="F5 (BIG-IP ASM / Distributed Cloud Bot Defense / Shape)", category="bot_manager",
-        cookies=((r"^TS[0-9a-f]{8,}", 2), (r"^f5avr", 3), (r"^_imp_apg_r_$", 3), (r"^f5_cspm$", 3), (r"^BIGipServer", 1)),
-        headers=((r"^x-f5-", 2),),
-        block_body=(r"the requested url was rejected\. please consult with your administrator", r"your support id is"),
+        cookies=((r"^TS[0-9a-f]{8,}", 2), (r"^TSPD_", 3), (r"^f5avr", 3), (r"^_imp_apg_r_$", 3),
+                 (r"^f5_cspm$", 3), (r"^BIGipServer", 1)),
+        headers=((r"^x-f5-", 2), (r"^server: volt-adc", 3), (r"^x-volterra-", 3)),
+        urls=((r"/TSPD/", 3),),
+        body=((r"/TSPD/[0-9a-f]+", 3), (r"\bTSPD_101\b", 3)),
+        block_body=(r"the requested url was rejected\. please consult with your administrator",
+                    r"request rejected", r"your support id is", r"support id:? ?\d+"),
         block_statuses=(200, 403),
     ),
     _v(
         id="aws-waf", name="AWS WAF (Bot Control / CAPTCHA)", category="cdn_waf",
         cookies=((r"^aws-waf-token$", 3),),
-        headers=((r"^x-amzn-waf-action:", 3), (r"^x-amzn-errortype: ", 1)),
+        headers=((r"^x-amzn-waf-action:", 3), (r"^x-amzn-errortype: ", 1)),  # action challenge|captcha comes back as 202
         urls=((r"awswaf\.com", 3), (r"/awswaf/", 3)),
         body=((r"awswafintegration|awscaptcha", 3),),
-        clearance_cookies=("aws-waf-token",), block_statuses=(403, 405),
+        clearance_cookies=("aws-waf-token",), block_statuses=(202, 403, 405),
     ),
     _v(
         id="sucuri", name="Sucuri Website Firewall", category="cdn_waf",
@@ -208,6 +215,23 @@ CATALOG: tuple[Vendor, ...] = (
         urls=((r"mtcaptcha\.com", 3),),
         body=((r"mtcaptcha-verifiedtoken", 3), (r"\bmtcaptcha\b", 2)),
         block_statuses=(),
+    ),
+    _v(
+        id="azure-front-door", name="Azure Front Door", category="cdn_waf",
+        headers=((r"^x-azure-ref:", 1), (r"^x-azure-fdid:", 1)),
+        block_body=(r"the request is blocked", r"request is blocked"),
+        block_statuses=(403,), status_needs_wording=True,
+        note="x-azure-ref is informational on its own; only the 403 'request is blocked' page means blocked.",
+    ),
+    _v(
+        id="app-rate-limit", name="Application-level rate limit / challenge redirect", category="rate_limit",
+        headers=((r"^retry-after:", 2), (r"^location: [^ ]*/challenge", 2)),
+        urls=((r"^[^/]+/challenge[\w-]*(/|\?|$)", 2),),
+        body=((r"too many requests in the past (minute|hour|\d+ (seconds|minutes))", 3),
+              (r"(rate|request) limit (exceeded|reached)", 2)),
+        block_body=(r"too many requests in the past", r"too many requests",
+                    r"you have been rate.?limited"),
+        block_statuses=(429,),
     ),
     _v(
         id="google-sorry", name="Google 'unusual traffic' interstitial", category="generic",
@@ -345,7 +369,11 @@ def detect_bot_protection(
             continue
         for slot in ev[v.id].values():
             for eid in slot["entry_ids"]:
-                if status_by_entry.get(eid) in v.block_statuses and slot["kind"] in {"header", "challenge_page"}:
+                if (
+                    status_by_entry.get(eid) in v.block_statuses
+                    and slot["kind"] in {"header", "challenge_page"}
+                    and not (v.status_needs_wording and slot["kind"] == "header")
+                ):
                     blocked[v.id].add(eid)
 
     vendors: list[dict[str, Any]] = []
@@ -406,6 +434,106 @@ def detect_bot_protection(
         ),
         "needs_person": needs_person,
     }
+
+
+def classify_response_vendors(
+    status: int,
+    headers: dict[str, Any],
+    body: str = "",
+    url: str = "",
+    cookies: tuple[str, ...] | list[str] = (),
+) -> list[dict[str, Any]]:
+    """Score the catalog against ONE response (pure; no index needed).
+
+    ``headers`` maps response header names to a string or list of strings;
+    ``url`` is ``host/path`` or a full URL. Only evidence *names* are returned
+    (header names, cookie names, URL paths, wording markers) - never values.
+    """
+    status = int(status or 0)
+    lines: list[str] = []
+    cookie_names = set(cookies or ())
+    for k, v in (headers or {}).items():
+        vals = v if isinstance(v, (list, tuple)) else [v]
+        for item in vals:
+            item = "" if item is None else str(item)
+            lines.append(f"{k}: {item}".lower()[:300])
+            if str(k).lower() == "set-cookie":
+                for part in item.split("\n"):
+                    name = part.split("=", 1)[0].strip()
+                    if name and "=" in part:
+                        cookie_names.add(name)
+    text = (body or "")[:60_000]
+    lowered = text[:6000].lower()
+    bare = re.sub(r"^[a-z][a-z0-9+.-]*://", "", url or "")
+    srcs = _SCRIPT_SRC.findall(text) + _IFRAME_SRC.findall(text)
+
+    out: list[dict[str, Any]] = []
+    scored: dict[str, tuple[int, list[dict[str, Any]], bool, bool]] = {}
+    for v in CATALOG:
+        rx = _compiled(v)
+        ev: dict[tuple[str, str], dict[str, Any]] = {}
+
+        def add(kind: str, match: str, weight: int) -> None:
+            ev.setdefault((kind, match), {"kind": kind, "match": match, "weight": weight})
+
+        for name in cookie_names:
+            for pat, w in rx["cookies"]:
+                if pat.search(name):
+                    add("cookie", name, w)
+        for line in lines:
+            for pat, w in rx["headers"]:
+                if pat.search(line):
+                    hname = line.split(":", 1)[0]
+                    add("header", hname + _safe_value(hname, line.split(": ", 1)[-1]), w)
+        for pat, w in rx["urls"]:
+            if bare and pat.search(bare):
+                add("url", _short_path(bare.split("?")[0]), w)
+            for src in srcs:
+                if pat.search(src):
+                    add("script", _short_src(src), w)
+        for pat, w in rx["body"]:
+            if text and pat.search(text):
+                add("body", pat.pattern[:48], w)
+        scored[v.id] = (sum(e["weight"] for e in ev.values()), list(ev.values()), False, False)
+        score, evl, _, _ = scored[v.id]
+        wording = bool(lowered) and any(p.search(lowered) for p, _ in rx["block_body"])
+        if wording and (score > 0 or v.id == "generic-block"):
+            evl.append({"kind": "challenge_page", "match": "block/challenge wording", "weight": 1})
+            score += 1
+        header_block = any(
+            e["kind"] == "header" and e["weight"] >= 1 for e in evl
+        ) and not v.status_needs_wording
+        in_block = status in v.block_statuses
+        challenged = wording and (score > 0 or v.id == "generic-block") and (
+            in_block or (status in (0, 200, 202) and v.id != "generic-block")
+        )
+        blocked = (wording and in_block and score > 0) or (header_block and in_block and score > 1)
+        if v.id == "generic-block":
+            blocked = wording and in_block
+        scored[v.id] = (score, evl, challenged or blocked, blocked)
+
+    strong_ids = {vid for vid, (sc, _, _, _) in scored.items() if sc >= 3 and vid != "generic-block"}
+    for v in CATALOG:
+        score, evl, challenged, blocked = scored[v.id]
+        if score <= 0 or not evl:
+            continue
+        if v.id == "generic-block" and (strong_ids or not challenged):
+            continue  # explained by a named product, or nothing blocked
+        state = "blocked" if blocked else "challenged" if challenged else "present"
+        if v.id != "generic-block" and score < 1:
+            continue
+        out.append(
+            {
+                "id": v.id,
+                "name": v.name,
+                "category": v.category,
+                "state": state,
+                "score": score,
+                "evidence": [{"kind": e["kind"], "match": e["match"]} for e in evl][:8],
+            }
+        )
+    out.sort(key=lambda d: -d["score"])
+    return out
 
 
 def _short_path(path: str) -> str:
