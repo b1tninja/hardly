@@ -1,4 +1,4 @@
-"""Agent ergonomics: docstring lint, prompts, resources, skill, hardly_start, errors."""
+"""Agent ergonomics: docstring lint, prompts, resources, skill, hardly_guide_task_plan, errors."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def _first_sentence(doc: str) -> str:
 
 def test_tool_docstring_lint():
     funcs = _tool_funcs()
-    assert len(funcs) > 90
+    assert len(funcs) == 71
     bad = []
     for name, fn in funcs.items():
         doc = inspect.getdoc(fn) or ""
@@ -44,6 +44,10 @@ def test_tool_docstring_lint():
             bad.append((name, "live tool must mention confirm"))
         if "confirm" in params and "LIVE" not in doc:
             bad.append((name, "live tool must be marked LIVE"))
+        if "confirm" in params and "confirm-gated" not in doc.lower():
+            bad.append((name, "live tool must say it is confirm-gated"))
+        if name.startswith("hardly_write_") and "overwrite" not in doc:
+            bad.append((name, "write tool must mention overwrite"))
     assert not bad, bad
 
 
@@ -57,21 +61,21 @@ def test_tool_docstrings_have_examples_or_are_simple():
 def test_start_is_registered_and_plans():
     from hardly.capabilities import TOOLS
 
-    assert "hardly_start" in TOOLS
-    out = json.loads(server.hardly_start(goal="build a client SDK", har_path="/x/a.har"))
+    assert "hardly_guide_task_plan" in TOOLS
+    out = json.loads(server.hardly_guide_task_plan(goal="build a client SDK", har_path="/x/a.har"))
     assert out["mode"] == "archive"
     tools = [s["tool"] for s in out["plan"]]
-    assert tools[0] == "hardly_open"
-    assert "hardly_stub" in tools
+    assert tools[0] == "hardly_session_open"
+    assert "hardly_client_build" in tools
     assert "capture_available" in out["environment"]
     assert out["rules"]
     assert len(json.dumps(out)) < 6000
 
-    out = json.loads(server.hardly_start(goal="the page shows a captcha", url="https://example.com"))
+    out = json.loads(server.hardly_guide_task_plan(goal="the page shows a captcha", url="https://example.com"))
     assert out["mode"] == "interactive"
-    assert any(s["tool"] == "hardly_gates" for s in out["plan"])
+    assert any(s["tool"] == "hardly_gate_bot_protection" for s in out["plan"])
 
-    assert json.loads(server.hardly_start())["plan"]
+    assert json.loads(server.hardly_guide_task_plan())["plan"]
 
 
 def test_prompts_register_and_render():
@@ -91,9 +95,9 @@ def test_prompts_register_and_render():
         )
 
     text = asyncio.run(render("reverse_engineer_api", {"har_path": "/d/a.har"}))
-    assert "/d/a.har" in text and "hardly_open" in text
+    assert "/d/a.har" in text and "hardly_session_open" in text
     text = asyncio.run(render("build_client_sdk", {"session_id": "abc"}))
-    assert "abc" in text and "hardly_stub" in text
+    assert "abc" in text and "hardly_client_build" in text
     text = asyncio.run(render("diagnose_blocked_capture", {"url": "https://example.com"}))
     assert "https://example.com" in text and "STOP" in text
     text = asyncio.run(render("verify_client", {"session_id": "abc", "entry_id": "7"}))
@@ -122,14 +126,14 @@ def test_resources_register_and_read():
         return "".join(getattr(c, "content", "") or "" for c in res.contents)
 
     sheet = asyncio.run(read("hardly://cheatsheet"))
-    assert "hardly_start" in sheet
+    assert "hardly_guide_task_plan" in sheet
     assert len(sheet.splitlines()) < 60
     assert "Gate policy" in asyncio.run(read("hardly://docs/gate-policy"))
 
 
 def test_instructions_cover_workflow_and_safety():
     ins = server.INSTRUCTIONS
-    for needle in ("hardly_start", "confirm=true", "Never Read a raw HAR", "captcha", "hardly://cheatsheet"):
+    for needle in ("hardly_guide_task_plan", "confirm=true", "Never Read a raw HAR", "captcha", "hardly://cheatsheet"):
         assert needle in ins, needle
     assert len(ins) < 3500
 
@@ -177,24 +181,24 @@ def test_skill_print_and_install(tmp_path, capsys):
 
 
 def test_unknown_session_error_is_actionable():
-    out = json.loads(server.hardly_summary("nope-does-not-exist"))
+    out = json.loads(server.hardly_session_overview("nope-does-not-exist"))
     assert "error" in out
     text = json.dumps(out)
-    assert "hardly_open" in text and out["code"] == "unknown_session"
+    assert "hardly_session_open" in text and out["code"] == "unknown_session"
 
 
 def test_missing_file_error_is_actionable():
-    out = json.loads(server.hardly_open("/definitely/not/here.har"))
+    out = json.loads(server.hardly_session_open("/definitely/not/here.har"))
     assert "error" in out
     assert "path" in json.dumps(out).lower()
 
 
 def test_confirm_missing_errors_say_how():
-    out = json.loads(server.hardly_redirect_diag("https://example.com"))
+    out = json.loads(server.hardly_send_redirect_walk("https://example.com"))
     assert "confirm=true" in json.dumps(out)
 
 
 def test_cli_start(capsys):
-    args = cli.build_parser().parse_args(["start", "--goal", "x", "--har", "a.har"])
+    args = cli.build_parser().parse_args(["guide", "task-plan", "--goal", "x", "--har-path", "a.har"])
     assert args.func(args) == 0
     assert json.loads(capsys.readouterr().out)["plan"]

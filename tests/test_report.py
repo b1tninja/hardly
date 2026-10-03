@@ -92,7 +92,7 @@ def test_full_has_drill_pointers_and_more_than_standard(opened):
     conn, har = opened
     full = R.build_report(conn, har, detail="full")
     gate = next(f for f in full["findings"] if f["kind"] == "gate")
-    assert gate["drill"]["tool"] == "hardly_gates"
+    assert gate["drill"]["tool"] == "hardly_gate_bot_protection"
     assert all("drill" in f for f in full["findings"] if f["kind"] != "run")
     assert "drill" not in next(f for f in R.build_report(conn, har, detail="standard")["findings"])
 
@@ -162,14 +162,18 @@ def test_detectors_are_evidence_only_by_default(opened):
 def test_cli_report(opened, tmp_path, capsys, monkeypatch):
     _, har = opened
     parser = cli.build_parser()
-    args = parser.parse_args(["report", str(har), "--detail", "standard", "--write"])
+    args = parser.parse_args(["session", "report", str(har), "--detail", "standard"])
     assert args.func(args) == 0
     out = json.loads(capsys.readouterr().out)
-    assert out["findings"] and (har.parent / "w.report.json").is_file()
-    args = parser.parse_args(["report", str(har), "--format", "md"])
+    assert out["findings"]
+    args = parser.parse_args(["write", "export", str(har), "--format", "report", "-o", str(har.parent / "w.report.json")])
+    assert args.func(args) == 0
+    assert (har.parent / "w.report.json").is_file()
+    capsys.readouterr()
+    args = parser.parse_args(["session", "report", str(har), "--format", "md"])
     assert args.func(args) == 0
     assert capsys.readouterr().out.startswith("# HAR report")
-    args = parser.parse_args(["report", str(har), "--sections", "bogus"])
+    args = parser.parse_args(["session", "report", str(har), "--categories", "bogus"])
     assert args.func(args) == 1
 
 
@@ -181,7 +185,7 @@ def test_mcp_tool(tmp_path, monkeypatch):
                                         "entries": _entries()}}))
     monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     sid = sess.open_har(str(path), force=True)["session_id"]
-    out = json.loads(server.hardly_report(sid, sections_json='["access","forms"]', detail="standard",
-                                          output_path=str(tmp_path / "rep.md")))
-    assert set(out["sections"]) == {"access", "forms"} and (tmp_path / "rep.md").is_file()
-    assert "error" in json.loads(server.hardly_report(sid, detail="bad"))
+    out = json.loads(server.hardly_write_export(sid, "report", str(tmp_path / "rep.md"),
+                                                categories=["access", "forms"], detail="standard"))
+    assert "error" not in out and (tmp_path / "rep.md").is_file()
+    assert "error" in json.loads(server.hardly_session_report(sid, detail="bad"))

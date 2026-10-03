@@ -20,32 +20,18 @@ def test_mcp_tools_match_capabilities():
 def test_cli_has_core_analysis_commands():
     parser = cli.build_parser()
     choices = parser._subparsers._group_actions[0].choices
-    for name in (
-        "search",
-        "entry",
-        "hosts",
-        "flow",
-        "schema",
-        "curl",
-        "compare",
-        "probe",
-        "sessions",
-        "brief",
-        "help-tools",
-        "modes",
-        "capabilities",
-    ):
+    for name in ("server", "guide", "session", "entry", "endpoint", "write", "send", "browser"):
         assert name in choices, name
 
 
-def test_cli_smoke_brief(tmp_path, monkeypatch, capsys):
+def test_cli_smoke_site_brief(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     from pathlib import Path
 
     fix = Path(__file__).parent / "fixtures" / "sample.har"
     parser = cli.build_parser()
     args = parser.parse_args(
-        ["brief", str(fix), "--host", "portal.example.com"]
+        ["session", "site-brief", str(fix), "--host", "portal.example.com"]
     )
     assert args.func(args) == 0
     out = capsys.readouterr().out

@@ -227,7 +227,7 @@ def client_stub(
         else "INPUT_DEFAULTS: dict[str, str] = {}"
     )
     head = (
-        '"""Auto-generated client from hardly_stub — review before use.\n\n'
+        '"""Auto-generated client from hardly_client_build — review before use.\n\n'
         "Tokens issued by earlier responses (hidden fields, antiforgery values,\n"
         "cookies, JSON keys) are extracted at run time. User inputs are\n"
         "PLACEHOLDER_* defaults of run(**inputs); never commit live credentials.\n"
@@ -366,7 +366,7 @@ def client_stub(
         "code": code if not written else None,
         "note": (
             "Tokens are carried forward from earlier responses; user inputs are "
-            "run(**inputs) keywords. Verify paths/fields against hardly_story / "
+            "run(**inputs) keywords. Verify paths/fields against hardly_session_story / "
             "live probes. When output_path is set, code is written to disk and "
             "omitted here."
         ),

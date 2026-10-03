@@ -233,25 +233,21 @@ def test_cli_discover_keeps_its_url():
     from hardly.cli import build_parser
 
     ns = build_parser().parse_args(
-        ["capture", "discover", "https://site.example/x", "--headless", "--wait", "1"]
+        ["browser", "capture-discover", "https://site.example/x", "--analyze", "--wait-seconds", "1"]
     )
-    assert ns.url == "https://site.example/x" and ns.capture_action == "discover"
-    ns = build_parser().parse_args(["capture", "goto", "https://site.example/y"])
-    assert ns.url == "https://site.example/y"
+    assert ns.url == "https://site.example/x" and ns.analyze and ns.wait_seconds == 1.0
+    ns = build_parser().parse_args(["browser", "interact", "goto", "--url", "https://site.example/y"])
+    assert ns.url == "https://site.example/y" and ns.action == "goto"
 
 
-def test_bare_capture_url_means_run():
-    from hardly.cli import build_parser, normalize_argv
+def test_browser_start_foreground_records_until_closed():
+    from hardly.cli import build_parser
 
-    argv = normalize_argv(["capture", "https://a.example", "-o", "x.har", "--headless"])
-    assert argv[:2] == ["capture", "run"]
-    ns = build_parser().parse_args(argv)
-    assert ns.url == "https://a.example" and ns.capture_action == "run" and ns.output == "x.har"
-    # explicit subcommands and unrelated commands are untouched
-    assert normalize_argv(["capture", "discover", "u"]) == ["capture", "discover", "u"]
-    assert normalize_argv(["capture", "list"]) == ["capture", "list"]
-    assert normalize_argv(["summary", "a.har"]) == ["summary", "a.har"]
-    assert normalize_argv(["capture", "-h"]) == ["capture", "-h"]
+    ns = build_parser().parse_args(
+        ["browser", "start", "https://a.example", "-o", "x.har", "--no-headed", "--foreground"]
+    )
+    assert ns.url == "https://a.example" and ns.foreground and ns.har_output_path == "x.har"
+    assert ns.headed is False
 
 
 def test_goto_with_retry_retries_transient_errors_only():

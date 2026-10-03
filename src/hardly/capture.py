@@ -1,5 +1,8 @@
 """Spawn a browser and record a HAR 1.2 session.
 
+Internal: not part of the public API (see docs/api-stability.md); use the ``hardly_browser_*``
+tools or ``hardly browser`` commands.
+
 Uses Playwright's built-in ``record_har_path``. The browser runs in a
 **subprocess** (``python -m hardly.capture_worker``) so recording survives
 after the CLI / MCP call returns. Optional dependency:
@@ -159,7 +162,7 @@ def playwright_available() -> bool:
 
 
 def playwright_status() -> dict[str, Any]:
-    """Diagnose the optional Playwright stack for agents and ``capture doctor``.
+    """Diagnose the optional Playwright stack for agents and ``hardly server status --sections browser_setup``.
 
     Distinguishes package-missing vs browser-binary-missing — the usual
     failure after ``pip install -e ".[capture]"`` without ``playwright install``.
@@ -332,7 +335,7 @@ def active_dir() -> Path:
 
 KEEP_HINT_START = (
     "No output path: the HAR is ephemeral (private temp file, ingested into memory and deleted "
-    "at stop). Pass har_path to keep it."
+    "at stop). Pass har_output_path (MCP) or -o (CLI) to keep it."
 )
 
 
@@ -700,20 +703,20 @@ def _start_capture_locked(
         next_bits = [
             "Mode=interactive: ASK THE PERSON to use the open browser "
             "(search, open detail, accept cookies, login).",
-            "Optional: hardly_capture_screenshot / _status while they work.",
-            "When they finish: hardly_capture_stop(open_session=true) then "
-            "hardly_brief.",
+            "Optional: hardly_write_screenshot / _status while they work.",
+            "When they finish: hardly_browser_stop(open_session=true) then "
+            "hardly_session_site_brief.",
         ]
         row["ask_user"] = (
             "A headed browser is recording. Ask the person to complete the "
-            "portal steps you need traffic for, then call hardly_capture_stop."
+            "portal steps you need traffic for, then call hardly_browser_stop."
         )
     else:
         next_bits = [
-            "Mode=headless: drive with hardly_capture_aria -> "
-            "click/fill ref='eN' (or hardly_capture_recipe), then "
-            "hardly_capture_stop.",
-            "Or use hardly_discover(url) for a one-shot load+optional recipe.",
+            "Mode=headless: drive with hardly_browser_inspect -> "
+            "click/fill ref='eN' (or hardly_browser_run_steps), then "
+            "hardly_browser_stop.",
+            "Or use hardly_browser_capture_discover(url) for a one-shot load+optional recipe.",
         ]
         row["ask_user"] = None
     if not use_channel:
@@ -961,7 +964,7 @@ def click_capture(
 ) -> dict[str, Any]:
     """Click a visible control on the active capture tab.
 
-    Prefer ``ref`` from ``hardly_capture_aria`` (``e12`` / ``[ref=e12]``).
+    Prefer ``ref`` from ``hardly_browser_inspect`` (``e12`` / ``[ref=e12]``).
     """
     if not any((ref, xpath, css, text, role)):
         raise CaptureError("pass ref, xpath, css, text, or role (+ optional name)")
@@ -1047,7 +1050,7 @@ def fill_capture(
 ) -> dict[str, Any]:
     """Fill an input/textarea on the active capture tab.
 
-    Prefer ``ref`` from ``hardly_capture_aria`` when available.
+    Prefer ``ref`` from ``hardly_browser_inspect`` when available.
     """
     if not any((ref, xpath, css)):
         raise CaptureError("pass ref, xpath, or css for the field to fill")
@@ -2606,7 +2609,7 @@ def discover_apis(
 
     For agent-driven API discovery without asking a person to click. If the
     page walls the headless browser, switch to interactive mode
-    (``hardly_capture_start(headed=true, channel=chrome)``).
+    (``hardly_browser_start(headed=true, channel=chrome)``).
 
     Default path is in-process (``capture_headless``) so soak/tests and one-shot
     discover do not depend on the subprocess ``.stop`` sidecar. Set
@@ -2676,7 +2679,7 @@ def discover_apis(
                 out["next"] = (
                     f"Mode=archive (session_id={session_id}). Brief looks empty "
                     "or walled — switch to interactive: "
-                    "hardly_capture_start(headed=true, channel='chrome') and "
+                    "hardly_browser_start(headed=true, channel='chrome') and "
                     "ASK THE PERSON to click."
                 )
                 out["suggest_mode"] = "interactive"
@@ -2684,13 +2687,13 @@ def discover_apis(
                 out["next"] = (
                     f"Mode=archive (session_id={session_id}). Little auth/"
                     "session material — try interactive capture or a richer "
-                    "recipe; else hardly_endpoints / hardly_credentials."
+                    "recipe; else hardly_endpoint_list / hardly_auth_report."
                 )
                 out["suggest_mode"] = "interactive"
             else:
                 out["next"] = (
                     f"Mode=archive (session_id={session_id}). Drill with "
-                    "hardly_credentials / hardly_endpoints / hardly_correlate; "
+                    "hardly_auth_report / hardly_endpoint_list / hardly_session_trace_value; "
                     "if traffic looks thin, retry interactive with channel=chrome."
                 )
         return out
@@ -2770,7 +2773,7 @@ def discover_apis(
                 out["next"] = (
                     f"Mode=archive (session_id={session_id}). Brief looks empty "
                     "or walled — switch to interactive: "
-                    "hardly_capture_start(headed=true, channel='chrome') and "
+                    "hardly_browser_start(headed=true, channel='chrome') and "
                     "ASK THE PERSON to click."
                 )
                 out["suggest_mode"] = "interactive"
@@ -2778,25 +2781,25 @@ def discover_apis(
                 out["next"] = (
                     f"Mode=archive (session_id={session_id}). Little auth/"
                     "session material — try interactive capture or a richer "
-                    "recipe; else hardly_endpoints / hardly_credentials."
+                    "recipe; else hardly_endpoint_list / hardly_auth_report."
                 )
                 out["suggest_mode"] = "interactive"
             else:
                 out["next"] = (
                     f"Mode=archive (session_id={session_id}). Drill with "
-                    "hardly_credentials / hardly_endpoints / hardly_correlate; "
+                    "hardly_auth_report / hardly_endpoint_list / hardly_session_trace_value; "
                     "if traffic looks thin, retry interactive with channel=chrome."
                 )
         except Exception as exc:  # noqa: BLE001
             out["brief_error"] = str(exc)
             out["next"] = (
                 f"Mode=archive (session_id={session_id}). "
-                "Call hardly_brief / hardly_endpoints next."
+                "Call hardly_session_site_brief / hardly_endpoint_list next."
             )
     else:
         out["next"] = (
-            "Headless capture stopped. Mode=archive — hardly_open the HAR "
-            "or use session_id with hardly_brief / hardly_endpoints."
+            "Headless capture stopped. Mode=archive — hardly_session_open the HAR "
+            "or use session_id with hardly_session_site_brief / hardly_endpoint_list."
         )
     return out
 
@@ -2825,12 +2828,12 @@ def _next_steps(result: dict[str, Any]) -> str:
     if sid:
         return (
             f"Mode=archive. Indexed as session_id={sid}. "
-            "Call hardly_brief (portals) or hardly_endpoints (APIs); "
+            "Call hardly_session_site_brief (portals) or hardly_endpoint_list (APIs); "
             "then correlate / forms / schema as needed — do not Read the HAR."
         )
     return (
         f"Mode=archive. HAR at {result.get('har_path')}. "
-        "Call hardly_open on that path."
+        "Call hardly_session_open on that path."
     )
 
 

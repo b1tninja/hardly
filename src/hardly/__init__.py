@@ -1,4 +1,10 @@
-"""hardly — HAR analysis for agents (MCP + library)."""
+"""hardly — HAR analysis for agents (MCP + library).
+
+Public Python API: exactly the names in ``__all__`` (``open_session``, ``Session`` and the error
+classes). Everything else, in particular ``hardly.core.*``, ``hardly.index.*``, ``hardly.capture*``
+and any name starting with an underscore, is internal and may change in any release. The compatibility
+policy is docs/api-stability.md.
+"""
 
 __version__ = "0.2.30"
 

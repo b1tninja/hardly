@@ -20,13 +20,12 @@ from pathlib import Path
 SWEEP_MAX_AGE_S = 3600.0
 KEEP_HINT = (
     "No output path was given, so the HAR was not kept: it exists only as an in-memory session. "
-    "To keep it, capture again with output_path / -o (or har_path), or pass export_path to "
-    "hardly_capture_stop."
+    "To keep it, capture again with har_output_path (MCP) or -o (CLI), or save the session's "
+    "HAR with hardly_write_session_copy (CLI: --export-path at stop)."
 )
 INTERACTIVE_WARNING = (
     "WARNING: no output path was given, so the HAR will exist only in memory and be discarded "
-    "when this capture stops. To keep it pass har_path now, or export_path to "
-    "hardly_capture_stop."
+    "when this capture stops. To keep it, start again with har_output_path (MCP) or -o (CLI)."
 )
 
 _lock = threading.Lock()

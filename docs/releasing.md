@@ -27,14 +27,15 @@ Do these once, before the first tag. Nothing here uses stored API tokens.
 | MCP Registry `io.github.b1tninja/hardly` | `server.json` pointing at the PyPI package (`uvx hardly serve`) | GitHub OIDC |
 | Agent Skill | `hardly skill install` (from the wheel) | same as PyPI |
 
-Install paths: `uvx hardly serve`, `uvx --from 'hardly[capture]' hardly capture --help`, `pipx install 'hardly[capture]'`, `docker run ghcr.io/b1tninja/hardly`. Browser capture needs a local install; the container is for analysis.
+Install paths: `uvx hardly serve`, `uvx --from 'hardly[capture]' hardly browser --help`, `pipx install 'hardly[capture]'`, `docker run ghcr.io/b1tninja/hardly`. Browser capture needs a local install; the container is for analysis.
 
 Extras: `[capture]` adds Playwright; `[dev]` adds pytest, ruff, build and twine. Entry point: `hardly` -> `hardly.cli:main` (`hardly serve` or `python -m hardly` starts the MCP server).
 
 ## Pre-release checklist
 
 - [ ] `PYTHONPATH=src python -m pytest -q -m "not browser and not live"` and `ruff check .` pass.
-- [ ] `python scripts/gen_tool_docs.py` leaves no diff.
+- [ ] `python scripts/gen_tool_docs.py` leaves no diff, and `python scripts/dump_api_surface.py --check` and `python scripts/dump_cli_surface.py --check` pass.
+- [ ] The `tests/api_surface.json` / `tests/cli_surface.json` diff since the last release is reviewed against [api-stability.md](api-stability.md): additions need a minor bump, renames or removals a major bump. The first published release is 1.0.0, from which the surface is permanent.
 - [ ] Latest nightly browser run is green.
 - [ ] Version bumped in all three places: `pyproject.toml`, `src/hardly/__init__.py`, `server.json` (two fields). `tests/test_packaging.py` and the release workflow both enforce this.
 - [ ] `CHANGELOG.md`: rename `[Unreleased]` content into `## [X.Y.Z] - YYYY-MM-DD` (the release notes are taken from that section) and start a fresh `[Unreleased]`.

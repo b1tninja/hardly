@@ -49,7 +49,7 @@ def entry_tree(
         "pageref_peers": siblings,
         "next": (
             "Children are requests whose _initiator points at this URL. "
-            "Use hardly_around for time-neighbors when initiator is missing."
+            "Use hardly_entry_around for time-neighbors when initiator is missing."
         ),
     }
 

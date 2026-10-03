@@ -19,7 +19,7 @@ def test_help_catalog_and_topic():
     assert {"archive", "headless", "interactive"} <= names
     portal = tool_help("portal")
     tools = {t for c in portal["categories"] for t in c["tools"]}
-    assert "hardly_brief" in tools
+    assert "hardly_session_site_brief" in tools
     archive = tool_help("archive")
     assert archive.get("playbook", {}).get("mode") == "archive"
 

@@ -116,7 +116,7 @@ def body_coverage(
         "next": (
             "Low preview_ratio on XHR-heavy portals usually means the capture "
             "predated body backfill — re-capture with current hardly, or use "
-            "hardly_probe / live clients for those paths."
+            "hardly_send_entry / live clients for those paths."
         ),
     }
 
@@ -642,9 +642,9 @@ def list_forms(
         "offset": offset,
         "entries": page,
         "next": (
-            "Call hardly_forms or hardly_ui with entry_id for full field / "
+            "Call hardly_page_forms or hardly_page_ui with entry_id for full field / "
             "link / handler lists (values redacted / truncated). Cross-check "
-            "handler_functions against hardly_routes. Entries with labels "
+            "handler_functions against hardly_page_embedded_routes. Entries with labels "
             "are sorted first."
         ),
     }
@@ -753,8 +753,8 @@ def list_js_routes(
         "offset": offset,
         "routes": page,
         "next": (
-            "Paths are string literals from JS — confirm against hardly_endpoints "
-            "/ hardly_around after a click that should hit them."
+            "Paths are string literals from JS — confirm against hardly_endpoint_list "
+            "/ hardly_entry_around after a click that should hit them."
         ),
     }
 
@@ -865,7 +865,7 @@ def entries_around(
         "count": len(entries),
         "entries": entries,
         "next": (
-            "Use hardly_entry / hardly_forms on XHRs after the center "
+            "Use hardly_entry_get / hardly_page_forms on XHRs after the center "
             "(positive delta_ms) to map the click handler."
         ),
     }

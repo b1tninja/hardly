@@ -46,7 +46,7 @@ def test_wait_accepts_seconds_or_ms():
 def test_cli_survives_closed_pipe():
     code = (
         "from hardly.cli import main; import sys;"
-        f"main(['endpoints', r'{FIX}'])"
+        f"main(['endpoint', 'list', r'{FIX}'])"
     )
     proc = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     assert proc.stdout is not None

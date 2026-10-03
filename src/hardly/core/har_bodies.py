@@ -3,7 +3,7 @@
 Playwright's ``record_har_content=embed`` still leaves many XHR/fetch
 responses without ``content.text``. During capture we keep a sidecar of
 text-ish bodies from ``response.text()`` and merge them into the HAR after
-the context closes so ``hardly_forms`` / ``hardly_entry`` see the HTML.
+the context closes so ``hardly_page_forms`` / ``hardly_entry_get`` see the HTML.
 """
 
 from __future__ import annotations

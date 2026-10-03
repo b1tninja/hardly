@@ -69,8 +69,8 @@ def cookie_timeline(
         "by_flag": by_flag,
         "events": events,
         "next": (
-            "Names and Set-Cookie flags only — pair with hardly_correlate / "
-            "hardly_credentials. Values are never returned."
+            "Names and Set-Cookie flags only — pair with hardly_session_trace_value / "
+            "hardly_auth_report. Values are never returned."
         ),
     }
 

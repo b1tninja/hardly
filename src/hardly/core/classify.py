@@ -343,7 +343,7 @@ def summarize_content(
         "samples": samples,
         "next": (
             "Filter with kind=json|jsonl|jsonp|csv|html|html_table|pdf|image|… "
-            "Drill samples via hardly_entry (includes content classification)."
+            "Drill samples via hardly_entry_get (includes content classification)."
         ),
     }
 

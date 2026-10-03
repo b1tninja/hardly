@@ -1,6 +1,6 @@
 """HAR doctor: diagnose problems in a HAR file itself (not the browser).
 
-``hardly_capture_doctor`` checks the capture *environment*. This module checks
+``hardly_server_status`` checks the capture *environment*. This module checks
 a finished *HAR*: truncated or missing bodies, sanitised headers, broken
 timings, odd encodings, version/creator quirks, a stale index and so on. It
 is content-neutral: it looks at structure, never at what a site is about.
@@ -64,7 +64,7 @@ CHECKS: dict[str, tuple[str, str]] = {
     "index_stale": ("warn", "cached index no longer matches this HAR"),
 }
 
-#: code -> (hint, recapture flags for the hardly capture tools)
+#: code -> (hint, recapture flags: parameters of hardly_browser_start / hardly_browser_capture_discover)
 FIXES: dict[str, tuple[str, dict[str, Any]]] = {
     "body_omitted": (
         "Recapture with response bodies enabled (omit_content=False); for Playwright use "
@@ -76,7 +76,7 @@ FIXES: dict[str, tuple[str, dict[str, Any]]] = {
         "'Save as HAR' on very large responses.",
         {"omit_content": False},
     ),
-    "preview_capped": ("Informational: full text stays in the HAR; use hardly_entry/raw read for the rest.", {}),
+    "preview_capped": ("Informational: full text stays in the HAR; use hardly_entry_get/raw read for the rest.", {}),
     "bad_encoding": ("Re-export the HAR; the body encoding field is corrupt.", {}),
     "base64_text": ("Informational: hardly decodes textual base64 bodies at ingest.", {}),
     "request_body_missing": (
@@ -84,7 +84,7 @@ FIXES: dict[str, tuple[str, dict[str, Any]]] = {
         "multipart/binary uploads.",
         {"omit_content": False},
     ),
-    "no_timings": ("Informational: timing-based tools (slow, waterfall) will skip these entries.", {}),
+    "no_timings": ("Informational: timing-based tools (hardly_session_slow_requests) will skip these entries.", {}),
     "bad_timings": ("Re-export the HAR; timing fields are inconsistent.", {}),
     "bad_start_time": ("Re-export the HAR; ordering and page-relative checks are unreliable.", {}),
     "out_of_order": ("Informational: sort by startedDateTime before comparing; may indicate merged HARs.", {}),
@@ -93,16 +93,16 @@ FIXES: dict[str, tuple[str, dict[str, Any]]] = {
         "Redirect target was not recorded; recapture, or follow it via the next entry's Referer.",
         {},
     ),
-    "status_zero": ("Check _error/_failureText; recapture, and avoid blockers that abort requests (block_noise=False).", {"block_noise": False}),
-    "page_no_entries": ("Pages with no traffic can be dropped with `hardly har prune`.", {}),
-    "dangling_pageref": ("Re-export, or fix with `hardly har merge` on a single source.", {}),
+    "status_zero": ("Check _error/_failureText; recapture, and avoid blockers that abort requests (exclude_noise=false).", {"exclude_noise": False}),
+    "page_no_entries": ("Pages with no traffic can be dropped with `hardly write har-pruned HAR -o OUT`.", {}),
+    "dangling_pageref": ("Re-export, or fix with `hardly write har-merged HAR -o OUT` on a single source.", {}),
     "missing_pageref": ("Informational: page grouping tools fall back to timing.", {}),
     "missing_initiator": ("Informational: initiator chains need a Chrome/Playwright capture.", {}),
     "giant_entry": (
-        "Prune it (`hardly har prune --drop-mime ...`) or raise thresholds.max_entry_bytes.",
+        "Prune it (`hardly write har-pruned HAR -o OUT --drop-mime-types ...`) or raise thresholds.max_entry_bytes.",
         {},
     ),
-    "duplicate_entry": ("The HAR was probably concatenated twice; dedupe with `hardly har merge`.", {}),
+    "duplicate_entry": ("The HAR was probably concatenated twice; dedupe with `hardly write har-merged HAR -o OUT`.", {}),
     "headers_redacted": (
         "Recapture without a sanitising exporter (Chrome 'Save all as HAR with content' keeps secrets "
         "only in the sensitive variant); replay needs real Authorization/Cookie values.",
@@ -113,11 +113,11 @@ FIXES: dict[str, tuple[str, dict[str, Any]]] = {
         {},
     ),
     "http2_pseudo_headers": ("Drop headers starting with ':' before replay (curl/requests reject them).", {}),
-    "noise_hosts": ("Recapture with block_noise=True or strip them with `hardly har prune --drop-noise`.", {"block_noise": True}),
-    "mixed_hosts": ("Scope analysis with host=... or `hardly har split --by host`.", {}),
+    "noise_hosts": ("Recapture with exclude_noise=true or strip them with `hardly write har-pruned HAR -o OUT --drop-noise`.", {"exclude_noise": True}),
+    "mixed_hosts": ("Scope analysis with host=... or `hardly write har-split HAR --output-dir DIR --by host`.", {}),
     "har_version": ("Re-export as HAR 1.2.", {}),
     "creator_quirk": ("", {}),
-    "index_stale": ("Re-run ingest (hardly_open with force=True).", {}),
+    "index_stale": ("Re-run ingest (hardly_session_open(har_path, force=true)).", {}),
 }
 
 #: tuning knobs and their defaults
@@ -201,7 +201,7 @@ def normalize_config(config: dict | str | Path | None) -> dict[str, Any]:
 
 
 def add_cli_flags(parser) -> None:
-    """Add the knobs as argparse flags (for ``hardly har-doctor``)."""
+    """Add the knobs as argparse flags (for ``hardly har file-check``)."""
     a = parser.add_argument
     a("--config", help="JSON file or JSON string with any of the knobs")
     a("--checks", help="comma list/globs of checks to run (default all)")
@@ -209,7 +209,7 @@ def add_cli_flags(parser) -> None:
     a("--severity", action="append", metavar="CODE=LEVEL", help="override a severity (repeatable)")
     a("--max-entry-bytes", type=int)
     a("--truncation-ratio", type=float)
-    a("--clock-skew-s", type=float)
+    a("--clock-skew-seconds", type=float, dest="clock_skew_s")
     a("--noise-ratio", type=float)
     a("--strict", action="store_true", help="treat warnings as errors")
     a("--fail-on", choices=[*SEVERITIES, "never"])

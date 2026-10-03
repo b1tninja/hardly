@@ -137,7 +137,7 @@ def correlate_tokens(
         "candidate_count": len(producers),
         "next": (
             "Wire these into clients: extract from from_entry response "
-            "(hardly_forms / hardly_entry) and inject into to_entry request. "
+            "(hardly_page_forms / hardly_entry_get) and inject into to_entry request. "
             "Values are omitted on purpose — re-read live or from the HAR."
         ),
     }

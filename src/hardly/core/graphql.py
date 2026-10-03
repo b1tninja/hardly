@@ -75,7 +75,7 @@ def detect_graphql(
         "by_name": dict(sorted(by_name.items(), key=lambda x: -x[1])),
         "operations": ops,
         "next": (
-            "Use hardly_entry / hardly_schema on entry_ids. "
+            "Use hardly_entry_get / hardly_endpoint_schema on entry_ids. "
             "Variables are redacted when sensitive."
         ),
     }

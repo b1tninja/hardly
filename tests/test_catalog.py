@@ -159,7 +159,7 @@ def test_cli_and_mcp(tmp_path, capsys):
     p = str(tmp_path / "c.json")
     for argv in (
         ["catalog", "init", p, "--name", "demo"],
-        ["catalog", "add", p, "--id", "t1", "--tag", "example-a", "--group", "region=r1",
+        ["write", "catalog-record", p, "--id", "t1", "--tags", "example-a", "--group", "region=r1",
          "--endpoint", "search=https://one.example/find,form"],
     ):
         with pytest.raises(SystemExit) as e:
@@ -171,19 +171,19 @@ def test_cli_and_mcp(tmp_path, capsys):
     rows = json.loads(capsys.readouterr().out)["rows"]
     assert rows[0]["kind"] == "form" and rows[0]["role"] == "search"
     with pytest.raises(SystemExit) as e:
-        cli_main(["catalog", "verify", p])  # no --yes
-    assert e.value.code == 1
-    capsys.readouterr()
+        cli_main(["send", "catalog-verify", p])  # no --confirm: a plan, nothing sent
+    assert e.value.code == 0
+    assert json.loads(capsys.readouterr().out)["sent"] is False
 
-    out = json.loads(server.hardly_catalog_upsert(p, json.dumps({"id": "t2", "tags": ["example-b"]})))
+    out = json.loads(server.hardly_write_catalog_record(p, {"id": "t2", "tags": ["example-b"]}))
     assert out["targets"] == 2
     assert json.loads(server.hardly_catalog_list(p, tag="example-a"))["count"] == 1
-    assert json.loads(server.hardly_catalog_list(p, summary=True))["targets"] == 2
-    bad = json.dumps({"id": "t3", "endpoints": [{"role": "x", "url": "nope"}]})
-    assert "error" in json.loads(server.hardly_catalog_upsert(p, bad))
-    assert "error" in json.loads(server.hardly_catalog_verify(p))  # no confirm
+    assert json.loads(server.hardly_catalog_list(p, detail="summary"))["targets"] == 2
+    bad = {"id": "t3", "endpoints": [{"role": "x", "url": "nope"}]}
+    assert "error" in json.loads(server.hardly_write_catalog_record(p, bad))
+    assert json.loads(server.hardly_send_catalog_verify(p))["sent"] is False  # no confirm: dry-run plan
     with local_site.serve() as base:
         ep = {"id": "lb", "endpoints": [{"role": "s", "url": f"{base}/portal/lookup"}]}
-        server.hardly_catalog_upsert(p, json.dumps(ep))
-        res = json.loads(server.hardly_catalog_verify(p, confirm=True, target_id="lb", delay_s=0))
+        server.hardly_write_catalog_record(p, ep)
+        res = json.loads(server.hardly_send_catalog_verify(p, confirm=True, target_id="lb", delay_seconds=0))
     assert res["results"][0]["status"] == "verified"

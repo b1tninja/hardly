@@ -161,7 +161,7 @@ def recipe_from_story(
                     "op": "note",
                     "text": (
                         f"Detail hit {method} {path} (entry {step['entry_id']}). "
-                        "Open a result row; use hardly_around on that entry."
+                        "Open a result row; use hardly_entry_around on that entry."
                     ),
                 }
             )
@@ -173,7 +173,7 @@ def recipe_from_story(
                 "op": "note",
                 "text": (
                     "No page/auth step in story; fill steps below come from "
-                    "hardly_credentials — goto the login URL first."
+                    "hardly_auth_report — goto the login URL first."
                 ),
             }
         )
@@ -200,9 +200,9 @@ def recipe_from_story(
             cred.get("password_fields") or cred.get("identity_fields")
         ),
         "next": (
-            "hardly_capture_start(channel=chrome) -> recipe (includes aria) -> "
+            "hardly_browser_start(channel=chrome) -> recipe (includes aria) -> "
             "swap css/text for ref=eN from aria.refs -> stop. "
-            "Fallback: hardly_capture_elements for xpath/css. "
+            "Fallback: hardly_browser_inspect for xpath/css. "
             "If walls/MFA: interactive mode and ask the person."
         ),
     }
@@ -221,7 +221,7 @@ def _login_fill_steps(cred: dict[str, Any]) -> list[dict[str, Any]]:
                 "op": "fill",
                 "css": f"[name='{name}']",
                 "value": f"PLACEHOLDER_{name}",
-                "note": "identity field from hardly_credentials — prefer aria ref",
+                "note": "identity field from hardly_auth_report — prefer aria ref",
             }
         )
     for field in (cred.get("password_fields") or [])[:2]:
@@ -235,7 +235,7 @@ def _login_fill_steps(cred: dict[str, Any]) -> list[dict[str, Any]]:
                 "css": f"[name='{name}']",
                 "value": "PLACEHOLDER_PASSWORD",
                 "note": (
-                    "password field from hardly_credentials — fill only in a "
+                    "password field from hardly_auth_report — fill only in a "
                     "headed interactive session if MFA/walls; never log the value"
                 ),
             }
@@ -246,7 +246,7 @@ def _login_fill_steps(cred: dict[str, Any]) -> list[dict[str, Any]]:
                 "op": "note",
                 "text": (
                     "After fills: click Sign in / Submit via aria ref; "
-                    "then hardly_capture_stop -> hardly_credentials"
+                    "then hardly_browser_stop -> hardly_auth_report"
                 ),
             }
         )

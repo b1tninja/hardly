@@ -304,24 +304,24 @@ def test_ingest_is_deterministic(har):
 
 
 def test_mcp_open_save_and_unknown_session(har, tmp_path):
-    a = json.loads(server.hardly_open(str(har)))
+    a = json.loads(server.hardly_session_open(str(har)))
     assert a["saved_to"] is None and "storage" not in a and "note" in a
-    again = json.loads(server.hardly_open(str(har)))
+    again = json.loads(server.hardly_session_open(str(har)))
     assert again["session_id"] == a["session_id"]
     out = tmp_path / "idx.db"
-    saved = json.loads(server.hardly_open(str(har), output_path=str(out)))
-    assert saved["session_id"] == a["session_id"] and saved["saved_to"] == str(out.resolve())
-    clash = json.loads(server.hardly_open(str(har), output_path=str(out)))
+    saved = json.loads(server.hardly_write_session_copy(a["session_id"], str(out), format="index"))
+    assert saved["format"] == "index" and saved["saved_to"] == str(out.resolve())
+    clash = json.loads(server.hardly_write_session_copy(a["session_id"], str(out), format="index"))
     assert clash["code"] == "output_exists"
-    assert json.loads(server.hardly_summary(a["session_id"]))["saved_to"] == str(out.resolve())
-    rows = json.loads(server.hardly_list_sessions())["sessions"]
-    assert rows[0]["saved_to"] == str(out.resolve())
-    assert json.loads(server.hardly_close(a["session_id"]))["closed"] is True
-    gone = json.loads(server.hardly_summary(a["session_id"]))
+    assert json.loads(server.hardly_session_overview(a["session_id"]))["index_path"] == str(out.resolve())
+    rows = json.loads(server.hardly_session_list())["sessions"]
+    assert rows[0]["index_path"] == str(out.resolve())
+    assert json.loads(server.hardly_session_close(a["session_id"]))["closed"] is True
+    gone = json.loads(server.hardly_session_overview(a["session_id"]))
     assert gone["code"] == "unknown_session"
-    assert "hardly_open(har_path=" in gone["hint"] and "saved index" in gone["hint"]
+    assert "hardly_session_open(har_path=" in gone["hint"] and "saved index" in gone["hint"]
     # reopen from the saved index by path
-    ix = json.loads(server.hardly_open(str(out)))
+    ix = json.loads(server.hardly_session_open(str(out)))
     assert ix["opened_from"] == "index" and ix["entries"] == 22
     with pytest.raises(UnknownSession):
         sess.require_conn("nope")
@@ -339,7 +339,7 @@ def test_export_har(har, tmp_path):
     if os.name != "nt":
         assert (dest.stat().st_mode & 0o777) == 0o600
     assert sess.export_har("nope", dest)["code"] == "unknown_session"
-    res = json.loads(server.hardly_export_har(sid, str(tmp_path / "k2.har")))
+    res = json.loads(server.hardly_write_session_copy(sid, str(tmp_path / "k2.har")))
     assert res["exported"] is True
 
 

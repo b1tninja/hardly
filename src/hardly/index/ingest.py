@@ -46,7 +46,7 @@ PREVIEW_CHARS = 8000
 # Bump when ingest output changes meaning (redaction, shapes, signals) so cached
 # indexes built by older versions are rebuilt instead of reused.
 INDEX_VERSION = 6
-# HTML portals often bury forms after scripts/CSS; keep more for hardly_forms.
+# HTML portals often bury forms after scripts/CSS; keep more for hardly_page_forms.
 HTML_PREVIEW_CHARS = 64_000
 
 

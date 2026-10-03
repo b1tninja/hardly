@@ -57,7 +57,7 @@ def find_duplicates(
         "group_count": len(groups),
         "groups": groups,
         "next": (
-            "High counts may be polling or retries — use hardly_params / "
-            "hardly_compare_entries on sample entry_ids."
+            "High counts may be polling or retries — use hardly_endpoint_schema / "
+            "hardly_entry_compare on sample entry_ids."
         ),
     }

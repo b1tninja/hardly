@@ -93,15 +93,15 @@ def portal_brief(
     ][:8]
 
     next_bits = [
-        "Drill with hardly_entry / hardly_around / hardly_stub.",
-        "Live: hardly_recipe_plan → capture_recipe.",
+        "Drill with hardly_entry_get / hardly_entry_around / hardly_client_build.",
+        "Live: hardly_session_plan_steps → hardly_browser_run_steps.",
         "Do not Read the HAR file.",
     ]
     if related:
         next_bits.insert(
             0,
             f"SPA APIs often live on related_hosts (same apex {apex}); "
-            "pass that host to hardly_endpoints / hardly_story.",
+            "pass that host to hardly_endpoint_list / hardly_session_story.",
         )
     if (
         credentials.get("password_field_count")
@@ -111,7 +111,7 @@ def portal_brief(
     ):
         next_bits.insert(
             0,
-            "Credentials/login signals present — drill with hardly_credentials "
+            "Credentials/login signals present — drill with hardly_auth_report "
             "(names/shapes only).",
         )
     if (walls.get("environment_blocked") or {}).get("detected"):

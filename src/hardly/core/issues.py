@@ -177,7 +177,7 @@ def find_issues(
         "by_kind": by_kind,
         "issues": issues,
         "next": (
-            "empty_body / truncated_token → hardly_coverage / re-capture; "
-            "http_error → hardly_entry; redirects → hardly_redirects."
+            "empty_body / truncated_token → hardly_session_body_coverage / re-capture; "
+            "http_error → hardly_entry_get; redirects → hardly_session_redirect_history."
         ),
     }

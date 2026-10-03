@@ -151,13 +151,13 @@ def test_frontend_frameworks(run):
         _entry("https://h.test/", body='<app-root ng-version="17.0.1"></app-root>'),
     ])
     t = _by_id(r)
-    assert t["nextjs"]["confidence"] == "high" and "hardly_routes" in t["nextjs"]["implications"]
+    assert t["nextjs"]["confidence"] == "high" and "hardly_page_embedded_routes" in t["nextjs"]["implications"]
     assert t["nuxt"]["confidence"] == "high"
     assert t["react"]["confidence"] == "low"
     assert t["vue"]["confidence"] in ("medium", "low")
     assert t["angularjs"]["confidence"] == "high"
     assert t["angular"]["confidence"] == "high"
-    assert "hardly_routes" in t["angular"]["implications"]
+    assert "hardly_page_embedded_routes" in t["angular"]["implications"]
 
 
 def test_salesforce_aura(run):

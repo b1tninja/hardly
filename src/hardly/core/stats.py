@@ -117,7 +117,7 @@ def traffic_stats(
             "slow_ge_1s": int(timing["slow_1s"] or 0),
         },
         "next": (
-            "hardly_content to drill kinds; hardly_slow for outliers; "
-            "hardly_wall if 4xx cluster; hardly_coverage if bodies look empty."
+            "hardly_session_traffic_stats to drill kinds; hardly_session_slow_requests for outliers; "
+            "hardly_gate_bot_protection if 4xx cluster; hardly_session_body_coverage if bodies look empty."
         ),
     }

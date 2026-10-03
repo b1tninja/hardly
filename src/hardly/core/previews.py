@@ -28,5 +28,5 @@ def preview_warnings(truncated: list[dict[str, Any]], what: str = "content") -> 
     return [
         f"{len(truncated)} HTML response preview(s) were truncated at ingest (only the first "
         f"~64k characters are stored), so {what} later in those pages may be missing "
-        f"(entry_ids {ids}). Use hardly_entry for the page, or re-capture with smaller pages."
+        f"(entry_ids {ids}). Use hardly_entry_get for the page, or re-capture with smaller pages."
     ]

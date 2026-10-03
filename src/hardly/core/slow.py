@@ -55,5 +55,5 @@ def slowest_entries(
         "count": len(entries),
         "sum_time_ms": round(total, 1),
         "entries": entries,
-        "next": "Inspect with hardly_entry; pair slow HTML with hardly_forms / hardly_tree.",
+        "next": "Inspect with hardly_entry_get; pair slow HTML with hardly_page_forms / hardly_entry_initiators.",
     }

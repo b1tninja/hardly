@@ -22,6 +22,7 @@ DOC_RESOURCES: dict[str, str] = {
     "reporting": "reporting.md",
     "catalog": "catalog.md",
     "crawl-handoff": "crawl-handoff.md",
+    "cli": "cli.md",
 }
 
 # Docs copied into the skill's references/ directory.
@@ -33,6 +34,7 @@ SKILL_REFERENCES = (
     "gate-policy.md",
     "reporting.md",
     "tools.md",
+    "cli.md",
 )
 
 
@@ -56,7 +58,7 @@ def read_doc(filename: str) -> str:
     if d is None or not (d / filename).is_file():
         return (
             f"Documentation file {filename} is not available in this install. "
-            "Use hardly_help(topic) or see the project docs/ directory."
+            "Use hardly_guide_help(topic) or see the project docs/ directory."
         )
     return (d / filename).read_text(encoding="utf-8")
 

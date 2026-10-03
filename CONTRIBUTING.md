@@ -9,7 +9,10 @@ commands, conventions, safety rules). The short version:
 2. Set up: `pip install -e ".[dev]"`, then `pytest -q` and `ruff check .`
    (in a git worktree use `PYTHONPATH=src python -m pytest -q`).
 3. Add a test with a synthetic fixture (or the loopback `hardly.local_site`). No network access.
-4. If you touched a tool, docstring or doc: `python scripts/gen_tool_docs.py` and commit the result.
+4. If you touched a tool, command, docstring or doc: `python scripts/gen_tool_docs.py` and commit the result.
+   Tool names, parameters and CLI commands are a frozen public surface: adding or changing one means
+   regenerating `tests/api_surface.json` / `tests/cli_surface.json` and a CHANGELOG entry; renames and
+   removals follow [docs/api-stability.md](docs/api-stability.md).
 5. Open a pull request using the template; it repeats the scope checklist below.
 
 ## Scope checklist
@@ -17,7 +20,8 @@ commands, conventions, safety rules). The short version:
 - Would this still make sense if the target were a completely different kind of site?
 - Does it read facts from the HAR or a live probe, rather than restate what a model already knows?
   (Prose advice stays behind `explain=true`.)
-- Could it extend an existing tool or `hardly_report` section instead of adding a new tool?
+- Could it extend an existing tool or `hardly_session_report` section instead of adding a new tool?
+  (Every released tool name is permanent: [docs/api-stability.md](docs/api-stability.md).)
 - Names and shapes only in output, never secret values. Live tools are confirm-gated.
 - No captcha, bot-wall or access-control evasion.
 - Tests use neutral, synthetic data; `tests/test_neutrality.py` passes.

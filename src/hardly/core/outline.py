@@ -176,7 +176,7 @@ def outline_markup(
         "node_count": _count_nodes(nodes),
         "note": (
             "Offline outline from stored body — not the live accessibility tree. "
-            "For rendered ARIA YAML use hardly_capture_aria (Playwright "
+            "For rendered ARIA YAML use hardly_browser_inspect (Playwright "
             "page.ariaSnapshot) during a headed capture."
         ),
     }

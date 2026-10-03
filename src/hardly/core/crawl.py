@@ -628,7 +628,7 @@ def _summarise(
     if searchy:
         nxt.append(
             f"search-like form at {searchy[0]['url']}: inspect its fields, then replay with curl "
-            "or run `hardly capture discover <url>` to capture the real request."
+            "or run `hardly browser capture-discover <url> --analyze --confirm` to capture the real request."
         )
     elif candidates:
         nxt.append(f"no search form found; best lead {candidates[0]['url']} - raise depth or refine keywords.")
@@ -636,7 +636,7 @@ def _summarise(
         nxt.append("no usable pages; check blocked / environment_blocked / robots_disallowed.")
     if needs_browser:
         nxt.append(
-            f"{len(needs_browser)} page(s) need a browser: use `hardly capture discover <url> --recipe` "
+            f"{len(needs_browser)} page(s) need a browser: use `hardly browser capture-discover <url> --analyze --confirm --steps FILE` "
             "with a find_click step for the needs_browser pages."
         )
     if env_blocked:

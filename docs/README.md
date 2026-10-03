@@ -31,6 +31,9 @@ particular website or subject matter; that belongs in the SDK you build with it.
 | Read this | When |
 |-----------|------|
 | [tools.md](tools.md) | Generated reference for every MCP tool |
+| [cli.md](cli.md) | CLI grammar and every command, generated from the parser |
+| [api-stability.md](api-stability.md) | What is public, semver and deprecation rules, how snapshots enforce them |
+| [api-decisions.md](api-decisions.md) | How the v1 names were chosen; old to new name tables |
 | [technologies.md](technologies.md) | What hardly detects per technology, and what it does not |
 | [gate-policy.md](gate-policy.md) | What to do at each kind of gate: accept, stop, or re-run elsewhere |
 | [crawl-handoff.md](crawl-handoff.md) | Crawl strategy, budgets, and traps hit during live testing |
@@ -45,5 +48,5 @@ rules are in [AGENTS.md](../AGENTS.md) and [CONTRIBUTING.md](../CONTRIBUTING.md)
 
 hardly ships **technology helpers** and **generic resource classifications**. It does not ship site
 recipes, vendor/site names in logic, subject-specific vocabularies, or record schemas. Downstream
-projects pass their own vocabulary in as arguments (for example `hardly_find_search` `keywords`) and
+projects pass their own vocabulary in as arguments (for example `hardly_page_ui` `keywords`) and
 keep their own captures, fixtures and recipes. Details: [scope.md](scope.md).

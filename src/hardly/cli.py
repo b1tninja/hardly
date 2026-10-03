@@ -1,4 +1,17 @@
-"""Command-line interface for hardly (non-MCP)."""
+"""Command-line interface for hardly (non-MCP).
+
+Grammar (v1, permanent; ``tests/cli_surface.json`` pins it, ``docs/cli.md`` lists it):
+
+    hardly <group> <command> [positionals] [--flags]
+
+The command path is the MCP tool name without ``hardly_``, split at the first underscore, the rest
+joined with hyphens: ``hardly_session_traffic_stats`` is ``hardly session traffic-stats``.
+Flags are the tool's parameter names with hyphens (``--exclude-noise``, ``--timeout-seconds``);
+a boolean that defaults to true is spelled ``--x`` / ``--no-x``; lists are comma separated;
+objects are inline JSON. The tool's ``session_id`` / ``har_path`` become a positional HAR (or saved
+index) path. Live commands take ``--confirm`` and print only a plan without it.
+CLI-only commands: ``serve``, ``skill install|print``, ``soak live``, ``catalog init|show|export``.
+"""
 
 from __future__ import annotations
 
@@ -9,582 +22,53 @@ from pathlib import Path
 from typing import Any
 
 from hardly import session as sess
-from hardly.core.auth import detect_auth
-from hardly.core.export_md import export_markdown
-from hardly.core.export_openapi import export_openapi
 from hardly.index import query as q
+
+_BOOL = argparse.BooleanOptionalAction
+
+
+# ----------------------------------------------------------------------------- helpers
 
 
 def _print(data: object) -> None:
     print(json.dumps(data, indent=2, default=str))
 
 
-def cmd_open(args: argparse.Namespace) -> int:
-    result = sess.open_har(
-        args.har, force=args.force, output_path=args.output, overwrite=args.overwrite
-    )
-    _print(result)
-    return 0 if "error" not in result else 1
+def _csv(text: str) -> list[str]:
+    """``a,b`` -> ``['a', 'b']`` (argparse type for list-valued flags)."""
+    return [s.strip() for s in text.split(",") if s.strip()]
 
 
-def cmd_export_har(args: argparse.Namespace) -> int:
-    """Copy the source HAR of a HAR path to a new file (atomic, never in place)."""
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    out = sess.export_har(result["session_id"], args.output, overwrite=args.overwrite)
-    _print(out)
-    return 0 if "error" not in out else 1
+def _csv_ints(tokens: list[str] | str) -> list[int]:
+    """Entry ids as ``12 14`` or ``12,14`` (or both)."""
+    if isinstance(tokens, str):
+        tokens = [tokens]
+    out: list[int] = []
+    for tok in tokens:
+        for part in tok.split(","):
+            if part.strip():
+                out.append(int(part))
+    return out
 
 
-def cmd_stats(args: argparse.Namespace) -> int:
-    from hardly.core.stats import traffic_stats
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        traffic_stats(
-            conn, host=args.host, exclude_noise=not args.include_noise
-        )
-    )
-    return 0
-
-
-def cmd_summary(args: argparse.Namespace) -> int:
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        {
-            **q.summary(conn),
-            "saved_to": sess.get_saved_to(result["session_id"]),
-        }
-    )
-    return 0
-
-
-def cmd_sessions(_args: argparse.Namespace) -> int:
-    _print({"sessions": sess.list_sessions()})
-    return 0
-
-
-def cmd_hosts(args: argparse.Namespace) -> int:
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        {
-            "hosts": q.list_hosts(conn, exclude_noise=not args.include_noise),
-            "preferred_host": q.preferred_host(conn),
-        }
-    )
-    return 0
-
-
-def cmd_search(args: argparse.Namespace) -> int:
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        q.search_entries(
-            conn,
-            host=args.host,
-            path_contains=args.path or None,
-            method=args.method or None,
-            status=args.status,
-            body_contains=args.body or None,
-            header_name=args.header_name or None,
-            header_contains=args.header_contains or None,
-            mime_contains=args.mime or None,
-            content_kind=args.kind or None,
-            exclude_noise=not args.include_noise,
-            limit=args.limit,
-        )
-    )
-    return 0
-
-
-def cmd_entry(args: argparse.Namespace) -> int:
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(q.get_entry(conn, args.entry_id, body_chars=args.body_chars))
-    return 0
-
-
-def cmd_content(args: argparse.Namespace) -> int:
-    from hardly.core.classify import summarize_content
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        summarize_content(
-            conn,
-            host=args.host,
-            kind=args.kind or None,
-            exclude_noise=not args.include_noise,
-            limit=args.limit,
-        )
-    )
-    return 0
-
-
-def cmd_outline(args: argparse.Namespace) -> int:
-    from hardly.core.outline import outline_entry
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    out = outline_entry(
-        conn,
-        args.entry_id,
-        format=args.format,
-        max_depth=args.depth,
-        side=args.side,
-    )
-    if args.markdown_only and out.get("markdown"):
-        print(out["markdown"])
-        return 0 if "error" not in out else 1
-    _print(out)
-    return 0 if "error" not in out else 1
-
-
-def cmd_flow(args: argparse.Namespace) -> int:
-    from hardly.core.flows import get_flow
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        get_flow(
-            conn,
-            host=args.host,
-            path_prefix=args.path_prefix or None,
-            exclude_noise=not args.include_noise,
-            limit=args.limit,
-        )
-    )
-    return 0
-
-
-def cmd_schema(args: argparse.Namespace) -> int:
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        q.endpoint_schema(
-            conn,
-            method=args.method,
-            host=args.host,
-            path_template=args.path_template,
-            limit=args.limit,
-        )
-    )
-    return 0
-
-
-def cmd_curl(args: argparse.Namespace) -> int:
-    from hardly.core.curl import entry_to_curl
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        entry_to_curl(
-            conn,
-            args.entry_id,
-            redact=not args.no_redact,
-            use_env_placeholders=not args.no_env,
-        )
-    )
-    return 0
-
-
-def cmd_compare(args: argparse.Namespace) -> int:
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(q.compare_entries(conn, args.entry_a, args.entry_b))
-    return 0
-
-
-def cmd_probe(args: argparse.Namespace) -> int:
-    from hardly.core.probe import probe_entry
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        probe_entry(
-            conn,
-            args.entry_id,
-            confirm=args.yes,
-            header_overrides={},
-            body_override=None,
-            timeout=args.timeout,
-        )
-    )
-    return 0
-
-
-def cmd_endpoints(args: argparse.Namespace) -> int:
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        q.list_endpoints(
-            conn,
-            host=args.host,
-            exclude_noise=not args.include_noise,
-            limit=args.limit,
-        )
-    )
-    return 0
-
-
-def cmd_export_md(args: argparse.Namespace) -> int:
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        export_markdown(
-            conn,
-            args.output,
-            host=args.host,
-            exclude_noise=not args.include_noise,
-        )
-    )
-    return 0
-
-
-def cmd_export_openapi(args: argparse.Namespace) -> int:
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        export_openapi(
-            conn,
-            args.output,
-            host=args.host,
-            exclude_noise=not args.include_noise,
-            title=args.title,
-        )
-    )
-    return 0
-
-
-def cmd_auth(args: argparse.Namespace) -> int:
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(detect_auth(conn, host=args.host))
-    return 0
-
-
-def cmd_report(args: argparse.Namespace) -> int:
-    from hardly.core.report import (
-        build_report,
-        default_output_path,
-        render_markdown,
-        write_report,
-    )
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    sid = result["session_id"]
-    conn = sess.require_conn(sid)
-    sections = [s.strip() for s in args.sections.split(",") if s.strip()] if args.sections else None
+def _entry_ids_arg(text: str) -> list[int]:
     try:
-        rep = build_report(
-            conn, sess.get_har_path(sid), host=args.host, sections=sections,
-            detail=args.detail, explain=args.explain,
-        )
+        return _csv_ints(text)
     except ValueError as exc:
-        _print({"error": str(exc)})
-        return 1
-    out = args.output
-    if args.write and not out:
-        out = str(default_output_path(args.har, "json" if args.format == "json" else "md"))
-    if out:
-        rep["output_path"] = str(write_report(rep, out, har_path=args.har))
-    if args.format == "md":
-        sys.stdout.write(render_markdown(rep))
-    else:
-        _print(rep)
-    return 0
+        raise argparse.ArgumentTypeError(f"entry ids must be integers: {text!r}") from exc
 
 
-def cmd_brief(args: argparse.Namespace) -> int:
-    from hardly.core.brief import portal_brief
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    sid = result["session_id"]
-    conn = sess.require_conn(sid)
-    _print(
-        portal_brief(
-            conn,
-            har_path=sess.get_har_path(sid),
-            host=args.host,
-        )
-    )
-    return 0
-
-
-def cmd_story(args: argparse.Namespace) -> int:
-    from hardly.core.story import portal_story
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        portal_story(
-            conn,
-            host=args.host,
-            limit=args.limit,
-            exclude_noise=not args.include_noise,
-            include_related=not args.no_related,
-        )
-    )
-    return 0
-
-
-def cmd_stub(args: argparse.Namespace) -> int:
-    from hardly.core.stub import client_stub
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    ids = None
-    if args.entry_ids:
-        ids = [int(x) for x in args.entry_ids.split(",") if x.strip()]
-    _print(
-        client_stub(
-            conn,
-            entry_ids=ids,
-            host=args.host,
-            output_path=args.output or None,
-            class_name=args.class_name,
-        )
-    )
-    return 0
-
-
-def cmd_correlate(args: argparse.Namespace) -> int:
-    from hardly.core.correlate import correlate_tokens
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    sid = result["session_id"]
-    conn = sess.require_conn(sid)
-    _print(
-        correlate_tokens(
-            conn,
-            har_path=sess.get_har_path(sid),
-            host=args.host,
-            limit=args.limit,
-        )
-    )
-    return 0
-
-
-def cmd_cookies(args: argparse.Namespace) -> int:
-    from hardly.core.cookies import cookie_timeline
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    sid = result["session_id"]
-    conn = sess.require_conn(sid)
-    _print(
-        cookie_timeline(
-            conn,
-            har_path=sess.get_har_path(sid),
-            host=args.host,
-            limit=args.limit,
-        )
-    )
-    return 0
-
-
-def cmd_diff(args: argparse.Namespace) -> int:
-    from hardly.core.diff import diff_sessions
-
-    a = sess.open_har(args.har_a)
-    b = sess.open_har(args.har_b)
-    if "error" in a:
-        _print(a)
-        return 1
-    if "error" in b:
-        _print(b)
-        return 1
-    _print(
-        diff_sessions(
-            sess.require_conn(a["session_id"]),
-            sess.require_conn(b["session_id"]),
-            host=args.host,
-            exclude_noise=not args.include_noise,
-            credentials=not getattr(args, "no_credentials", False),
-            har_path_a=sess.get_har_path(a["session_id"]),
-            har_path_b=sess.get_har_path(b["session_id"]),
-        )
-    )
-    return 0
-
-
-def cmd_find_search(args: argparse.Namespace) -> int:
-    from hardly.core.search_nav import find_search_entry
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        find_search_entry(
-            conn, host=args.host, keywords=args.keyword or [], limit=args.limit
-        )
-    )
-    return 0
-
-
-def cmd_grids(args: argparse.Namespace) -> int:
-    from hardly.core.grids import detect_grids
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(detect_grids(conn, host=args.host, limit=args.limit, explain=getattr(args, "explain", False)))
-    return 0
-
-
-def cmd_challenges(args: argparse.Namespace) -> int:
-    from hardly.core.challenges import detect_challenges
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(detect_challenges(conn, host=args.host, limit=args.limit, explain=getattr(args, "explain", False)))
-    return 0
-
-
-def cmd_data_attrs(args: argparse.Namespace) -> int:
-    from hardly.core.data_attrs import scan_session
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        scan_session(
-            conn, host=args.host, entry_id=args.entry_id, limit=args.limit, explain=getattr(args, "explain", False)
-        )
-    )
-    return 0
-
-
-def cmd_arcgis(args: argparse.Namespace) -> int:
-    from hardly.core.arcgis import summarize_session
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(summarize_session(conn, host=args.host))
-    return 0
-
-
-def cmd_arcgis_explore(args: argparse.Namespace) -> int:
-    from hardly.core.arcgis import explore
-
-    out = explore(args.url, confirm=args.confirm)
-    _print(out)
-    return 1 if "error" in out else 0
-
-
-def cmd_redirect_diag(args: argparse.Namespace) -> int:
-    from hardly.core.redirect_diag import diagnose_redirects
-
-    if not args.yes:
-        _print({"error": "redirect-diag requires --yes (performs live GET requests)"})
-        return 1
-    _print(diagnose_redirects(args.url, max_hops=args.max_hops))
-    return 0
-
-
-def cmd_crawl(args: argparse.Namespace) -> int:
-    from hardly.core.crawl import crawl
-
-    if not args.yes:
-        _print({"error": "crawl requires --yes (performs live GET requests)"})
-        return 1
-    result = crawl(
-        args.url,
-        tuple(args.keyword or ()),
-        max_pages=args.max_pages,
-        depth=args.depth,
-        delay_s=args.delay,
-        follow_external=args.follow_external,
-        respect_robots=not args.ignore_robots,
-        timeout_s=args.timeout,
-        user_agent=args.user_agent,
-        explain=getattr(args, "explain", False),
-    )
-    _print(result)
-    return 1 if "error" in result else 0
-
+def _json_obj(text: str | None, flag: str) -> dict | None:
+    """Inline JSON text for an object-valued flag (never a file path)."""
+    if text is None:
+        return None
+    try:
+        value = json.loads(text)
+    except ValueError as exc:
+        raise ValueError(f"{flag} must be inline JSON text, not a file path") from exc
+    if not isinstance(value, dict):
+        raise ValueError(f"{flag} must be a JSON object")
+    return value
 
 
 def _kv_pairs(items: list[str] | None, what: str) -> dict[str, str]:
@@ -597,567 +81,98 @@ def _kv_pairs(items: list[str] | None, what: str) -> dict[str, str]:
     return out
 
 
-def _catalog_filters(args: argparse.Namespace) -> dict:
-    return {
-        "tag": args.tag or None,
-        "group": _kv_pairs(args.group, "--group") or None,
-        "role": args.role,
-        "status": args.status,
-    }
-
-
-def cmd_catalog(args: argparse.Namespace) -> int:
-    from hardly.core import catalog as C
-
-    act = args.catalog_action
-    try:
-        if act == "init":
-            if Path(args.path).exists() and not args.force:
-                _print({"error": "catalog file exists; pass --force to overwrite"})
-                return 1
-            C.save(C.Catalog(name=args.name), args.path)
-            _print({"created": str(args.path), "name": args.name, "version": C.CATALOG_VERSION})
-            return 0
-        cat = C.load(args.path)
-        if act == "add":
-            endpoints = []
-            for spec in args.endpoint or []:
-                # role=url[,kind]
-                role, sep, rest = spec.partition("=")
-                if not sep:
-                    raise ValueError(f"--endpoint must look like role=url[,kind]: {spec!r}")
-                url, kind = rest, ""
-                head, comma, tail = rest.rpartition(",")
-                if comma and tail in C.KINDS:
-                    url, kind = head, tail
-                endpoints.append({"role": role, "url": url, "kind": kind or None})
-            t = cat.upsert(
-                {"id": args.id, "name": args.name or "", "tags": args.tag or [],
-                 "groups": _kv_pairs(args.group, "--group"), "endpoints": endpoints},
-                merge=not args.replace,
-            )
-            C.save(cat, args.path)
-            _print({"saved": t.to_dict()})
-            return 0
-        if act == "list":
-            f = _catalog_filters(args)
-            if args.summary:
-                _print(cat.summary())
-            else:
-                _print({"rows": cat.table(**f), "count": len(cat.table(**f))})
-            return 0
-        if act == "show":
-            t = cat.get(args.id)
-            if t is None:
-                _print({"error": f"no target {args.id!r}"})
-                return 1
-            _print(t.to_dict())
-            return 0
-        if act == "export":
-            text = C.dumps(cat, args.format)
-            if args.output:
-                Path(args.output).write_text(text, encoding="utf-8", newline="\n")
-                _print({"written": str(args.output), "format": args.format})
-            else:
-                print(text, end="")
-            return 0
-        if act == "verify":
-            runner = C.CatalogRunner(
-                cat, path=args.path, confirm=args.yes, delay_s=args.delay,
-                max_requests=args.max_requests, max_endpoints=args.max_endpoints,
-                recheck_after_s=args.recheck_after, force=args.force,
-            )
-            out = runner.run(target_id=args.id, **_catalog_filters(args))
-            _print(out)
-            return 1 if "error" in out else 0
-    except (C.CatalogError, ValueError) as exc:
-        _print({"error": str(exc)})
-        return 1
-    return 1
-
-
-def cmd_replay_check(args: argparse.Namespace) -> int:
-    from hardly.core.replay_check import replay_check
-
-    if not args.yes:
-        _print({"error": "replay-check requires --yes (sends live requests)"})
-        return 1
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    overrides = None
-    if args.overrides_json:
-        try:
-            overrides = json.loads(args.overrides_json)
-        except ValueError:
-            _print(
-                {
-                    "error": "--overrides-json must be inline JSON text, not a file path: "
-                    '{"headers":{},"cookies":{},"query":{},"body":{}}'
-                }
-            )
-            return 1
-        if not isinstance(overrides, dict):
-            _print({"error": "--overrides-json must be a JSON object"})
-            return 1
-    out = replay_check(
-        conn,
-        args.entry_ids,
-        overrides=overrides,
-        max_requests=args.max_requests,
-        delay_s=args.delay,
-        allow_unsafe=args.allow_unsafe,
-        allow_gates=getattr(args, "allow_gate", None),
-    )
-    _print(out)
-    return 0
-
-
-def cmd_stack(args: argparse.Namespace) -> int:
-    from hardly.core.stack import fingerprint
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(fingerprint(conn, host=args.host, limit=args.limit, explain=getattr(args, "explain", False)))
-    return 0
-
-
-def cmd_auth_patterns(args: argparse.Namespace) -> int:
-    from hardly.core.auth_patterns import detect_auth_patterns
-
-    _print(detect_auth_patterns(args.har, host=args.host, kinds=args.kind or None, explain=getattr(args, "explain", False)))
-    return 0
-
-
-def cmd_pagination(args: argparse.Namespace) -> int:
-    from hardly.core.pagination import detect_pagination
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(detect_pagination(conn, host=args.host, limit=args.limit))
-    return 0
-
-
-def cmd_har_doctor(args: argparse.Namespace) -> int:
-    from hardly.core import har_doctor
-
-    try:
-        res = har_doctor.diagnose_har(None, args.har, har_doctor.config_from_namespace(args))
-    except (ValueError, OSError) as exc:
-        _print({"error": str(exc)})
-        return 2
-    _print(res)
-    return int(res.get("exit_code") or 0)
-
-
-def cmd_har_tool(args: argparse.Namespace) -> int:
-    from hardly.core import har_tools
-
-    try:
-        if args.har_cmd == "prune":
-            out = har_tools.prune_har(args.har, args.dst, args.drop_host or (), args.drop_mime or (), args.drop_noise, overwrite=args.overwrite)
-        elif args.har_cmd == "split":
-            out = har_tools.split_har(args.har, args.by, args.outdir, overwrite=args.overwrite)
-        elif args.har_cmd == "merge":
-            out = har_tools.merge_hars(args.hars, args.out, overwrite=args.overwrite, dedupe=not args.no_dedupe)
-        else:
-            out = har_tools.scrub_har(args.har, args.dst, overwrite=args.overwrite)
-    except (ValueError, OSError) as exc:
-        _print({"error": str(exc)})
-        return 2
-    _print(out)
-    return 0
-
-
-def _session_conn(har: str):
+def _open(har: str) -> str | None:
+    """Open (or re-open) a HAR or saved index; print the error and return None on failure."""
     result = sess.open_har(har)
     if "error" in result:
         _print(result)
         return None
-    return sess.require_conn(result["session_id"])
+    return result["session_id"]
 
 
-def cmd_streams(args: argparse.Namespace) -> int:
-    from hardly.core.streams import summarize_streams
-
-    conn = _session_conn(args.har)
-    if conn is None:
-        return 1
-    _print(summarize_streams(conn, host=args.host, kind=args.kind, limit=args.limit))
-    return 0
+def _conn(har: str):
+    sid = _open(har)
+    return None if sid is None else sess.require_conn(sid)
 
 
-def cmd_body_query(args: argparse.Namespace) -> int:
-    from hardly.core.body_query import BodyQueryError, query_body
+def _run_tool(tool: str, /, **kwargs: Any) -> int:
+    """Call an MCP tool function in-process and print its JSON; exit 1 when it reports an error."""
+    from hardly import server
 
-    conn = _session_conn(args.har)
-    if conn is None:
-        return 1
+    text = getattr(server, f"hardly_{tool}")(**kwargs)
+    print(text)
     try:
-        _print(query_body(conn, args.entry_id, args.side, jsonpath=args.jsonpath, regex=args.regex, offset=args.offset, limit=args.limit))
-    except BodyQueryError as exc:
-        _print({"error": str(exc)})
-        return 1
+        data = json.loads(text)
+    except ValueError:
+        return 0
+    return 1 if isinstance(data, dict) and "error" in data else 0
+
+
+def _delegate(tool: str, *params: str):
+    """Handler that forwards parsed flags to an MCP tool (``dest`` or ``dest:tool_param``).
+
+    A ``har`` positional is opened first and passed as ``session_id``. Used where one command
+    mirrors a merged tool, so the CLI and the tool cannot drift apart.
+    """
+
+    def run(args: argparse.Namespace) -> int:
+        kwargs: dict[str, Any] = {}
+        for spec in params:
+            dest, _, target = spec.partition(":")
+            kwargs[target or dest] = getattr(args, dest)
+        if hasattr(args, "har"):
+            sid = _open(args.har)
+            if sid is None:
+                return 1
+            kwargs["session_id"] = sid
+        try:
+            return _run_tool(tool, **kwargs)
+        except ValueError as exc:
+            _print({"error": str(exc)})
+            return 1
+
+    return run
+
+
+# ----------------------------------------------------------------------------- guide, server, skill
+
+
+def cmd_server_status(args: argparse.Namespace) -> int:
+    return _run_tool("server_status", sections=args.sections)
+
+
+def cmd_guide_help(args: argparse.Namespace) -> int:
+    from hardly.core.help import tool_help
+
+    _print(tool_help(args.topic or None))
     return 0
 
 
-def cmd_contract_check(args: argparse.Namespace) -> int:
-    from hardly.core.contract import check_contract
+def cmd_guide_mode(args: argparse.Namespace) -> int:
+    from hardly.core.modes import list_modes, mode_playbook, pick_mode
 
-    conn = _session_conn(args.har)
-    if conn is None:
-        return 1
-    try:
-        _print(check_contract(conn, args.openapi, host=args.host))
-    except Exception as exc:  # noqa: BLE001
-        _print({"error": str(exc)})
-        return 1
+    mode = (args.mode or "").strip()
+    goal, har_path, url = args.goal or "", args.har_path or "", args.url or ""
+    if mode:
+        _print(mode_playbook(mode, har_path=har_path, url=url, goal=goal))
+    elif goal or har_path or url:
+        _print(pick_mode(goal=goal, har_path=har_path, url=url))
+    else:
+        _print(list_modes())
     return 0
 
 
-def cmd_flow_graph(args: argparse.Namespace) -> int:
-    from hardly.core.flow_graph import flow_graph
-
-    conn = _session_conn(args.har)
-    if conn is None:
-        return 1
-    _print(flow_graph(conn, args.entry_id, host=args.host, max_depth=args.max_depth))
-    return 0
-
-
-def cmd_flow_replay(args: argparse.Namespace) -> int:
-    from hardly.core.flow_replay import replay_flow
-
-    conn = _session_conn(args.har)
-    if conn is None:
-        return 1
-    try:
-        env = json.loads(args.env_json) if args.env_json else None
-        out = replay_flow(conn, target=args.target, env=env, confirm=args.confirm, delay_s=args.delay,
-                          max_requests=args.max_requests, allow_unsafe=args.allow_unsafe, allow_gates=args.allow_gate)
-    except Exception as exc:  # noqa: BLE001
-        _print({"error": str(exc)})
-        return 1
-    _print(out)
-    return 0
-
-
-def cmd_tables(args: argparse.Namespace) -> int:
-    from hardly.core.tables import scan_session
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(scan_session(conn, host=args.host, entry_id=args.entry_id))
-    return 0
-
-
-def cmd_gates(args: argparse.Namespace) -> int:
-    from hardly.core.gates import classify_gates
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(classify_gates(conn, host=args.host, explain=getattr(args, "explain", False)))
-    return 0
-
-
-def cmd_recipe_plan(args: argparse.Namespace) -> int:
-    from hardly.core.recipe_plan import recipe_from_story
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        recipe_from_story(
-            conn,
-            host=args.host,
-            output_path=args.output or None,
-            limit=args.limit,
-        )
-    )
-    return 0
-
-
-def cmd_redirects(args: argparse.Namespace) -> int:
-    from hardly.core.redirects import redirect_chains
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(redirect_chains(conn, host=args.host, limit=args.limit, explain=getattr(args, "explain", False)))
-    return 0
-
-
-def cmd_issues(args: argparse.Namespace) -> int:
-    from hardly.core.issues import find_issues
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(find_issues(conn, host=args.host, limit=args.limit))
-    return 0
-
-
-def cmd_trace(args: argparse.Namespace) -> int:
-    from hardly.core.trace import trace_field
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    sid = result["session_id"]
-    conn = sess.require_conn(sid)
-    _print(
-        trace_field(
-            conn,
-            name=args.name or None,
-            value=args.value or None,
-            har_path=sess.get_har_path(sid),
-            host=args.host,
-            limit=args.limit,
-        )
-    )
-    return 0
-
-
-def cmd_secrets(args: argparse.Namespace) -> int:
-    from hardly.core.secrets import locate_secrets
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(locate_secrets(conn, host=args.host, limit=args.limit))
-    return 0
-
-
-def cmd_credentials(args: argparse.Namespace) -> int:
-    from hardly.core.credentials import map_credentials
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        map_credentials(
-            conn,
-            har_path=sess.get_har_path(result["session_id"]),
-            host=args.host,
-            limit=args.limit,
-            explain=getattr(args, "explain", False),
-        )
-    )
-    return 0
-
-
-def cmd_recommend(args: argparse.Namespace) -> int:
-    from hardly.core.recommend import recommend_tools
-
-    _print(recommend_tools(args.goal))
-    return 0
-
-
-def cmd_tree(args: argparse.Namespace) -> int:
-    from hardly.core.tree import entry_tree
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        entry_tree(
-            conn,
-            args.entry_id,
-            exclude_noise=not args.include_noise,
-            child_limit=args.limit,
-        )
-    )
-    return 0
-
-
-def cmd_params(args: argparse.Namespace) -> int:
-    from hardly.core.params import param_variance
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        param_variance(
-            conn,
-            method=args.method,
-            host=args.host,
-            path_template=args.path_template,
-            limit=args.limit,
-        )
-    )
-    return 0
-
-
-def cmd_graphql(args: argparse.Namespace) -> int:
-    from hardly.core.graphql import detect_graphql
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(detect_graphql(conn, host=args.host, limit=args.limit))
-    return 0
-
-
-def cmd_duplicates(args: argparse.Namespace) -> int:
-    from hardly.core.duplicates import find_duplicates
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        find_duplicates(
-            conn,
-            host=args.host,
-            exclude_noise=not args.include_noise,
-            min_count=args.min_count,
-            limit=args.limit,
-        )
-    )
-    return 0
-
-
-def cmd_slow(args: argparse.Namespace) -> int:
-    from hardly.core.slow import slowest_entries
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        slowest_entries(
-            conn,
-            host=args.host,
-            exclude_noise=not args.include_noise,
-            limit=args.limit,
-            min_ms=args.min_ms,
-        )
-    )
-    return 0
-
-
-def cmd_wall(args: argparse.Namespace) -> int:
-    from hardly.core.wall import detect_walls
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(detect_walls(conn, host=args.host, limit=args.limit, explain=getattr(args, "explain", False)))
-    return 0
-
-
-def cmd_pages(args: argparse.Namespace) -> int:
-    from hardly.core.pages import list_pages
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        list_pages(
-            conn,
-            host=args.host,
-            exclude_noise=not args.include_noise,
-            limit=args.limit,
-        )
-    )
-    return 0
-
-
-def cmd_export_brief(args: argparse.Namespace) -> int:
-    from hardly.core.export_brief import export_brief_md
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    sid = result["session_id"]
-    conn = sess.require_conn(sid)
-    _print(
-        export_brief_md(
-            conn,
-            args.output,
-            har_path=sess.get_har_path(sid),
-            host=args.host,
-        )
-    )
-    return 0
-
-
-def cmd_export_postman(args: argparse.Namespace) -> int:
-    from hardly.core.export_postman import export_postman
-
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        export_postman(
-            conn,
-            args.output,
-            host=args.host,
-            exclude_noise=not args.include_noise,
-            name=args.name,
-        )
-    )
-    return 0
-
-
-def cmd_capabilities(_args: argparse.Namespace) -> int:
-    from hardly.capabilities import capabilities
-
-    _print(capabilities())
-    return 0
-
-
-def cmd_start(args: argparse.Namespace) -> int:
+def cmd_guide_task_plan(args: argparse.Namespace) -> int:
     from hardly.core.start import build_plan
 
-    _print(build_plan(goal=args.goal, har_path=args.har, url=args.url))
+    _print(build_plan(goal=args.goal or "", har_path=args.har_path or "", url=args.url or ""))
     return 0
 
 
 def cmd_skill(args: argparse.Namespace) -> int:
     from hardly import resources
 
-    action = getattr(args, "skill_action", None) or "print"
+    action = getattr(args, "skill_command", None) or "print"
     try:
         if action == "print":
             sys.stdout.write(resources.skill_text())
@@ -1170,130 +185,22 @@ def cmd_skill(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_modes(args: argparse.Namespace) -> int:
-    from hardly.core.modes import list_modes, mode_playbook, pick_mode
-
-    mode = (getattr(args, "mode", None) or "").strip()
-    if mode:
-        _print(
-            mode_playbook(
-                mode,
-                har_path=getattr(args, "har", "") or "",
-                url=getattr(args, "url", "") or "",
-                goal=getattr(args, "goal", "") or "",
-            )
-        )
-        return 0
-    if getattr(args, "goal", None) or getattr(args, "har", None) or getattr(
-        args, "url", None
-    ):
-        _print(
-            pick_mode(
-                goal=getattr(args, "goal", "") or "",
-                har_path=getattr(args, "har", "") or "",
-                url=getattr(args, "url", "") or "",
-            )
-        )
-        return 0
-    _print(list_modes())
-    return 0
-
-
 def cmd_soak_live(args: argparse.Namespace) -> int:
     """Headless soak against public tech demos (captures HARs on the fly)."""
     from hardly.soak_live import main as soak_main
 
     argv: list[str] = []
-    if getattr(args, "list", False):
+    if args.list:
         argv.append("--list")
-    if getattr(args, "ids", "") or "":
+    if args.ids:
         argv.extend(["--ids", args.ids])
-    if getattr(args, "fail_soft", False):
+    if args.fail_soft:
         argv.append("--fail-soft")
-    if getattr(args, "json", False):
+    if args.json:
         argv.append("--json")
-    if getattr(args, "write_fixtures", "") or "":
+    if args.write_fixtures:
         argv.extend(["--write-fixtures", args.write_fixtures])
     return soak_main(argv)
-
-
-def cmd_help(args: argparse.Namespace) -> int:
-    from hardly.core.help import tool_help
-
-    _print(tool_help(args.topic or None))
-    return 0
-
-
-def cmd_coverage(args: argparse.Namespace) -> int:
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        q.body_coverage(
-            conn,
-            host=args.host,
-            exclude_noise=not args.include_noise,
-            limit=args.limit,
-        )
-    )
-    return 0
-
-
-def cmd_forms(args: argparse.Namespace) -> int:
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    if args.entry_id is not None:
-        _print(q.forms_for_entry(conn, args.entry_id, side=args.side))
-    else:
-        _print(
-            q.list_forms(
-                conn,
-                host=args.host,
-                side=args.side,
-                exclude_noise=args.exclude_noise,
-                limit=args.limit,
-            )
-        )
-    return 0
-
-
-def cmd_ui(args: argparse.Namespace) -> int:
-    """Same inventory as forms; CLI alias for link/handler-first use."""
-    return cmd_forms(args)
-
-
-def cmd_routes(args: argparse.Namespace) -> int:
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(q.list_js_routes(conn, host=args.host, limit=args.limit))
-    return 0
-
-
-def cmd_around(args: argparse.Namespace) -> int:
-    result = sess.open_har(args.har)
-    if "error" in result:
-        _print(result)
-        return 1
-    conn = sess.require_conn(result["session_id"])
-    _print(
-        q.entries_around(
-            conn,
-            args.entry_id,
-            before=args.before,
-            after=args.after,
-            exclude_noise=not args.include_noise,
-            host=args.host,
-        )
-    )
-    return 0
 
 
 def cmd_serve(_args: argparse.Namespace) -> int:
@@ -1303,1317 +210,1262 @@ def cmd_serve(_args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_capture(args: argparse.Namespace) -> int:
-    from hardly.capture import (
-        CaptureError,
-        capture_aria_snapshot,
-        capture_for,
-        capture_interactive,
-        capture_page_url,
-        capture_screenshot,
-        click_capture,
-        discover_apis,
-        fill_capture,
-        get_capture,
-        list_capture_elements,
-        list_captures,
-        navigate_capture,
-        press_capture,
-        start_capture,
-        stop_capture,
+# ----------------------------------------------------------------------------- session
+
+
+def cmd_session_open(args: argparse.Namespace) -> int:
+    result = sess.open_har(
+        args.har_path, force=args.force, output_path=args.output, overwrite=args.overwrite
     )
+    _print(result)
+    return 0 if "error" not in result else 1
 
-    if not hasattr(args, "url"):
-        args.url = ""
-    action = getattr(args, "capture_action", None) or "run"
+
+def cmd_session_list(_args: argparse.Namespace) -> int:
+    _print({"sessions": sess.list_sessions()})
+    return 0
+
+
+def cmd_session_body_coverage(args: argparse.Namespace) -> int:
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(q.body_coverage(conn, host=args.host, exclude_noise=args.exclude_noise, limit=args.limit))
+    return 0
+
+
+def cmd_session_issues(args: argparse.Namespace) -> int:
+    from hardly.core.issues import find_issues
+
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(find_issues(conn, host=args.host, limit=args.limit))
+    return 0
+
+
+def cmd_session_duplicates(args: argparse.Namespace) -> int:
+    from hardly.core.duplicates import find_duplicates
+
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(
+        find_duplicates(
+            conn, host=args.host, exclude_noise=args.exclude_noise,
+            min_count=args.min_count, limit=args.limit,
+        )
+    )
+    return 0
+
+
+def cmd_session_slow_requests(args: argparse.Namespace) -> int:
+    from hardly.core.slow import slowest_entries
+
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(
+        slowest_entries(
+            conn, host=args.host, exclude_noise=args.exclude_noise, limit=args.limit,
+            min_ms=args.min_elapsed_seconds * 1000.0,
+        )
+    )
+    return 0
+
+
+def cmd_session_report(args: argparse.Namespace) -> int:
+    from hardly.core.report import build_report, render_markdown
+
+    sid = _open(args.har)
+    if sid is None:
+        return 1
+    conn = sess.require_conn(sid)
     try:
-        if action == "list":
-            _print({"captures": list_captures()})
-            return 0
-        if action == "status":
-            _print(get_capture(args.capture_id))
-            return 0
-        if action == "stop":
-            _print(
-                stop_capture(
-                    args.capture_id or None,
-                    open_session=not args.no_open,
-                    export_path=getattr(args, "export_path", None),
-                )
-            )
-            return 0
-        if action == "goto":
-            _print(navigate_capture(args.capture_id or None, args.url))
-            return 0
-        if action == "elements":
-            _print(
-                list_capture_elements(
-                    args.capture_id or None,
-                    limit=args.limit,
-                    query=args.query or "",
-                )
-            )
-            return 0
-        if action == "aria":
-            _print(
-                capture_aria_snapshot(
-                    args.capture_id or None,
-                    selector=getattr(args, "selector", "") or "",
-                    mode=getattr(args, "mode", "") or "ai",
-                )
-            )
-            return 0
-        if action == "doctor":
-            from hardly.capture import playwright_status
+        rep = build_report(
+            conn, sess.get_har_path(sid), host=args.host, sections=args.categories,
+            detail=args.detail, explain=args.explain,
+        )
+    except ValueError as exc:
+        _print({"error": str(exc)})
+        return 1
+    if args.format == "md":
+        sys.stdout.write(render_markdown(rep))
+    else:
+        _print(rep)
+    return 0
 
-            _print(playwright_status())
-            return 0
-        if action == "screenshot":
-            _print(
-                capture_screenshot(
-                    args.capture_id or None,
-                    path=getattr(args, "path", "") or "",
-                    full_page=bool(getattr(args, "full_page", False)),
-                )
-            )
-            return 0
-        if action == "click":
-            _print(
-                click_capture(
-                    args.capture_id or None,
-                    ref=getattr(args, "ref", "") or "",
-                    xpath=args.xpath or "",
-                    css=args.css or "",
-                    text=args.text or "",
-                    role=args.role or "",
-                    name=args.name or "",
-                )
-            )
-            return 0
-        if action == "fill":
-            _print(
-                fill_capture(
-                    args.capture_id or None,
-                    value=args.value,
-                    ref=getattr(args, "ref", "") or "",
-                    xpath=args.xpath or "",
-                    css=args.css or "",
-                )
-            )
-            return 0
-        if action == "press":
-            _print(
-                press_capture(
-                    args.capture_id or None,
-                    key=args.key or "Enter",
-                    ref=getattr(args, "ref", "") or "",
-                    xpath=args.xpath or "",
-                    css=args.css or "",
-                )
-            )
-            return 0
-        if action == "url":
-            _print(capture_page_url(args.capture_id or None))
-            return 0
-        if action == "recipe":
-            from hardly.capture import run_capture_recipe
 
-            steps = json.loads(Path(args.steps_file).read_text(encoding="utf-8"))
-            _print(
-                run_capture_recipe(
-                    steps,
-                    capture_id=args.capture_id or None,
-                    stop_on_error=not args.continue_on_error,
-                )
+def cmd_session_site_brief(args: argparse.Namespace) -> int:
+    from hardly.core.brief import portal_brief
+
+    sid = _open(args.har)
+    if sid is None:
+        return 1
+    _print(portal_brief(sess.require_conn(sid), har_path=sess.get_har_path(sid), host=args.host))
+    return 0
+
+
+def cmd_session_story(args: argparse.Namespace) -> int:
+    from hardly.core.story import portal_story
+
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(
+        portal_story(
+            conn, host=args.host, limit=args.limit, exclude_noise=args.exclude_noise,
+            include_related=args.include_related,
+        )
+    )
+    return 0
+
+
+def cmd_session_timeline(args: argparse.Namespace) -> int:
+    from hardly.core.flows import get_flow
+
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(
+        get_flow(
+            conn, host=args.host, path_prefix=args.path_prefix or None,
+            exclude_noise=args.exclude_noise, limit=args.limit, offset=args.offset,
+        )
+    )
+    return 0
+
+
+def cmd_session_redirect_history(args: argparse.Namespace) -> int:
+    from hardly.core.redirects import redirect_chains
+
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(redirect_chains(conn, host=args.host, limit=args.limit, explain=args.explain))
+    return 0
+
+
+def cmd_session_compare(args: argparse.Namespace) -> int:
+    from hardly.core.diff import diff_sessions
+
+    a = sess.open_har(args.har)
+    b = sess.open_har(args.other_har)
+    for r in (a, b):
+        if "error" in r:
+            _print(r)
+            return 1
+    _print(
+        diff_sessions(
+            sess.require_conn(a["session_id"]),
+            sess.require_conn(b["session_id"]),
+            host=args.host,
+            exclude_noise=args.exclude_noise,
+            credentials=args.include_credentials,
+            har_path_a=sess.get_har_path(a["session_id"]),
+            har_path_b=sess.get_har_path(b["session_id"]),
+        )
+    )
+    return 0
+
+
+def cmd_session_plan_steps(args: argparse.Namespace) -> int:
+    from hardly.core.recipe_plan import recipe_from_story
+
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(recipe_from_story(conn, host=args.host, output_path=None, limit=args.limit))
+    return 0
+
+
+# ----------------------------------------------------------------------------- entry
+
+
+def cmd_entry_search(args: argparse.Namespace) -> int:
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(
+        q.search_entries(
+            conn,
+            host=args.host,
+            path_contains=args.path_contains or None,
+            method=args.method or None,
+            status=args.status,
+            body_contains=args.body_contains or None,
+            header_name=args.header_name or None,
+            header_contains=args.header_contains or None,
+            mime_contains=args.mime_contains or None,
+            content_kind=args.content_kind or None,
+            exclude_noise=args.exclude_noise,
+            limit=args.limit,
+            offset=args.offset,
+        )
+    )
+    return 0
+
+
+def cmd_entry_get(args: argparse.Namespace) -> int:
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(q.get_entry(conn, args.entry_id, body_chars=args.max_body_chars))
+    return 0
+
+
+def cmd_entry_around(args: argparse.Namespace) -> int:
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(
+        q.entries_around(
+            conn, args.entry_id, before=args.before, after=args.after,
+            exclude_noise=args.exclude_noise, host=args.host,
+        )
+    )
+    return 0
+
+
+def cmd_entry_initiators(args: argparse.Namespace) -> int:
+    from hardly.core.tree import entry_tree
+
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(entry_tree(conn, args.entry_id, exclude_noise=args.exclude_noise, child_limit=args.child_limit))
+    return 0
+
+
+def cmd_entry_compare(args: argparse.Namespace) -> int:
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(q.compare_entries(conn, args.entry_id, args.other_entry_id))
+    return 0
+
+
+def cmd_entry_build_curl(args: argparse.Namespace) -> int:
+    from hardly.core.curl import entry_to_curl
+
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(
+        entry_to_curl(
+            conn, args.entry_id, redact=args.redact, use_env_placeholders=args.use_env_placeholders
+        )
+    )
+    return 0
+
+
+def cmd_entry_body_query(args: argparse.Namespace) -> int:
+    from hardly.core.body_query import BodyQueryError, query_body
+
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    try:
+        _print(
+            query_body(
+                conn, args.entry_id, args.side, jsonpath=args.jsonpath, regex=args.regex,
+                offset=args.offset, limit=args.limit,
             )
-            return 0
-        if action == "discover":
-            steps = None
-            recipe_file = getattr(args, "recipe", "") or ""
-            if recipe_file:
-                steps = json.loads(Path(recipe_file).read_text(encoding="utf-8"))
-            _print(
-                discover_apis(
-                    args.url,
-                    args.output,
-                    recipe=steps,
-                    wait_seconds=float(
-                        args.wait if getattr(args, "wait", None) is not None else 5
-                    ),
-                    channel=args.channel or "",
-                    url_filter=args.url_filter or "",
-                    omit_content=args.omit_content,
-                    label=args.label or "",
-                    open_session=not getattr(args, "no_open", False),
-                    brief=not getattr(args, "no_brief", False),
-                    same_tab=not getattr(args, "allow_popups", False),
-                    trace=True if getattr(args, "trace", False) else None,
-                    budget_seconds=getattr(args, "budget", None),
-                    block_noise=bool(getattr(args, "block_noise", False)),
-                    slot_timeout_s=getattr(args, "slot_timeout", None),
-                    diagnose_redirects=bool(getattr(args, "diagnose_redirects", False)),
-                )
+        )
+    except BodyQueryError as exc:
+        _print({"error": str(exc)})
+        return 1
+    return 0
+
+
+def cmd_entry_outline(args: argparse.Namespace) -> int:
+    from hardly.core.outline import outline_entry
+
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    out = outline_entry(
+        conn, args.entry_id, format=args.format, max_depth=args.max_depth, side=args.side
+    )
+    if args.markdown_only and out.get("markdown"):
+        print(out["markdown"])
+        return 0 if "error" not in out else 1
+    _print(out)
+    return 0 if "error" not in out else 1
+
+
+def cmd_entry_dependencies(args: argparse.Namespace) -> int:
+    from hardly.core.flow_graph import flow_graph
+
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(flow_graph(conn, args.entry_id, host=args.host, max_depth=args.max_depth))
+    return 0
+
+
+# ----------------------------------------------------------------------------- endpoint, spec, page
+
+
+def cmd_endpoint_list(args: argparse.Namespace) -> int:
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(
+        q.list_endpoints(
+            conn, host=args.host, exclude_noise=args.exclude_noise, limit=args.limit
+        )
+    )
+    return 0
+
+
+def cmd_endpoint_graphql(args: argparse.Namespace) -> int:
+    from hardly.core.graphql import detect_graphql
+
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(detect_graphql(conn, host=args.host, limit=args.limit))
+    return 0
+
+
+def cmd_endpoint_streams(args: argparse.Namespace) -> int:
+    from hardly.core.streams import summarize_streams
+
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(summarize_streams(conn, host=args.host, kind=args.kind, limit=args.limit))
+    return 0
+
+
+def cmd_endpoint_pagination(args: argparse.Namespace) -> int:
+    from hardly.core.pagination import detect_pagination
+
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(detect_pagination(conn, host=args.host, limit=args.limit))
+    return 0
+
+
+def cmd_endpoint_arcgis(args: argparse.Namespace) -> int:
+    from hardly.core.arcgis import summarize_session
+
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(summarize_session(conn, host=args.host))
+    return 0
+
+
+def cmd_spec_contract_check(args: argparse.Namespace) -> int:
+    from hardly.core.contract import check_contract
+
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    try:
+        _print(check_contract(conn, args.spec_path, host=args.host))
+    except Exception as exc:  # noqa: BLE001
+        _print({"error": str(exc)})
+        return 1
+    return 0
+
+
+def cmd_page_list(args: argparse.Namespace) -> int:
+    from hardly.core.pages import list_pages
+
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(list_pages(conn, host=args.host, exclude_noise=args.exclude_noise, limit=args.limit))
+    return 0
+
+
+def cmd_page_tables(args: argparse.Namespace) -> int:
+    from hardly.core.tables import scan_session
+
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(scan_session(conn, host=args.host, entry_id=args.entry_id))
+    return 0
+
+
+def cmd_client_build(args: argparse.Namespace) -> int:
+    from hardly.core.stub import client_stub
+
+    conn = _conn(args.har)
+    if conn is None:
+        return 1
+    _print(
+        client_stub(
+            conn, entry_ids=args.entry_ids, host=args.host, output_path=None,
+            class_name=args.class_name,
+        )
+    )
+    return 0
+
+
+# ----------------------------------------------------------------------------- har files, write
+
+
+def cmd_har_file_check(args: argparse.Namespace) -> int:
+    from hardly.core import har_doctor
+
+    try:
+        res = har_doctor.diagnose_har(None, args.har_path, har_doctor.config_from_namespace(args))
+    except (ValueError, OSError) as exc:
+        _print({"error": str(exc)})
+        return 2
+    _print(res)
+    return int(res.get("exit_code") or 0)
+
+
+def cmd_write_har(args: argparse.Namespace) -> int:
+    from hardly.core import har_tools
+
+    try:
+        kind = args.write_command
+        if kind == "har-pruned":
+            out = har_tools.prune_har(
+                args.har_path, args.output, args.drop_hosts or (), args.drop_mime_types or (),
+                args.drop_noise, overwrite=args.overwrite,
             )
-            return 0
-        same_tab = not getattr(args, "allow_popups", False)
-        use_trace = True if getattr(args, "trace", False) else None
-        if action == "start":
-            if not args.output:
-                _print(
-                    {
-                        "error": "capture start needs -o/--output from the CLI: the HAR is "
-                        "ephemeral without it and this process exits right after starting.",
-                        "hint": "hardly capture start URL -o capture.har, or use "
-                        "`hardly capture run` / the MCP tools for an in-memory capture.",
-                    }
-                )
-                return 1
-            _print(
-                start_capture(
-                    args.url or "",
-                    args.output,
-                    headed=not args.headless,
-                    channel=args.channel or "",
-                    url_filter=args.url_filter or "",
-                    omit_content=args.omit_content,
-                    label=args.label or "",
-                    user_data_dir=args.profile or None,
-                    same_tab=same_tab,
-                    trace=use_trace,
-                    slot_timeout_s=getattr(args, "slot_timeout", None),
-                )
-            )
-            return 0
-        # Default: interactive or timed run
-        if args.wait is not None:
-            result = capture_for(
-                args.url or "",
-                args.output,
-                wait_seconds=args.wait,
-                headed=not args.headless,
-                channel=args.channel or "",
-                url_filter=args.url_filter or "",
-                omit_content=args.omit_content,
-                label=args.label or "",
-                open_session=not args.no_open,
-                same_tab=same_tab,
-                trace=use_trace,
-                budget_seconds=getattr(args, "budget", None),
-                block_noise=bool(getattr(args, "block_noise", False)),
-                slot_timeout_s=getattr(args, "slot_timeout", None),
-                diagnose_redirects=bool(getattr(args, "diagnose_redirects", False)),
+        elif kind == "har-split":
+            out = har_tools.split_har(args.har_path, args.by, args.output_dir, overwrite=args.overwrite)
+        elif kind == "har-merged":
+            out = har_tools.merge_hars(
+                args.har_paths, args.output, overwrite=args.overwrite, dedupe=args.dedupe
             )
         else:
-            result = capture_interactive(
-                args.url or "",
-                args.output,
-                headed=not args.headless,
-                channel=args.channel or "",
-                url_filter=args.url_filter or "",
-                omit_content=args.omit_content,
-                label=args.label or "",
-                user_data_dir=args.profile or None,
-                same_tab=same_tab,
-                trace=use_trace,
-                slot_timeout_s=getattr(args, "slot_timeout", None),
-            )
-    except CaptureError as exc:
-        _print(exc.to_dict())
+            out = har_tools.scrub_har(args.har_path, args.output, overwrite=args.overwrite)
+    except (ValueError, OSError) as exc:
+        _print({"error": str(exc)})
+        return 2
+    _print(out)
+    return 0
+
+
+def cmd_write_catalog_record(args: argparse.Namespace) -> int:
+    from hardly.core import catalog as C
+
+    try:
+        endpoints = []
+        for spec in args.endpoint or []:
+            role, sep, rest = spec.partition("=")  # role=url[,kind]
+            if not sep:
+                raise ValueError(f"--endpoint must look like role=url[,kind]: {spec!r}")
+            url, kind = rest, ""
+            head, comma, tail = rest.rpartition(",")
+            if comma and tail in C.KINDS:
+                url, kind = head, tail
+            endpoints.append({"role": role, "url": url, "kind": kind or None})
+        target = {
+            "id": args.id,
+            "name": args.name or "",
+            "tags": args.tags or [],
+            "groups": _kv_pairs(args.group, "--group"),
+            "endpoints": endpoints,
+        }
+    except ValueError as exc:
+        _print({"error": str(exc)})
         return 1
+    return _run_tool(
+        "write_catalog_record", catalog_path=args.catalog_path, target=target,
+        merge=args.merge, create=args.create,
+    )
+
+
+# ----------------------------------------------------------------------------- catalog
+
+
+def cmd_catalog_list(args: argparse.Namespace) -> int:
+    try:
+        group = _kv_pairs(args.group, "--group") or None
+    except ValueError as exc:
+        _print({"error": str(exc)})
+        return 1
+    return _run_tool(
+        "catalog_list", catalog_path=args.catalog_path, tag=args.tag, group=group,
+        role=args.role, status=args.status, target_id=args.target_id, detail=args.detail,
+    )
+
+
+def cmd_catalog_init(args: argparse.Namespace) -> int:
+    from hardly.core import catalog as C
+
+    if Path(args.catalog_path).exists() and not args.force:
+        _print({"error": "catalog file exists; pass --force to overwrite"})
+        return 1
+    C.save(C.Catalog(name=args.name), args.catalog_path)
+    _print({"created": str(args.catalog_path), "name": args.name, "version": C.CATALOG_VERSION})
+    return 0
+
+
+def cmd_catalog_show(args: argparse.Namespace) -> int:
+    from hardly.core import catalog as C
+
+    try:
+        t = C.load(args.catalog_path).get(args.target_id)
+    except C.CatalogError as exc:
+        _print({"error": str(exc)})
+        return 1
+    if t is None:
+        _print({"error": f"no target {args.target_id!r}"})
+        return 1
+    _print(t.to_dict())
+    return 0
+
+
+def cmd_catalog_export(args: argparse.Namespace) -> int:
+    from hardly.core import catalog as C
+
+    try:
+        text = C.dumps(C.load(args.catalog_path), args.format)
+    except C.CatalogError as exc:
+        _print({"error": str(exc)})
+        return 1
+    if args.output:
+        Path(args.output).write_text(text, encoding="utf-8", newline="\n")
+        _print({"written": str(args.output), "format": args.format})
+    else:
+        print(text, end="")
+    return 0
+
+
+# ----------------------------------------------------------------------------- send (live)
+
+
+def cmd_send_entry_ablation(args: argparse.Namespace) -> int:
+    sid = _open(args.har)
+    if sid is None:
+        return 1
+    try:
+        overrides = _json_obj(args.overrides, "--overrides")
+    except ValueError as exc:
+        _print({"error": f"{exc}: " + '{"headers":{},"cookies":{},"query":{},"body":{}}'})
+        return 1
+    return _run_tool(
+        "send_entry_ablation", session_id=sid, entry_ids=_csv_ints(args.entry_ids), confirm=args.confirm,
+        overrides=overrides, max_requests=args.max_requests, delay_seconds=args.delay_seconds,
+        allow_unsafe=args.allow_unsafe, allow_gates=args.allow_gates,
+    )
+
+
+def cmd_send_catalog_verify(args: argparse.Namespace) -> int:
+    try:
+        group = _kv_pairs(args.group, "--group") or None
+    except ValueError as exc:
+        _print({"error": str(exc)})
+        return 1
+    return _run_tool(
+        "send_catalog_verify", catalog_path=args.catalog_path, confirm=args.confirm,
+        write_back=args.write_back, tag=args.tag, group=group, role=args.role, status=args.status,
+        target_id=args.target_id, delay_seconds=args.delay_seconds, max_requests=args.max_requests,
+        max_endpoints=args.max_endpoints, recheck_after_seconds=args.recheck_after_seconds,
+        force=args.force,
+    )
+
+
+def cmd_send_entry_series(args: argparse.Namespace) -> int:
+    sid = _open(args.har)
+    if sid is None:
+        return 1
+    try:
+        env = _json_obj(args.env, "--env")
+    except ValueError as exc:
+        _print({"error": str(exc)})
+        return 1
+    return _run_tool(
+        "send_entry_series", session_id=sid, entry_ids=args.entry_ids, entry_id=args.entry_id,
+        confirm=args.confirm, env=env, delay_seconds=args.delay_seconds,
+        max_requests=args.max_requests, allow_unsafe=args.allow_unsafe, allow_gates=args.allow_gates,
+    )
+
+
+# ----------------------------------------------------------------------------- browser
+
+
+def _capture_error(exc: Exception) -> int:
+    to_dict = getattr(exc, "to_dict", None)
+    _print(to_dict() if to_dict else {"error": str(exc)})
+    return 1
+
+
+def cmd_browser_start(args: argparse.Namespace) -> int:
+    from hardly.capture import CaptureError, capture_interactive, start_capture
+
+    use_trace = True if args.trace else None
+    common = dict(
+        headed=args.headed,
+        channel=args.channel or "",
+        url_filter=args.url_filter or "",
+        omit_content=args.omit_content,
+        label=args.label or "",
+        user_data_dir=args.profile or None,
+        same_tab=args.same_tab,
+        trace=use_trace,
+        slot_timeout_s=args.slot_timeout_seconds,
+    )
+    try:
+        if args.foreground:
+            result = capture_interactive(args.url or "", args.har_output_path, **common)
+            _print(result)
+            return 0 if result.get("status") in ("stopped", "running", "starting") else 1
+        if not args.har_output_path:
+            _print(
+                {
+                    "error": "browser start needs -o/--har-output-path from the CLI: the HAR is "
+                    "ephemeral without it and this process exits right after starting.",
+                    "hint": "hardly browser start URL -o capture.har, or --foreground to record "
+                    "until you close the window, or the MCP tools for an in-memory capture.",
+                }
+            )
+            return 1
+        _print(start_capture(args.url or "", args.har_output_path, **common))
+        return 0
+    except CaptureError as exc:
+        return _capture_error(exc)
+
+
+def cmd_browser_capture_discover(args: argparse.Namespace) -> int:
+    from hardly.capture import CaptureError, capture_for, discover_apis
+
+    steps = None
+    if args.steps:
+        steps = json.loads(Path(args.steps).read_text(encoding="utf-8"))
+    if args.analyze and args.headed:
+        _print({"error": "browser capture-discover: --analyze runs headless",
+                "hint": "For a visible browser use `hardly browser start --headed`."})
+        return 1
+    if steps and not args.analyze:
+        _print({"error": "browser capture-discover: --steps needs --analyze"})
+        return 1
+    if not args.confirm:
+        return _run_tool(
+            "browser_capture_discover", url=args.url, wait_seconds=args.wait_seconds,
+            analyze=args.analyze, confirm=False, har_output_path=args.har_output_path,
+            headed=args.headed, channel=args.channel, url_filter=args.url_filter, steps=steps,
+            budget_seconds=args.budget_seconds, exclude_noise=args.exclude_noise,
+            open_session=args.open_session,
+        )
+    wait = args.wait_seconds if args.wait_seconds is not None else (5.0 if args.analyze else 20.0)
+    try:
+        if args.analyze:
+            _print(
+                discover_apis(
+                    args.url, args.har_output_path, recipe=steps, wait_seconds=wait,
+                    channel=args.channel or "", url_filter=args.url_filter or "",
+                    omit_content=args.omit_content, label=args.label or "",
+                    open_session=args.open_session, brief=args.brief, same_tab=args.same_tab,
+                    trace=True if args.trace else None, budget_seconds=args.budget_seconds,
+                    block_noise=args.exclude_noise, slot_timeout_s=args.slot_timeout_seconds,
+                    diagnose_redirects=args.diagnose_redirects,
+                )
+            )
+            return 0
+        result = capture_for(
+            args.url, args.har_output_path, wait_seconds=wait, headed=args.headed,
+            channel=args.channel or "", url_filter=args.url_filter or "",
+            omit_content=args.omit_content, label=args.label or "",
+            open_session=args.open_session, same_tab=args.same_tab,
+            trace=True if args.trace else None, budget_seconds=args.budget_seconds,
+            block_noise=args.exclude_noise, slot_timeout_s=args.slot_timeout_seconds,
+            diagnose_redirects=args.diagnose_redirects,
+        )
+    except CaptureError as exc:
+        return _capture_error(exc)
     _print(result)
     return 0 if result.get("status") in ("stopped", "running", "starting") else 1
 
 
-def _add_capture_flags(
-    p: argparse.ArgumentParser, *, url: bool = True, url_default: Any = ""
-) -> None:
-    # discover declares its own required url; a second optional positional of
-    # the same dest would silently overwrite it with "". The parent ``capture``
-    # parser passes SUPPRESS so its default never clobbers a subcommand's url.
-    if url:
-        p.add_argument("url", nargs="?", default=url_default, help="Start URL (optional)")
-    p.add_argument(
-        "--budget",
-        type=float,
-        default=None,
-        metavar="SECONDS",
-        help="Hard per-call budget (headless): skip remaining recipe steps once "
-        "exceeded (env HARDLY_CAPTURE_BUDGET)",
+def cmd_browser_run_steps(args: argparse.Namespace) -> int:
+    steps = json.loads(Path(args.steps).read_text(encoding="utf-8"))
+    return _run_tool(
+        "browser_run_steps", steps=steps, capture_id=args.capture_id,
+        stop_on_error=args.stop_on_error,
     )
+
+
+# ----------------------------------------------------------------------------- parser
+
+
+def _har(p: argparse.ArgumentParser, name: str = "har", help: str = "HAR file or saved index") -> None:
+    p.add_argument(name, help=help)
+
+
+def _host(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--host", help="Exact hostname; omitted = all hosts")
+
+
+def _noise(p: argparse.ArgumentParser) -> None:
     p.add_argument(
-        "--block-noise",
-        action="store_true",
-        help="Headless: abort analytics/ads/fonts/map tiles/heavy media",
+        "--exclude-noise", action=_BOOL, default=True,
+        help="Skip static assets, analytics and other noise (default on)",
     )
-    p.add_argument(
-        "--slot-timeout",
-        type=float,
-        default=None,
-        metavar="SECONDS",
-        help="Max wait for a capture slot (env HARDLY_CAPTURE_SLOT_TIMEOUT, default 300)",
-    )
-    p.add_argument(
-        "--diagnose-redirects",
-        action="store_true",
-        help="Headless: on a redirect-loop failure, attach a capped redirect_diagnosis "
-        "(a few polite live GETs; off by default)",
-    )
-    p.add_argument(
-        "-o",
-        "--output",
-        help="HAR output path. Without it the capture is ephemeral: indexed in memory, HAR deleted",
-    )
-    p.add_argument(
-        "--wait",
-        type=float,
-        default=None,
-        help="Seconds to record then stop (default: wait for Enter / window close)",
-    )
-    p.add_argument(
-        "--headless",
-        action="store_true",
-        help="Run without a visible window (scripted waits only)",
-    )
-    p.add_argument(
-        "--channel",
-        default="",
-        help='Use installed browser: "chrome" or "msedge" (or HARDLY_BROWSER_CHANNEL)',
-    )
-    p.add_argument(
-        "--url-filter",
-        default="",
-        help='Playwright glob for HAR entries (e.g. "**/AjaxPresentor.aspx*")',
-    )
-    p.add_argument(
-        "--omit-content",
-        action="store_true",
-        help="Omit response bodies from the HAR (smaller file)",
-    )
-    p.add_argument("--label", default="", help="Filename label when -o is omitted")
-    p.add_argument(
-        "--profile",
-        default="",
-        help="Persistent browser profile directory (keeps cookies)",
-    )
-    p.add_argument(
-        "--allow-popups",
-        action="store_true",
-        help="Allow real popup windows (default: force same-tab navigation)",
-    )
-    p.add_argument(
-        "--trace",
-        action="store_true",
-        help="Write Playwright .trace.zip beside the HAR (or HARDLY_CAPTURE_TRACE=1)",
-    )
-    p.add_argument(
-        "--no-open",
-        action="store_true",
-        help="Do not index the HAR into a hardly session after stop",
-    )
+
+
+def _limit(p: argparse.ArgumentParser, default: int | None = None, help: str = "Maximum rows") -> None:
+    p.add_argument("--limit", type=int, default=default, help=help)
+
+
+def _explain(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--explain", action="store_true", help="Include canned prose (implications / advice / next steps)")
+
+
+def _confirm(p: argparse.ArgumentParser, what: str = "Send the requests") -> None:
+    p.add_argument("--confirm", action="store_true", help=f"{what}; without it only the plan is printed")
+
+
+def _sections(p: argparse.ArgumentParser, valid: str) -> None:
+    p.add_argument("--sections", type=_csv, help=f"Comma list: {valid}")
+
+
+def _output(p: argparse.ArgumentParser, help: str, required: bool = True) -> None:
+    p.add_argument("-o", "--output", required=required, help=help)
+
+
+def _overwrite(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--overwrite", action="store_true", help="Replace an existing output file")
+
+
+def _capture_id(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--capture-id", help="Capture id (default: the latest running capture)")
+
+
+def _browser_launch(p: argparse.ArgumentParser, *, headed_default: bool) -> None:
+    p.add_argument("-o", "--har-output-path", help="HAR output path. Without it the capture is ephemeral: indexed in memory, HAR deleted")
+    p.add_argument("--headed", action=_BOOL, default=headed_default, help="Show the browser window")
+    p.add_argument("--channel", help='Installed browser: "chrome" or "msedge" (or HARDLY_BROWSER_CHANNEL)')
+    p.add_argument("--url-filter", help='Playwright glob for HAR entries (e.g. "**/api/*")')
+    p.add_argument("--omit-content", action="store_true", help="Omit response bodies from the HAR (smaller file)")
+    p.add_argument("--label", help="Filename label when -o is omitted")
+    p.add_argument("--same-tab", action=_BOOL, default=True, help="Force target=_blank navigation into the current tab")
+    p.add_argument("--trace", action="store_true", help="Write a Playwright .trace.zip beside the HAR (or HARDLY_CAPTURE_TRACE=1)")
+    p.add_argument("--slot-timeout-seconds", type=float, help="Max wait for a capture slot (env HARDLY_CAPTURE_SLOT_TIMEOUT, default 300)")
+
+
+_GROUPS = {
+    "server": "Server version, features and browser setup",
+    "guide": "Orientation: task plan, operating modes, tool catalog",
+    "session": "Open a HAR and read counts, findings, story, timeline",
+    "entry": "One request: search, get, neighbours, body, dependencies",
+    "endpoint": "API shape: endpoints, schemas, GraphQL, streams, pagination, ArcGIS",
+    "spec": "Compare a capture with an OpenAPI file",
+    "tech": "Technology fingerprint",
+    "page": "Server-rendered pages: forms, UI controls, embedded routes, tables",
+    "auth": "Authentication evidence (names and shapes, never values)",
+    "gate": "Bot walls, captchas, challenges",
+    "har": "Check a HAR file on disk",
+    "client": "Generate client code (returned, not written)",
+    "write": "Commands that write a file (refuse to overwrite without --overwrite)",
+    "send": "LIVE commands that send requests (--confirm; a plan without it)",
+    "browser": "Drive a real browser that records a HAR (needs the capture extra)",
+    "capture": "List browser captures",
+    "catalog": "Content-neutral target catalog",
+    "skill": "Agent Skill: install into ~/.claude/skills/hardly or print SKILL.md",
+    "soak": "Soak runs (developer tool)",
+}
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="hardly",
-        description="HAR analysis - index, query, document, and probe APIs",
+        description="HAR analysis - index, query, document, and probe APIs. "
+        "hardly <group> <command>: the same names as the MCP tools (hardly_session_open is "
+        "`hardly session open`). See docs/cli.md.",
     )
-    sub = p.add_subparsers(dest="command", required=True)
+    top = p.add_subparsers(dest="group", required=True, metavar="GROUP")
+    subs: dict[str, argparse._SubParsersAction] = {}
 
-    caps_p = sub.add_parser(
-        "capabilities",
-        help="Show version / features (detect stale MCP installs)",
-    )
-    caps_p.set_defaults(func=cmd_capabilities)
+    def group(name: str, required: bool = True) -> None:
+        gp = top.add_parser(name, help=_GROUPS[name], description=_GROUPS[name])
+        subs[name] = gp.add_subparsers(dest=f"{name}_command", required=required, metavar="COMMAND")
+        gp.set_defaults(group_parser=gp)
 
-    start_p = sub.add_parser(
-        "start",
-        help="First-use plan: ordered tool calls plus environment state",
-    )
-    start_p.add_argument("--goal", default="", help="Free-text goal, e.g. 'build a client SDK'")
-    start_p.add_argument("--har", default="", help="Existing HAR path")
-    start_p.add_argument("--url", default="", help="Target URL")
-    start_p.set_defaults(func=cmd_start)
+    def cmd(path: str, help: str, func) -> argparse.ArgumentParser:
+        g, _, c = path.partition(" ")
+        sp = subs[g].add_parser(c, help=help, description=help)
+        sp.set_defaults(func=func)
+        return sp
 
-    skill_p = sub.add_parser(
-        "skill",
-        help="Agent Skill: install into ~/.claude/skills/hardly or print SKILL.md",
-    )
-    skill_sub = skill_p.add_subparsers(dest="skill_action")
-    skill_install_p = skill_sub.add_parser("install", help="Write SKILL.md + references/")
-    skill_install_p.add_argument(
-        "--dest",
-        default="",
-        help="Skill directory to write (default ~/.claude/skills/hardly)",
-    )
-    skill_install_p.set_defaults(func=cmd_skill)
-    skill_print_p = skill_sub.add_parser("print", help="Print SKILL.md to stdout")
-    skill_print_p.set_defaults(func=cmd_skill)
-    skill_p.set_defaults(func=cmd_skill, dest="")
+    for g in _GROUPS:
+        group(g, required=g != "skill")
 
-    modes_p = sub.add_parser(
-        "modes",
-        help="List operating modes (archive / headless / interactive)",
-    )
-    modes_p.add_argument(
-        "mode",
-        nargs="?",
-        default="",
-        help="archive | headless | interactive (optional playbook)",
-    )
-    modes_p.add_argument("--goal", default="", help="Free-text goal for auto-pick")
-    modes_p.add_argument("--har", default="", help="Existing HAR path hint")
-    modes_p.add_argument("--url", default="", help="Target URL hint")
-    modes_p.set_defaults(func=cmd_modes)
+    # ---- server, guide
+    c = cmd("server status", "Version, features, tool names and browser setup", cmd_server_status)
+    _sections(c, "capabilities (default), browser_setup")
 
-    soak_live_p = sub.add_parser(
-        "soak-live",
-        help="Headless soak: capture public tech demos on the fly (needs [capture])",
-    )
-    soak_live_p.add_argument(
-        "--ids",
-        default="",
-        help="Comma-separated target ids (default: all); use --list",
-    )
-    soak_live_p.add_argument(
-        "--list",
-        action="store_true",
-        help="Print the public target catalog and exit",
-    )
-    soak_live_p.add_argument(
-        "--fail-soft",
-        action="store_true",
-        help="Treat soft targets (GraphQL UI, Swagger) as hard failures",
-    )
-    soak_live_p.add_argument(
-        "--json",
-        action="store_true",
-        help="Print full JSON summary only",
-    )
-    soak_live_p.add_argument(
-        "--write-fixtures",
-        default="",
-        help="Write small redacted HTML/JSON snippets from successful captures",
-    )
-    soak_live_p.set_defaults(func=cmd_soak_live)
+    c = cmd("guide help", "Categorized tool catalog (topic optional)", cmd_guide_help)
+    c.add_argument("topic", nargs="?", default="", help="portal | tokens | capture | modes | tool name substring")
+    c = cmd("guide mode", "List operating modes, one playbook, or auto-pick from goal / har-path / url", cmd_guide_mode)
+    c.add_argument("mode", nargs="?", default="", help="archive | headless | interactive (optional playbook)")
+    for flag, h in (("--goal", "Free-text goal"), ("--har-path", "Existing HAR path"), ("--url", "Target URL")):
+        c.add_argument(flag, help=h)
+    c = cmd("guide task-plan", "First-use plan: ordered tool calls plus environment state", cmd_guide_task_plan)
+    for flag, h in (("--goal", "Free-text goal, e.g. 'build a client SDK'"), ("--har-path", "Existing HAR path"), ("--url", "Target URL")):
+        c.add_argument(flag, help=h)
 
-    help_p = sub.add_parser(
-        "help-tools",
-        help="Categorized tool catalog (topic optional)",
-    )
-    help_p.add_argument(
-        "topic",
-        nargs="?",
-        default="",
-        help="portal | tokens | capture | tool name substring",
-    )
-    help_p.set_defaults(func=cmd_help)
+    # ---- session
+    c = cmd("session open", "Index a HAR (or open a saved index); -o saves the index there", cmd_session_open)
+    c.add_argument("har_path", help="HAR file or a previously saved index file")
+    c.add_argument("--force", action="store_true", help="Re-ingest even if already indexed")
+    c.add_argument("-o", "--output", help="Save the index to this file (atomic). Without it nothing is written")
+    _overwrite(c)
+    cmd("session list", "List open sessions", cmd_session_list)
 
-    open_p = sub.add_parser(
-        "open", help="Index a HAR (or open a saved index); -o saves the index there"
-    )
-    open_p.add_argument("har", help="HAR file or a previously saved index file")
-    open_p.add_argument("--force", action="store_true")
-    open_p.add_argument(
-        "-o",
-        "--output",
-        default=None,
-        help="Save the index to this file (atomic). Without it nothing is written",
-    )
-    open_p.add_argument("--overwrite", action="store_true")
-    open_p.set_defaults(func=cmd_open)
+    c = cmd("session overview", "Headline counts per server, method and status, plus main_host", _delegate("session_overview", "host", "exclude_noise", "limit"))
+    _har(c)
+    _host(c)
+    _noise(c)
+    _limit(c)
+    c = cmd("session traffic-stats", "Distributions: MIME, status classes, sizes, timing, payload kinds", _delegate("session_traffic_stats", "host", "exclude_noise", "limit", "kind"))
+    _har(c)
+    _host(c)
+    _noise(c)
+    _limit(c)
+    c.add_argument("--kind", help="Filter payload kinds: json, jsonl, jsonp, csv, html_table, pdf, image, ...")
+    c = cmd("session body-coverage", "Body preview coverage (empty / truncated / size=-1)", cmd_session_body_coverage)
+    _har(c)
+    _host(c)
+    _noise(c)
+    _limit(c, 20)
+    c = cmd("session issues", "Capture-quality issues (empty bodies, errors)", cmd_session_issues)
+    _har(c)
+    _host(c)
+    _limit(c, 40)
+    c = cmd("session duplicates", "Repeated endpoint templates", cmd_session_duplicates)
+    _har(c)
+    _host(c)
+    _noise(c)
+    _limit(c, 30)
+    c.add_argument("--min-count", type=int, default=2, help="Minimum repeat count")
+    c = cmd("session slow-requests", "Slowest requests by elapsed time", cmd_session_slow_requests)
+    _har(c)
+    _host(c)
+    _noise(c)
+    _limit(c, 20)
+    c.add_argument("--min-elapsed-seconds", type=float, default=0.0, help="Only requests at least this slow")
+    c = cmd("session report", "One-pass findings with severity: access, auth, stack, data, forms", cmd_session_report)
+    _har(c)
+    _host(c)
+    c.add_argument("--categories", type=_csv, help="Comma list: access,auth,stack,data,forms")
+    c.add_argument("--detail", choices=("summary", "standard", "full"), default="summary")
+    c.add_argument("--format", choices=("json", "md"), default="json", help="Print JSON or Markdown")
+    _explain(c)
+    c = cmd("session site-brief", "One-shot digest of a server-rendered site", cmd_session_site_brief)
+    _har(c)
+    _host(c)
+    c = cmd("session story", "Annotated user-journey steps (roles, forms, labels)", cmd_session_story)
+    _har(c)
+    _host(c)
+    _limit(c, 40)
+    _noise(c)
+    c.add_argument("--include-related", action=_BOOL, default=True, help="Merge same-apex API hosts (SPA app.* + api.*)")
+    c = cmd("session timeline", "Plain ordered request list", cmd_session_timeline)
+    _har(c)
+    _host(c)
+    _noise(c)
+    _limit(c, 100)
+    c.add_argument("--path-prefix", default="", help="Only paths starting with this")
+    c.add_argument("--offset", type=int, default=0, help="Rows to skip")
+    c = cmd("session redirect-history", "Recorded 3xx redirect hops (offline)", cmd_session_redirect_history)
+    _har(c)
+    _host(c)
+    _limit(c, 30)
+    _explain(c)
+    c = cmd("session trace-value", "Trace a field name or value; with neither, list reused dynamic values", _delegate("session_trace_value", "name", "value", "host", "limit"))
+    _har(c)
+    _host(c)
+    _limit(c, None, "Maximum rows (default 40)")
+    c.add_argument("--name", help="Field / header / cookie name")
+    c.add_argument("--value", help="Exact value (not echoed)")
+    c = cmd("session sql", "Read-only SELECT against the session's SQLite index", _delegate("session_sql", "sql", "limit"))
+    _har(c)
+    c.add_argument("sql", help="A single SELECT statement")
+    _limit(c)
+    c = cmd("session compare", "Compare endpoint templates (and credentials) between two HARs", cmd_session_compare)
+    _har(c)
+    _har(c, "other_har", "Second HAR file or saved index")
+    _host(c)
+    _noise(c)
+    c.add_argument("--include-credentials", action=_BOOL, default=True, help="Diff the credentials/session map too")
+    c = cmd("session plan-steps", "Suggest browser steps from the story (printed, not run)", cmd_session_plan_steps)
+    _har(c)
+    _host(c)
+    _limit(c, 30)
 
-    export_p = sub.add_parser(
-        "export-har", help="Save a copy of a HAR to a new path (atomic, never in place)"
-    )
-    export_p.add_argument("har")
-    export_p.add_argument("-o", "--output", required=True, help="Where to write the HAR copy")
-    export_p.add_argument("--overwrite", action="store_true")
-    export_p.set_defaults(func=cmd_export_har)
+    # ---- entry
+    c = cmd("entry search", "Find entries by host, path, method, status, body, header or kind", cmd_entry_search)
+    _har(c)
+    _host(c)
+    _noise(c)
+    _limit(c, 50)
+    c.add_argument("--offset", type=int, default=0, help="Rows to skip")
+    c.add_argument("--path-contains", default="", help="Path substring")
+    c.add_argument("--method", default="")
+    c.add_argument("--status", type=int)
+    c.add_argument("--body-contains", default="", help="Body substring")
+    c.add_argument("--header-name", default="")
+    c.add_argument("--header-contains", default="")
+    c.add_argument("--mime-contains", default="")
+    c.add_argument("--content-kind", default="", help="json, jsonl, jsonp, csv, html_table, pdf, image, ...")
+    c = cmd("entry get", "Show one entry (redacted)", cmd_entry_get)
+    _har(c)
+    c.add_argument("entry_id", type=int)
+    c.add_argument("--max-body-chars", type=int, default=4000)
+    c = cmd("entry around", "Chronological neighbours of an entry (click -> XHR)", cmd_entry_around)
+    _har(c)
+    c.add_argument("entry_id", type=int)
+    _host(c)
+    _noise(c)
+    c.add_argument("--before", type=int, default=5)
+    c.add_argument("--after", type=int, default=15)
+    c = cmd("entry initiators", "Initiator parent and children of an entry", cmd_entry_initiators)
+    _har(c)
+    c.add_argument("entry_id", type=int)
+    _noise(c)
+    c.add_argument("--child-limit", type=int, default=40)
+    c = cmd("entry compare", "Compare two entries", cmd_entry_compare)
+    _har(c)
+    c.add_argument("entry_id", type=int)
+    c.add_argument("other_entry_id", type=int)
+    c = cmd("entry build-curl", "curl command for an entry (printed, not run)", cmd_entry_build_curl)
+    _har(c)
+    c.add_argument("entry_id", type=int)
+    c.add_argument("--redact", action=_BOOL, default=True, help="Redact secrets (default on)")
+    c.add_argument("--use-env-placeholders", action=_BOOL, default=True, help="Use $ENV placeholders for secrets (default on)")
+    c = cmd("entry body-query", "Search inside a large body by JSONPath-lite or regex (paged)", cmd_entry_body_query)
+    _har(c)
+    c.add_argument("entry_id", type=int)
+    c.add_argument("--side", default="response", choices=("request", "response"))
+    c.add_argument("--jsonpath")
+    c.add_argument("--regex")
+    c.add_argument("--offset", type=int, default=0)
+    _limit(c, 20)
+    c = cmd("entry outline", "HTML/XML document outline (markdown, tree, aria)", cmd_entry_outline)
+    _har(c)
+    c.add_argument("entry_id", type=int)
+    c.add_argument("--format", default="all", choices=("all", "markdown", "tree", "aria"))
+    c.add_argument("--max-depth", type=int, default=8)
+    c.add_argument("--side", default="response")
+    c.add_argument("--markdown-only", action="store_true", help="Print the markdown outline (not JSON)")
+    c = cmd("entry dependencies", "What a request depends on: prior steps and carried values", cmd_entry_dependencies)
+    _har(c)
+    c.add_argument("entry_id", type=int)
+    _host(c)
+    c.add_argument("--max-depth", type=int, default=8)
 
-    stats_p = sub.add_parser(
-        "stats",
-        help="MIME / status / size / initiator stats",
-    )
-    stats_p.add_argument("har")
-    stats_p.add_argument("--host")
-    stats_p.add_argument("--include-noise", action="store_true")
-    stats_p.set_defaults(func=cmd_stats)
+    # ---- endpoint, spec, tech
+    c = cmd("endpoint list", "Endpoint templates with counts", cmd_endpoint_list)
+    _har(c)
+    _host(c)
+    _noise(c)
+    _limit(c, 100)
+    c = cmd("endpoint schema", "Request/response shapes of one endpoint template", _delegate("endpoint_schema", "method", "path_template", "host", "sections", "limit"))
+    _har(c)
+    c.add_argument("method")
+    c.add_argument("path_template")
+    _host(c)
+    _sections(c, "schema (default), param_roles")
+    _limit(c)
+    c = cmd("endpoint graphql", "GraphQL operations behind shared URLs", cmd_endpoint_graphql)
+    _har(c)
+    _host(c)
+    _limit(c, 40)
+    c = cmd("endpoint streams", "gRPC / protobuf / MessagePack / CSV / SSE / WebSocket bodies (shapes only)", cmd_endpoint_streams)
+    _har(c)
+    _host(c)
+    _limit(c, 40)
+    c.add_argument("--kind")
+    c = cmd("endpoint pagination", "Cursor / next-link / Link-header pagination", cmd_endpoint_pagination)
+    _har(c)
+    _host(c)
+    _limit(c, 20)
+    c = cmd("endpoint arcgis", "ArcGIS REST endpoints seen in a capture", cmd_endpoint_arcgis)
+    _har(c)
+    _host(c)
+    c = cmd("spec contract-check", "Drift between a capture and an exported OpenAPI file", cmd_spec_contract_check)
+    _har(c)
+    c.add_argument("spec_path", help="OpenAPI file")
+    _host(c)
+    c = cmd("tech stack", "Frameworks, CMS, GIS, UI toolkits and data grids", _delegate("tech_stack", "host", "limit", "explain"))
+    _har(c)
+    _host(c)
+    _limit(c)
+    _explain(c)
 
-    sum_p = sub.add_parser("summary", help="Summarize a HAR")
-    sum_p.add_argument("har")
-    sum_p.set_defaults(func=cmd_summary)
+    # ---- page, auth, gate
+    c = cmd("page list", "HAR pageref groups", cmd_page_list)
+    _har(c)
+    _host(c)
+    _noise(c)
+    _limit(c, 40)
+    c = cmd("page forms", "HTML forms and inputs from response bodies", _delegate("page_forms", "entry_id", "host", "side", "exclude_noise", "limit", "offset"))
+    _har(c)
+    c.add_argument("--entry-id", type=int)
+    _host(c)
+    c.add_argument("--side", default="response", choices=("response", "request"))
+    _noise(c)
+    _limit(c)
+    c.add_argument("--offset", type=int)
+    c = cmd("page ui", "Links, handlers, labels and search links", _delegate("page_ui", "entry_id", "host", "side", "sections", "keywords", "exclude_noise", "limit", "offset"))
+    _har(c)
+    c.add_argument("--entry-id", type=int)
+    _host(c)
+    c.add_argument("--side", default="response", choices=("response", "request"))
+    _sections(c, "links, handlers, labels (default all three), search_links")
+    c.add_argument("--keywords", type=_csv, help="Comma list of domain terms for search_links")
+    _noise(c)
+    _limit(c)
+    c.add_argument("--offset", type=int)
+    c = cmd("page embedded-routes", "URL path literals in JavaScript and data-* attributes", _delegate("page_embedded_routes", "host", "entry_id", "sections", "explain", "limit", "offset"))
+    _har(c)
+    _host(c)
+    c.add_argument("--entry-id", type=int)
+    _sections(c, "script_routes, data_attrs (default both)")
+    _explain(c)
+    _limit(c)
+    c.add_argument("--offset", type=int)
+    c = cmd("page tables", "HTML data tables: headers, counts, masked first row", cmd_page_tables)
+    _har(c)
+    _host(c)
+    c.add_argument("--entry-id", type=int)
+    c = cmd("auth report", "Authentication evidence by section (names and shapes only)", _delegate("auth_report", "host", "sections", "pattern_kinds", "limit", "explain"))
+    _har(c)
+    _host(c)
+    _sections(c, "quick (default), patterns, credentials, secret_names, cookies")
+    c.add_argument("--pattern-kinds", type=_csv, help="Restrict the patterns section to these detectors")
+    _limit(c)
+    _explain(c)
+    c = cmd("gate bot-protection", "Gates in a capture: bot walls, captcha, login, challenges, CDN/WAF products", _delegate("gate_bot_protection", "host", "sections", "limit", "explain"))
+    _har(c)
+    _host(c)
+    _sections(c, "barriers, http_challenges, bot_protection (default all)")
+    _limit(c)
+    _explain(c)
 
-    sessions_p = sub.add_parser("sessions", help="List open sessions")
-    sessions_p.set_defaults(func=cmd_sessions)
-
-    hosts_p = sub.add_parser("hosts", help="List hosts in a HAR")
-    hosts_p.add_argument("har")
-    hosts_p.add_argument("--include-noise", action="store_true")
-    hosts_p.set_defaults(func=cmd_hosts)
-
-    search_p = sub.add_parser("search", help="Search entries")
-    search_p.add_argument("har")
-    search_p.add_argument("--host")
-    search_p.add_argument("--path", default="", help="Path substring")
-    search_p.add_argument("--method", default="")
-    search_p.add_argument("--status", type=int)
-    search_p.add_argument("--body", default="", help="Body substring")
-    search_p.add_argument("--header-name", default="")
-    search_p.add_argument("--header-contains", default="")
-    search_p.add_argument("--mime", default="")
-    search_p.add_argument(
-        "--kind",
-        default="",
-        help="Content kind: json, jsonl, jsonp, csv, html_table, pdf, image, …",
-    )
-    search_p.add_argument("--include-noise", action="store_true")
-    search_p.add_argument("--limit", type=int, default=50)
-    search_p.set_defaults(func=cmd_search)
-
-    entry_p = sub.add_parser("entry", help="Show one entry (redacted)")
-    entry_p.add_argument("har")
-    entry_p.add_argument("entry_id", type=int)
-    entry_p.add_argument("--body-chars", type=int, default=4000)
-    entry_p.set_defaults(func=cmd_entry)
-
-    content_p = sub.add_parser(
-        "content",
-        help="Classify response kinds (json/jsonl/csv/html_table/pdf/image/…)",
-    )
-    content_p.add_argument("har")
-    content_p.add_argument("--host")
-    content_p.add_argument(
-        "--kind",
-        default="",
-        help="Filter: json, jsonl, jsonp, csv, html_table, pdf, image, …",
-    )
-    content_p.add_argument("--limit", type=int, default=80)
-    content_p.add_argument("--include-noise", action="store_true")
-    content_p.set_defaults(func=cmd_content)
-
-    outline_p = sub.add_parser(
-        "outline",
-        help="HTML/XML document outline from an entry (markdown/tree/aria)",
-    )
-    outline_p.add_argument("har")
-    outline_p.add_argument("entry_id", type=int)
-    outline_p.add_argument(
-        "--format",
-        default="all",
-        choices=("all", "markdown", "tree", "aria"),
-    )
-    outline_p.add_argument("--depth", type=int, default=8)
-    outline_p.add_argument("--side", default="response")
-    outline_p.add_argument(
-        "--markdown-only",
-        action="store_true",
-        help="Print markdown outline to stdout (not JSON)",
-    )
-    outline_p.set_defaults(func=cmd_outline)
-
-    flow_p = sub.add_parser("flow", help="Chronological request flow")
-    flow_p.add_argument("har")
-    flow_p.add_argument("--host")
-    flow_p.add_argument("--path-prefix", default="")
-    flow_p.add_argument("--include-noise", action="store_true")
-    flow_p.add_argument("--limit", type=int, default=100)
-    flow_p.set_defaults(func=cmd_flow)
-
-    schema_p = sub.add_parser("schema", help="Infer JSON schema for an endpoint")
-    schema_p.add_argument("har")
-    schema_p.add_argument("method")
-    schema_p.add_argument("host")
-    schema_p.add_argument("path_template")
-    schema_p.add_argument("--limit", type=int, default=20)
-    schema_p.set_defaults(func=cmd_schema)
-
-    curl_p = sub.add_parser("curl", help="Generate curl for an entry")
-    curl_p.add_argument("har")
-    curl_p.add_argument("entry_id", type=int)
-    curl_p.add_argument("--no-redact", action="store_true")
-    curl_p.add_argument("--no-env", action="store_true")
-    curl_p.set_defaults(func=cmd_curl)
-
-    compare_p = sub.add_parser("compare", help="Compare two entries")
-    compare_p.add_argument("har")
-    compare_p.add_argument("entry_a", type=int)
-    compare_p.add_argument("entry_b", type=int)
-    compare_p.set_defaults(func=cmd_compare)
-
-    probe_p = sub.add_parser(
-        "probe",
-        help="Live replay an entry (requires --yes)",
-    )
-    probe_p.add_argument("har")
-    probe_p.add_argument("entry_id", type=int)
-    probe_p.add_argument("--yes", action="store_true", help="Confirm live request")
-    probe_p.add_argument("--timeout", type=float, default=30.0)
-    probe_p.set_defaults(func=cmd_probe)
-
-    cov_p = sub.add_parser(
-        "coverage",
-        help="Body preview coverage (empty / truncated / size=-1)",
-    )
-    cov_p.add_argument("har")
-    cov_p.add_argument("--host")
-    cov_p.add_argument("--include-noise", action="store_true")
-    cov_p.add_argument("--limit", type=int, default=20)
-    cov_p.set_defaults(func=cmd_coverage)
-
-    ep_p = sub.add_parser("endpoints", help="List endpoints")
-    ep_p.add_argument("har")
-    ep_p.add_argument("--host")
-    ep_p.add_argument("--include-noise", action="store_true")
-    ep_p.add_argument("--limit", type=int, default=100)
-    ep_p.set_defaults(func=cmd_endpoints)
-
-    md_p = sub.add_parser("export-md", help="Export API.md")
-    md_p.add_argument("har")
-    md_p.add_argument("-o", "--output", required=True)
-    md_p.add_argument("--host")
-    md_p.add_argument("--include-noise", action="store_true")
-    md_p.set_defaults(func=cmd_export_md)
-
-    oa_p = sub.add_parser("export-openapi", help="Export OpenAPI")
-    oa_p.add_argument("har")
-    oa_p.add_argument("-o", "--output", required=True)
-    oa_p.add_argument("--host")
-    oa_p.add_argument("--title", default="HAR-derived API")
-    oa_p.add_argument("--include-noise", action="store_true")
-    oa_p.set_defaults(func=cmd_export_openapi)
-
-    pm_p = sub.add_parser("export-postman", help="Export Postman Collection v2.1")
-    pm_p.add_argument("har")
-    pm_p.add_argument("-o", "--output", required=True)
-    pm_p.add_argument("--host")
-    pm_p.add_argument("--name", default="HAR-derived API")
-    pm_p.add_argument("--include-noise", action="store_true")
-    pm_p.set_defaults(func=cmd_export_postman)
-
-    eb_p = sub.add_parser("export-brief", help="Export portal brief Markdown")
-    eb_p.add_argument("har")
-    eb_p.add_argument("-o", "--output", required=True)
-    eb_p.add_argument("--host")
-    eb_p.set_defaults(func=cmd_export_brief)
-
-    auth_p = sub.add_parser("auth", help="Detect auth patterns")
-    auth_p.add_argument("har")
-    auth_p.add_argument("--host")
-    auth_p.set_defaults(func=cmd_auth)
-
-    report_p = sub.add_parser(
-        "report",
-        help="One-pass evidence index: access, auth, stack, data, forms (summary/standard/full)",
-    )
-    report_p.add_argument("har")
-    report_p.add_argument("--host")
-    report_p.add_argument("--sections", help="Comma list: access,auth,stack,data,forms,run")
-    report_p.add_argument("--detail", choices=("summary", "standard", "full"), default="summary")
-    report_p.add_argument("--format", choices=("json", "md"), default="json")
-    report_p.add_argument("--explain", action="store_true", help="Include canned prose (implications / next steps)")
-    report_p.add_argument("--output", help="Write the report here (.json -> JSON, else Markdown; a directory gets <har>.report.md)")
-    report_p.add_argument("--write", action="store_true", help="Write <har stem>.report.md/.json next to the HAR")
-    report_p.set_defaults(func=cmd_report)
-
-    brief_p = sub.add_parser(
-        "brief",
-        help="One-shot portal RE brief (story+forms+correlate+...)",
-    )
-    brief_p.add_argument("har")
-    brief_p.add_argument("--host")
-    brief_p.set_defaults(func=cmd_brief)
-
-    story_p = sub.add_parser(
-        "story",
-        help="Annotated portal steps (roles, forms, labels)",
-    )
-    story_p.add_argument("har")
-    story_p.add_argument("--host")
-    story_p.add_argument("--limit", type=int, default=40)
-    story_p.add_argument("--include-noise", action="store_true")
-    story_p.add_argument(
-        "--no-related",
-        action="store_true",
-        help="Do not merge same-apex API hosts (SPA app.* + api.*)",
-    )
-    story_p.set_defaults(func=cmd_story)
-
-    stub_p = sub.add_parser(
-        "stub",
-        help="Generate a minimal urllib client sketch",
-    )
-    stub_p.add_argument("har")
-    stub_p.add_argument("--host")
-    stub_p.add_argument(
-        "--entry-ids",
-        default="",
-        help="Comma-separated entry ids (default: from story)",
-    )
-    stub_p.add_argument("-o", "--output", help="Write .py to this path")
-    stub_p.add_argument("--class-name", default="PortalClient")
-    stub_p.set_defaults(func=cmd_stub)
-
-    corr_p = sub.add_parser(
-        "correlate",
-        help="Find CSRF/session values reused across requests",
-    )
-    corr_p.add_argument("har")
-    corr_p.add_argument("--host")
-    corr_p.add_argument("--limit", type=int, default=40)
-    corr_p.set_defaults(func=cmd_correlate)
-
-    cookies_p = sub.add_parser(
-        "cookies",
-        help="Cookie name timeline (values omitted)",
-    )
-    cookies_p.add_argument("har")
-    cookies_p.add_argument("--host")
-    cookies_p.add_argument("--limit", type=int, default=60)
-    cookies_p.set_defaults(func=cmd_cookies)
-
-    diff_p = sub.add_parser(
-        "diff",
-        help="Compare endpoint templates (and credentials) between two HARs",
-    )
-    diff_p.add_argument("har_a")
-    diff_p.add_argument("har_b")
-    diff_p.add_argument("--host")
-    diff_p.add_argument("--include-noise", action="store_true")
-    diff_p.add_argument(
-        "--no-credentials",
-        action="store_true",
-        help="Skip credentials/session map diff",
-    )
-    diff_p.set_defaults(func=cmd_diff)
-
-    challenges_p = sub.add_parser(
-        "challenges",
-        help="Auth challenges, throttling/lockout, captcha widgets",
-    )
-    challenges_p.add_argument("har")
-    challenges_p.add_argument("--host")
-    challenges_p.add_argument("--limit", type=int, default=20)
-    challenges_p.set_defaults(func=cmd_challenges)
-
-    data_attrs_p = sub.add_parser(
-        "data-attrs",
-        help="Interpret HTML data-* attributes (dataset keys, endpoints, JSON, frameworks)",
-    )
-    data_attrs_p.add_argument("har")
-    data_attrs_p.add_argument("--host")
-    data_attrs_p.add_argument("--entry-id", type=int)
-    data_attrs_p.add_argument("--limit", type=int, default=20)
-    data_attrs_p.set_defaults(func=cmd_data_attrs)
-
-    arcgis_p = sub.add_parser("arcgis", help="ArcGIS REST endpoints seen in a HAR")
-    arcgis_p.add_argument("har")
-    arcgis_p.add_argument("--host")
-    arcgis_p.set_defaults(func=cmd_arcgis)
-
-    arcgis_x = sub.add_parser("arcgis-explore", help="Live ArcGIS service exploration (needs --confirm)")
-    arcgis_x.add_argument("url")
-    arcgis_x.add_argument("--confirm", action="store_true")
-    arcgis_x.set_defaults(func=cmd_arcgis_explore)
-
-    rd_p = sub.add_parser(
-        "redirect-diag",
-        help="Diagnose a redirect loop / ERR_TOO_MANY_RETRIES (live GETs; requires --yes)",
-    )
-    rd_p.add_argument("url")
-    rd_p.add_argument("--max-hops", type=int, default=12)
-    rd_p.add_argument("--yes", action="store_true", help="Confirm live requests")
-    rd_p.set_defaults(func=cmd_redirect_diag)
-
-    crawl_p = sub.add_parser(
-        "crawl",
-        help="Curl-first polite crawl for candidate pages (live GETs; requires --yes)",
-    )
-    crawl_p.add_argument("url")
-    crawl_p.add_argument("-k", "--keyword", action="append", help="Domain keyword (repeatable)")
-    crawl_p.add_argument("--max-pages", type=int, default=12)
-    crawl_p.add_argument("--depth", type=int, default=2)
-    crawl_p.add_argument("--delay", type=float, default=1.0, help="Seconds between requests per host")
-    crawl_p.add_argument("--follow-external", action="store_true")
-    crawl_p.add_argument("--ignore-robots", action="store_true", help="Only where you are permitted")
-    crawl_p.add_argument("--timeout", type=float, default=15.0)
-    crawl_p.add_argument("--user-agent", default=None, help='Default is an honest hardly UA; "browser" or a custom string')
-    crawl_p.add_argument("--yes", action="store_true", help="Confirm live requests")
-    crawl_p.set_defaults(func=cmd_crawl)
-
-
-    cat_p = sub.add_parser("catalog", help="Content-neutral target catalog (init/add/list/show/verify/export)")
-    cat_sub = cat_p.add_subparsers(dest="catalog_action", required=True)
-
-    def _cat_filters(p: argparse.ArgumentParser) -> None:
-        p.add_argument("--tag", action="append", help="Require tag (repeatable)")
-        p.add_argument("--group", action="append", help="Require group key=value (repeatable)")
-        p.add_argument("--role", help="Endpoint role")
-        p.add_argument("--status", choices=["unverified", "verified", "blocked", "dead", "needs_browser"])
-
-    c = cat_sub.add_parser("init", help="Create an empty catalog file (.json, or .yaml with PyYAML)")
-    c.add_argument("path")
-    c.add_argument("--name", default="catalog")
-    c.add_argument("--force", action="store_true")
-    c = cat_sub.add_parser("add", help="Add or merge a target")
-    c.add_argument("path")
-    c.add_argument("--id", required=True)
-    c.add_argument("--name")
-    c.add_argument("--tag", action="append")
-    c.add_argument("--group", action="append", help="key=value (repeatable)")
-    c.add_argument("--endpoint", action="append", help="role=url[,kind] (repeatable)")
-    c.add_argument("--replace", action="store_true", help="Replace the target instead of merging")
-    c = cat_sub.add_parser("list", help="List endpoints (one row each), filtered")
-    c.add_argument("path")
-    _cat_filters(c)
-    c.add_argument("--summary", action="store_true", help="Counts by tag/group/role/status/gate/stack")
-    c = cat_sub.add_parser("show", help="Show one target")
-    c.add_argument("path")
-    c.add_argument("id")
-    c = cat_sub.add_parser("verify", help="Politely verify endpoints (live GETs; requires --yes)")
-    c.add_argument("path")
-    c.add_argument("--id", help="Only this target")
-    _cat_filters(c)
-    c.add_argument("--delay", type=float, default=1.0, help="Seconds between requests per host")
-    c.add_argument("--max-requests", type=int, default=100)
-    c.add_argument("--max-endpoints", type=int)
-    c.add_argument("--recheck-after", type=float, help="Re-verify endpoints older than N seconds")
-    c.add_argument("--force", action="store_true", help="Re-verify already-checked endpoints")
-    c.add_argument("--yes", action="store_true", help="Confirm live requests")
-    c = cat_sub.add_parser("export", help="Write the catalog as json, yaml or csv")
-    c.add_argument("path")
-    c.add_argument("--format", choices=["json", "yaml", "csv"], default="json")
-    c.add_argument("-o", "--output")
-    cat_p.set_defaults(func=cmd_catalog)
-
-
-    rc_p = sub.add_parser(
-    "replay-check",
-    help="Replay a request/flow and report which headers, cookies, params, fields and prior steps are required",
-    )
-    rc_p.add_argument("har")
-    rc_p.add_argument("entry_ids", type=int, nargs="+", help="One entry id, or an ordered flow (last = target)")
-    rc_p.add_argument("--yes", action="store_true", help="Confirm live requests")
-    rc_p.add_argument("--overrides-json", default=None, help='Inline JSON text (not a file path): {"headers":{},"cookies":{},"query":{},"body":{}}')
-    rc_p.add_argument("--max-requests", type=int, default=15)
-    rc_p.add_argument("--delay", type=float, default=0.5)
-    rc_p.add_argument("--allow-unsafe", action="store_true", help="Allow POST/PUT/PATCH/DELETE")
-    rc_p.add_argument("--allow-gate", action="append", default=None, help="Gate class to tolerate, e.g. login (repeatable)")
-    rc_p.set_defaults(func=cmd_replay_check)
-
-    stack_p = sub.add_parser(
-    "stack",
-    help="Fingerprint frameworks / CMS / GIS / UI toolkits and SDK implications",
-    )
-    stack_p.add_argument("har")
-    stack_p.add_argument("--host")
-    stack_p.add_argument("--limit", type=int, default=30)
-    stack_p.set_defaults(func=cmd_stack)
-
-
-    ap_p = sub.add_parser(
-        "auth-patterns",
-        help="Detect bearer/refresh login, OIDC/PKCE, SAML POST, double-submit CSRF, signed requests",
-    )
-    ap_p.add_argument("har")
-    ap_p.add_argument("--host")
-    ap_p.add_argument("--kind", action="append", help="Restrict to a detector (repeatable)")
-    ap_p.set_defaults(func=cmd_auth_patterns)
-
-    pg_p = sub.add_parser("pagination", help="Recognise cursor / next-link / Link-header pagination")
-    pg_p.add_argument("har")
-    pg_p.add_argument("--host")
-    pg_p.add_argument("--limit", type=int, default=20)
-    pg_p.set_defaults(func=cmd_pagination)
-
+    # ---- har, client
     from hardly.core import har_doctor as _hd
 
-    hd_p = sub.add_parser("har-doctor", help="Diagnose HAR problems (truncated bodies, sanitised cookies, skew, noise); exit code via --fail-on")
-    hd_p.add_argument("har")
-    _hd.add_cli_flags(hd_p)
-    hd_p.set_defaults(func=cmd_har_doctor)
+    c = cmd("har file-check", "Diagnose HAR problems (truncated bodies, sanitised cookies, skew, noise); exit code via --fail-on", cmd_har_file_check)
+    c.add_argument("har_path", help="HAR file")
+    _hd.add_cli_flags(c)
+    c = cmd("client build", "Minimal Python (urllib) client sketch, printed", cmd_client_build)
+    _har(c)
+    _host(c)
+    c.add_argument("--entry-ids", type=_entry_ids_arg, help="Comma list of entry ids (default: from the story)")
+    c.add_argument("--class-name", default="PortalClient")
 
-    har_p = sub.add_parser("har", help="HAR hygiene: prune | split | merge | scrub (never in place)")
-    har_sub = har_p.add_subparsers(dest="har_cmd", required=True)
-    for name in ("prune", "scrub"):
-        hp = har_sub.add_parser(name)
-        hp.add_argument("har")
-        hp.add_argument("dst")
-        hp.add_argument("--overwrite", action="store_true")
-        if name == "prune":
-            hp.add_argument("--drop-host", action="append")
-            hp.add_argument("--drop-mime", action="append")
-            hp.add_argument("--drop-noise", action="store_true")
-        hp.set_defaults(func=cmd_har_tool)
-    hp = har_sub.add_parser("split")
-    hp.add_argument("har")
-    hp.add_argument("--by", choices=("host", "page"), default="host")
-    hp.add_argument("--outdir", required=True)
-    hp.add_argument("--overwrite", action="store_true")
-    hp.set_defaults(func=cmd_har_tool)
-    hp = har_sub.add_parser("merge")
-    hp.add_argument("hars", nargs="+")
-    hp.add_argument("--out", required=True)
-    hp.add_argument("--no-dedupe", action="store_true")
-    hp.add_argument("--overwrite", action="store_true")
-    hp.set_defaults(func=cmd_har_tool)
+    # ---- write
+    c = cmd("write export", "Write openapi, postman, api_markdown, site_brief, report, client_python or plan_steps",
+            _delegate("write_export", "format", "output:output_path", "host", "exclude_noise", "title", "max_endpoints", "detail", "categories", "entry_ids", "class_name", "limit", "overwrite"))
+    _har(c)
+    c.add_argument("--format", required=True, choices=("openapi", "postman", "api_markdown", "site_brief", "report", "client_python", "plan_steps"))
+    _output(c, "Output file (a directory for --format report gets <har>.report.md)")
+    _host(c)
+    _noise(c)
+    _overwrite(c)
+    c.add_argument("--title", help="API title (openapi) or collection name (postman)")
+    c.add_argument("--max-endpoints", type=int)
+    c.add_argument("--detail", choices=("summary", "standard", "full"), default="standard")
+    c.add_argument("--categories", type=_csv, help="report: comma list access,auth,stack,data,forms")
+    c.add_argument("--entry-ids", type=_entry_ids_arg, help="client_python: comma list of entry ids")
+    c.add_argument("--class-name", help="client_python: class name")
+    _limit(c, None, "plan_steps: maximum steps")
+    c = cmd("write session-copy", "Save a copy of the source HAR (or the SQLite index), never in place", _delegate("write_session_copy", "output:output_path", "format", "overwrite"))
+    _har(c)
+    _output(c, "Where to write the copy")
+    c.add_argument("--format", choices=("har", "index"), default="har")
+    _overwrite(c)
+    c = cmd("write har-pruned", "Drop hosts, MIME types or noise from a HAR (new file)", cmd_write_har)
+    c.add_argument("har_path")
+    _output(c, "Output HAR")
+    _overwrite(c)
+    c.add_argument("--drop-hosts", type=_csv, help="Comma list of hosts to drop")
+    c.add_argument("--drop-mime-types", type=_csv, help="Comma list of MIME types to drop")
+    c.add_argument("--drop-noise", action="store_true")
+    c = cmd("write har-scrubbed", "Scrub secrets from a HAR (new file)", cmd_write_har)
+    c.add_argument("har_path")
+    _output(c, "Output HAR")
+    _overwrite(c)
+    c = cmd("write har-split", "Split a HAR by host or page into a directory", cmd_write_har)
+    c.add_argument("har_path")
+    c.add_argument("--output-dir", required=True, help="Output directory")
+    _overwrite(c)
+    c.add_argument("--by", choices=("host", "page"), default="host")
+    c = cmd("write har-merged", "Merge several HARs into one (new file)", cmd_write_har)
+    c.add_argument("har_paths", nargs="+", help="HAR files to merge")
+    _output(c, "Output HAR")
+    _overwrite(c)
+    c.add_argument("--dedupe", action=_BOOL, default=True, help="Drop duplicate entries (default on)")
+    c = cmd("write catalog-record", "Add or update one target in a catalog file", cmd_write_catalog_record)
+    c.add_argument("catalog_path", help="Catalog JSON/YAML file")
+    c.add_argument("--id", required=True, help="Target id")
+    c.add_argument("--name")
+    c.add_argument("--tags", type=_csv, help="Comma list of tags")
+    c.add_argument("--group", action="append", help="key=value (repeatable)")
+    c.add_argument("--endpoint", action="append", help="role=url[,kind] (repeatable)")
+    c.add_argument("--merge", action=_BOOL, default=True, help="Merge into the target (--no-merge replaces it)")
+    c.add_argument("--create", action="store_true", help="Create the catalog file if missing")
+    c = cmd("write screenshot", "PNG screenshot of the running browser tab", _delegate("write_screenshot", "output:output_path", "capture_id", "full_page", "overwrite"))
+    _output(c, "Output .png path")
+    _capture_id(c)
+    c.add_argument("--full-page", action="store_true")
+    _overwrite(c)
 
-    st_p = sub.add_parser("streams", help="Summarise gRPC/protobuf/MessagePack/CSV/SSE/WebSocket bodies (shapes only)")
-    st_p.add_argument("har")
-    st_p.add_argument("--host")
-    st_p.add_argument("--kind")
-    st_p.add_argument("--limit", type=int, default=40)
-    st_p.set_defaults(func=cmd_streams)
+    # ---- send (live)
+    c = cmd("send entry", "LIVE: replay one captured request", _delegate("send_entry", "entry_id", "confirm", "timeout_seconds"))
+    _har(c)
+    c.add_argument("entry_id", type=int)
+    _confirm(c, "Send the request")
+    c.add_argument("--timeout-seconds", type=float, default=30.0)
+    c = cmd("send entry-ablation", "LIVE: replay with one element removed at a time to find what is required", cmd_send_entry_ablation)
+    _har(c)
+    c.add_argument("entry_ids", nargs="+", type=str, help="One entry id, or an ordered flow (last = target); commas allowed")
+    _confirm(c)
+    c.add_argument("--overrides", help='Inline JSON: {"headers":{},"cookies":{},"query":{},"body":{}}')
+    c.add_argument("--max-requests", type=int, default=15)
+    c.add_argument("--delay-seconds", type=float, default=0.5)
+    c.add_argument("--allow-unsafe", action="store_true", help="Allow POST/PUT/PATCH/DELETE")
+    c.add_argument("--allow-gates", type=_csv, help="Comma list of gate classes to tolerate, e.g. login")
+    c = cmd("send entry-series", "LIVE: replay an ordered series and find the first diverging step", cmd_send_entry_series)
+    _har(c)
+    c.add_argument("--entry-id", type=int, help="Target entry (its dependencies are replayed first)")
+    c.add_argument("--entry-ids", type=_entry_ids_arg, help="Explicit ordered comma list of entry ids")
+    _confirm(c)
+    c.add_argument("--env", help="Inline JSON {name: value}; or use HARDLY_INPUT_<NAME> env vars")
+    c.add_argument("--delay-seconds", type=float, default=0.5)
+    c.add_argument("--max-requests", type=int, default=20)
+    c.add_argument("--allow-unsafe", action="store_true")
+    c.add_argument("--allow-gates", type=_csv, help="Comma list of gate classes to tolerate")
+    c = cmd("send site-crawl", "LIVE: polite robots-aware crawl for candidate pages",
+            _delegate("send_site_crawl", "url", "keywords", "confirm", "max_pages", "depth", "delay_seconds", "follow_external", "respect_robots", "timeout_seconds", "user_agent", "explain"))
+    c.add_argument("url")
+    _confirm(c)
+    c.add_argument("--keywords", type=_csv, help="Comma list of domain terms")
+    c.add_argument("--max-pages", type=int, default=12)
+    c.add_argument("--depth", type=int, default=2)
+    c.add_argument("--delay-seconds", type=float, default=1.0, help="Seconds between requests per host")
+    c.add_argument("--follow-external", action="store_true")
+    c.add_argument("--respect-robots", action=_BOOL, default=True, help="Honour robots.txt (default on; disable only where you are permitted)")
+    c.add_argument("--timeout-seconds", type=float, default=15.0)
+    c.add_argument("--user-agent", help='Default is an honest hardly UA; "browser" or a custom string')
+    _explain(c)
+    c = cmd("send arcgis-explore", "LIVE: explore an ArcGIS REST service (GET only, at most 7 requests)", _delegate("send_arcgis_explore", "url", "confirm"))
+    c.add_argument("url")
+    _confirm(c)
+    c = cmd("send redirect-walk", "LIVE: follow a redirect chain by hand, with and without cookies", _delegate("send_redirect_walk", "url", "confirm", "max_hops"))
+    c.add_argument("url")
+    _confirm(c)
+    c.add_argument("--max-hops", type=int, default=12)
+    c = cmd("send catalog-verify", "LIVE: politely verify catalog endpoints", cmd_send_catalog_verify)
+    c.add_argument("catalog_path")
+    _confirm(c)
+    c.add_argument("--write-back", action="store_true", help="Record statuses in the catalog file")
+    _catalog_filters(c)
+    c.add_argument("--delay-seconds", type=float, default=1.0, help="Seconds between requests per host")
+    c.add_argument("--max-requests", type=int, default=50)
+    c.add_argument("--max-endpoints", type=int)
+    c.add_argument("--recheck-after-seconds", type=float, help="Re-verify endpoints older than this")
+    c.add_argument("--force", action="store_true", help="Re-verify already-checked endpoints")
 
-    bq_p = sub.add_parser("body-query", help="Search inside a large body by JSONPath-lite or regex (paged)")
-    bq_p.add_argument("har")
-    bq_p.add_argument("entry_id", type=int)
-    bq_p.add_argument("--side", default="response", choices=("request", "response"))
-    bq_p.add_argument("--jsonpath")
-    bq_p.add_argument("--regex")
-    bq_p.add_argument("--offset", type=int, default=0)
-    bq_p.add_argument("--limit", type=int, default=20)
-    bq_p.set_defaults(func=cmd_body_query)
+    # ---- browser, capture
+    c = cmd("browser start", "Start recording in a real browser; the browser stays open", cmd_browser_start)
+    c.add_argument("url", nargs="?", default="", help="Start URL (optional)")
+    _browser_launch(c, headed_default=True)
+    c.add_argument("--profile", help="Persistent browser profile directory (keeps cookies)")
+    c.add_argument("--foreground", action="store_true", help="Record until you press Enter / close the window (CLI only)")
+    c = cmd("browser stop", "Stop a capture and flush the HAR", _delegate("browser_stop", "capture_id", "open_session", "force"))
+    _capture_id(c)
+    c.add_argument("--open-session", action=_BOOL, default=True, help="Index the HAR into a session after stop")
+    c.add_argument("--force", action="store_true")
+    c = cmd("browser capture-discover", "LIVE: unattended time-boxed capture of a URL; --analyze also discovers its APIs", cmd_browser_capture_discover)
+    c.add_argument("url")
+    c.add_argument("--wait-seconds", type=float, help="Seconds to record (default 20; 5 with --analyze)")
+    c.add_argument("--analyze", action="store_true", help="Headless: run --steps, open a session and return a brief")
+    _confirm(c, "Load the URL in a browser")
+    _browser_launch(c, headed_default=False)
+    c.add_argument("--steps", help="JSON file of steps (goto/wait/aria/click/fill/find_click ...); needs --analyze")
+    c.add_argument("--budget-seconds", type=float, help="Hard per-call budget (env HARDLY_CAPTURE_BUDGET)")
+    c.add_argument("--exclude-noise", action=_BOOL, default=False, help="Abort analytics/ads/fonts/map tiles/heavy media while loading")
+    c.add_argument("--open-session", action=_BOOL, default=True, help="Index the HAR into a session after stop")
+    c.add_argument("--brief", action=_BOOL, default=True, help="With --analyze: attach the brief")
+    c.add_argument("--diagnose-redirects", action="store_true", help="On a redirect-loop failure attach a capped diagnosis (a few polite live GETs)")
+    c = cmd("browser interact", "Drive the running tab: goto, click, fill or press",
+            _delegate("browser_interact", "action", "capture_id", "url", "ref", "css", "xpath", "text", "role", "name", "value", "key", "timeout_seconds"))
+    c.add_argument("action", choices=("goto", "click", "fill", "press"))
+    _capture_id(c)
+    c.add_argument("--url", help="goto: where to navigate")
+    c.add_argument("--ref", help="Aria ref from `hardly browser inspect --sections aria` (e12)")
+    c.add_argument("--css")
+    c.add_argument("--xpath")
+    c.add_argument("--text")
+    c.add_argument("--role")
+    c.add_argument("--name")
+    c.add_argument("--value", help="fill: the value to type")
+    c.add_argument("--key", help="press: key name (default Enter)")
+    c.add_argument("--timeout-seconds", type=float, default=10.0)
+    c = cmd("browser inspect", "Read the running tab: url, elements, aria", _delegate("browser_inspect", "capture_id", "sections", "query", "limit", "selector", "mode"))
+    _capture_id(c)
+    _sections(c, "url (default), elements, aria")
+    _limit(c)
+    c.add_argument("--query", help="elements: CSS selector override")
+    c.add_argument("--selector", help="aria: CSS scope (default body)")
+    c.add_argument("--mode", choices=("ai", "default"), help="aria: ai includes [ref=eN]")
+    c = cmd("browser run-steps", "Run a JSON list of steps (goto/click/fill/wait/...) on the running tab", cmd_browser_run_steps)
+    c.add_argument("steps", help='JSON file: [{"op":"goto","url":"..."}, ...]')
+    _capture_id(c)
+    c.add_argument("--stop-on-error", action=_BOOL, default=True, help="Stop at the first failed step (default on)")
+    c = cmd("capture list", "List browser captures, or the status of one", _delegate("capture_list", "capture_id"))
+    _capture_id(c)
 
-    cc_p = sub.add_parser("contract-check", help="Report drift between a capture and an exported OpenAPI file")
-    cc_p.add_argument("har")
-    cc_p.add_argument("openapi")
-    cc_p.add_argument("--host")
-    cc_p.set_defaults(func=cmd_contract_check)
+    # ---- catalog
+    c = cmd("catalog list", "List catalog endpoints (one row each), filtered", cmd_catalog_list)
+    c.add_argument("catalog_path")
+    _catalog_filters(c)
+    c.add_argument("--detail", choices=("summary", "full"), default="full", help="summary = counts by tag/group/role/status/gate/stack")
+    c = cmd("catalog init", "Create an empty catalog file (.json, or .yaml with PyYAML)", cmd_catalog_init)
+    c.add_argument("catalog_path")
+    c.add_argument("--name", default="catalog")
+    c.add_argument("--force", action="store_true")
+    c = cmd("catalog show", "Show one target", cmd_catalog_show)
+    c.add_argument("catalog_path")
+    c.add_argument("target_id")
+    c = cmd("catalog export", "Write the catalog as json, yaml or csv", cmd_catalog_export)
+    c.add_argument("catalog_path")
+    c.add_argument("--format", choices=("json", "yaml", "csv"), default="json")
+    _output(c, "Output file (default: stdout)", required=False)
 
-    fg_p = sub.add_parser("flow-graph", help="Trace what a request depends on (names/shapes only)")
-    fg_p.add_argument("har")
-    fg_p.add_argument("entry_id", type=int)
-    fg_p.add_argument("--host")
-    fg_p.add_argument("--max-depth", type=int, default=8)
-    fg_p.set_defaults(func=cmd_flow_graph)
+    # ---- skill, soak, serve
+    sp = subs["skill"].add_parser("install", help="Write SKILL.md + references/")
+    sp.add_argument("--dest", default="", help="Skill directory to write (default ~/.claude/skills/hardly)")
+    sp.set_defaults(func=cmd_skill)
+    sp = subs["skill"].add_parser("print", help="Print SKILL.md to stdout")
+    sp.set_defaults(func=cmd_skill)
+    top.choices["skill"].set_defaults(func=cmd_skill, dest="")
 
-    fr_p = sub.add_parser("flow-replay", help="Replay a flow live and find the first diverging step (dry run unless --confirm)")
-    fr_p.add_argument("har")
-    fr_p.add_argument("target", type=int)
-    fr_p.add_argument("--confirm", action="store_true", help="Send live requests")
-    fr_p.add_argument("--env-json", default=None, help="Inline JSON {name: value}; or use HARDLY_INPUT_<NAME> env vars")
-    fr_p.add_argument("--delay", type=float, default=0.5)
-    fr_p.add_argument("--max-requests", type=int, default=20)
-    fr_p.add_argument("--allow-unsafe", action="store_true")
-    fr_p.add_argument("--allow-gate", action="append", default=None)
-    fr_p.set_defaults(func=cmd_flow_replay)
+    c = subs["soak"].add_parser("live", help="Headless soak: capture public tech demos on the fly (needs the capture extra)")
+    c.add_argument("--ids", default="", help="Comma-separated target ids (default: all); use --list")
+    c.add_argument("--list", action="store_true", help="Print the public target catalog and exit")
+    c.add_argument("--fail-soft", action="store_true", help="Treat soft targets (GraphQL UI, Swagger) as hard failures")
+    c.add_argument("--json", action="store_true", help="Print full JSON summary only")
+    c.add_argument("--write-fixtures", default="", help="Write small redacted HTML/JSON snippets from successful captures")
+    c.set_defaults(func=cmd_soak_live)
 
-    tables_p = sub.add_parser(
-        "tables",
-        help="HTML data tables: headers, counts, masked first row (no values)",
-    )
-    tables_p.add_argument("har")
-    tables_p.add_argument("--host")
-    tables_p.add_argument("--entry-id", type=int, dest="entry_id")
-    tables_p.set_defaults(func=cmd_tables)
-
-    gates_p = sub.add_parser("gates", help="Classify gates (bot wall, captcha, login, paywall, ...) and policy actions")
-    gates_p.add_argument("har")
-    gates_p.add_argument("--host")
-    gates_p.set_defaults(func=cmd_gates)
-
-    grids_p = sub.add_parser(
-        "grids",
-        help="Detect grid frameworks, JSON envelope and paging conventions",
-    )
-    grids_p.add_argument("har")
-    grids_p.add_argument("--host")
-    grids_p.add_argument("--limit", type=int, default=20)
-    grids_p.set_defaults(func=cmd_grids)
-
-    find_search_p = sub.add_parser(
-        "find-search",
-        help="Rank links likely to lead to a search page in a capture",
-    )
-    find_search_p.add_argument("har")
-    find_search_p.add_argument("--host")
-    find_search_p.add_argument(
-        "--keyword", action="append", help="Domain term to boost (repeatable)"
-    )
-    find_search_p.add_argument("--limit", type=int, default=15)
-    find_search_p.set_defaults(func=cmd_find_search)
-
-    recipe_plan_p = sub.add_parser(
-        "recipe-plan",
-        help="Suggest a capture recipe from a portal story",
-    )
-    recipe_plan_p.add_argument("har")
-    recipe_plan_p.add_argument("--host")
-    recipe_plan_p.add_argument("--limit", type=int, default=30)
-    recipe_plan_p.add_argument("-o", "--output", help="Write steps JSON")
-    recipe_plan_p.set_defaults(func=cmd_recipe_plan)
-
-    redir_p = sub.add_parser(
-        "redirects",
-        help="List 3xx redirect chains",
-    )
-    redir_p.add_argument("har")
-    redir_p.add_argument("--host")
-    redir_p.add_argument("--limit", type=int, default=30)
-    redir_p.set_defaults(func=cmd_redirects)
-
-    issues_p = sub.add_parser(
-        "issues",
-        help="Capture-quality issues (empty bodies, errors)",
-    )
-    issues_p.add_argument("har")
-    issues_p.add_argument("--host")
-    issues_p.add_argument("--limit", type=int, default=40)
-    issues_p.set_defaults(func=cmd_issues)
-
-    trace_p = sub.add_parser(
-        "trace",
-        help="Trace a field name or value across the capture",
-    )
-    trace_p.add_argument("har")
-    trace_p.add_argument("--name", default="", help="Field/header/cookie name")
-    trace_p.add_argument("--value", default="", help="Exact value (not echoed)")
-    trace_p.add_argument("--host")
-    trace_p.add_argument("--limit", type=int, default=40)
-    trace_p.set_defaults(func=cmd_trace)
-
-    secrets_p = sub.add_parser(
-        "secrets",
-        help="Locate sensitive field/header names (values omitted)",
-    )
-    secrets_p.add_argument("har")
-    secrets_p.add_argument("--host")
-    secrets_p.add_argument("--limit", type=int, default=40)
-    secrets_p.set_defaults(func=cmd_secrets)
-
-    cred_p = sub.add_parser(
-        "credentials",
-        help="Login/session map: passwords, cookies, JWT/hex/base64 shapes",
-    )
-    cred_p.add_argument("har")
-    cred_p.add_argument("--host")
-    cred_p.add_argument("--limit", type=int, default=40)
-    cred_p.set_defaults(func=cmd_credentials)
-
-    rec_p = sub.add_parser(
-        "recommend",
-        help="Suggest tools for a short goal string",
-    )
-    rec_p.add_argument("goal", help='e.g. "csrf tokens on guest portal"')
-    rec_p.set_defaults(func=cmd_recommend)
-
-    tree_p = sub.add_parser(
-        "tree",
-        help="Initiator parent/children for an entry",
-    )
-    tree_p.add_argument("har")
-    tree_p.add_argument("entry_id", type=int)
-    tree_p.add_argument("--include-noise", action="store_true")
-    tree_p.add_argument("--limit", type=int, default=40)
-    tree_p.set_defaults(func=cmd_tree)
-
-    params_p = sub.add_parser(
-        "params",
-        help="Static vs dynamic params for an endpoint template",
-    )
-    params_p.add_argument("har")
-    params_p.add_argument("method")
-    params_p.add_argument("host")
-    params_p.add_argument("path_template")
-    params_p.add_argument("--limit", type=int, default=30)
-    params_p.set_defaults(func=cmd_params)
-
-    gql_p = sub.add_parser(
-        "graphql",
-        help="Detect GraphQL operations",
-    )
-    gql_p.add_argument("har")
-    gql_p.add_argument("--host")
-    gql_p.add_argument("--limit", type=int, default=40)
-    gql_p.set_defaults(func=cmd_graphql)
-
-    dup_p = sub.add_parser(
-        "duplicates",
-        help="Find repeated endpoint templates",
-    )
-    dup_p.add_argument("har")
-    dup_p.add_argument("--host")
-    dup_p.add_argument("--min-count", type=int, default=2)
-    dup_p.add_argument("--include-noise", action="store_true")
-    dup_p.add_argument("--limit", type=int, default=30)
-    dup_p.set_defaults(func=cmd_duplicates)
-
-    slow_p = sub.add_parser(
-        "slow",
-        help="List slowest requests by time_ms",
-    )
-    slow_p.add_argument("har")
-    slow_p.add_argument("--host")
-    slow_p.add_argument("--min-ms", type=float, default=0)
-    slow_p.add_argument("--include-noise", action="store_true")
-    slow_p.add_argument("--limit", type=int, default=20)
-    slow_p.set_defaults(func=cmd_slow)
-
-    wall_p = sub.add_parser(
-        "wall",
-        help="Detect bot walls / challenge pages",
-    )
-    wall_p.add_argument("har")
-    wall_p.add_argument("--host")
-    wall_p.add_argument("--limit", type=int, default=30)
-    wall_p.set_defaults(func=cmd_wall)
-
-    pages_p = sub.add_parser(
-        "pages",
-        help="List HAR pageref groups",
-    )
-    pages_p.add_argument("har")
-    pages_p.add_argument("--host")
-    pages_p.add_argument("--include-noise", action="store_true")
-    pages_p.add_argument("--limit", type=int, default=40)
-    pages_p.set_defaults(func=cmd_pages)
-
-    forms_p = sub.add_parser(
-        "forms",
-        help="Extract HTML forms/inputs from response bodies",
-    )
-    forms_p.add_argument("har")
-    forms_p.add_argument("--entry-id", type=int, dest="entry_id")
-    forms_p.add_argument("--host")
-    forms_p.add_argument(
-        "--side",
-        default="response",
-        choices=("response", "request"),
-    )
-    forms_p.add_argument(
-        "--exclude-noise",
-        action="store_true",
-        help="Skip static assets when scanning the whole HAR",
-    )
-    forms_p.add_argument("--limit", type=int, default=30)
-    forms_p.set_defaults(func=cmd_forms)
-
-    ui_p = sub.add_parser(
-        "ui",
-        help="Inventory links, onclick/onsubmit handlers, and forms",
-    )
-    ui_p.add_argument("har")
-    ui_p.add_argument("--entry-id", type=int, dest="entry_id")
-    ui_p.add_argument("--host")
-    ui_p.add_argument(
-        "--side",
-        default="response",
-        choices=("response", "request"),
-    )
-    ui_p.add_argument("--exclude-noise", action="store_true")
-    ui_p.add_argument("--limit", type=int, default=30)
-    ui_p.set_defaults(func=cmd_ui)
-
-    routes_p = sub.add_parser(
-        "routes",
-        help="Mine URL path literals from JavaScript bodies",
-    )
-    routes_p.add_argument("har")
-    routes_p.add_argument("--host")
-    routes_p.add_argument("--limit", type=int, default=40)
-    routes_p.set_defaults(func=cmd_routes)
-
-    around_p = sub.add_parser(
-        "around",
-        help="List chronological neighbors of an entry (click -> XHR)",
-    )
-    around_p.add_argument("har")
-    around_p.add_argument("entry_id", type=int)
-    around_p.add_argument("--before", type=int, default=5)
-    around_p.add_argument("--after", type=int, default=15)
-    around_p.add_argument("--host")
-    around_p.add_argument(
-        "--include-noise",
-        action="store_true",
-        help="Include static assets in the window",
-    )
-    around_p.set_defaults(func=cmd_around)
-
-    serve_p = sub.add_parser("serve", help="Run MCP server (stdio)")
-    serve_p.set_defaults(func=cmd_serve)
-
-    cap_p = sub.add_parser(
-        "capture",
-        help="Spawn a browser and record a HAR (requires [capture] extra)",
-    )
-    cap_sub = cap_p.add_subparsers(dest="capture_action")
-
-    run_p = cap_sub.add_parser(
-        "run",
-        help="Record interactively or for --wait seconds (default action)",
-    )
-    _add_capture_flags(run_p)
-    run_p.set_defaults(func=cmd_capture, capture_action="run")
-
-    start_p = cap_sub.add_parser("start", help="Start recording; leave browser open")
-    _add_capture_flags(start_p)
-    start_p.set_defaults(func=cmd_capture, capture_action="start")
-
-    discover_p = cap_sub.add_parser(
-        "discover",
-        help="Headless mode: load URL, optional recipe, open session + brief",
-    )
-    discover_p.add_argument("url")
-    _add_capture_flags(discover_p, url=False)
-    discover_p.add_argument(
-        "--recipe",
-        default="",
-        help="JSON recipe steps file (goto/wait/aria/click/fill/…)",
-    )
-    discover_p.add_argument("--no-brief", action="store_true")
-    discover_p.set_defaults(func=cmd_capture, capture_action="discover")
-
-    stop_p = cap_sub.add_parser("stop", help="Stop a capture (latest if id omitted)")
-    stop_p.add_argument("capture_id", nargs="?", default="")
-    stop_p.add_argument("--no-open", action="store_true")
-    stop_p.add_argument("--export-path", default=None, help="Keep an ephemeral capture's HAR here")
-    stop_p.set_defaults(func=cmd_capture, capture_action="stop")
-
-    list_p = cap_sub.add_parser("list", help="List captures")
-    list_p.set_defaults(func=cmd_capture, capture_action="list")
-
-    status_p = cap_sub.add_parser("status", help="Show one capture")
-    status_p.add_argument("capture_id")
-    status_p.set_defaults(func=cmd_capture, capture_action="status")
-
-    goto_p = cap_sub.add_parser("goto", help="Navigate a running capture")
-    goto_p.add_argument("url")
-    goto_p.add_argument("--capture-id", dest="capture_id", default="")
-    goto_p.set_defaults(func=cmd_capture, capture_action="goto")
-
-    el_p = cap_sub.add_parser(
-        "elements",
-        help="List visible interactive elements (xpath/css) on the live tab",
-    )
-    el_p.add_argument("--capture-id", dest="capture_id", default="")
-    el_p.add_argument("--limit", type=int, default=40)
-    el_p.add_argument("--query", default="", help="CSS selector override")
-    el_p.set_defaults(func=cmd_capture, capture_action="elements")
-
-    aria_p = cap_sub.add_parser(
-        "aria",
-        help="Live Playwright accessibility snapshot (YAML) for the tab",
-    )
-    aria_p.add_argument("--capture-id", dest="capture_id", default="")
-    aria_p.add_argument(
-        "--selector",
-        default="",
-        help="Optional CSS scope (default: body)",
-    )
-    aria_p.add_argument(
-        "--mode",
-        default="ai",
-        choices=("ai", "default"),
-        help="ai includes [ref=eN] when Playwright >=1.59",
-    )
-    aria_p.set_defaults(func=cmd_capture, capture_action="aria")
-
-    doctor_p = cap_sub.add_parser(
-        "doctor",
-        help="Diagnose Playwright package + browser binaries",
-    )
-    doctor_p.set_defaults(func=cmd_capture, capture_action="doctor")
-
-    shot_p = cap_sub.add_parser(
-        "screenshot",
-        help="PNG screenshot of the live capture tab",
-    )
-    shot_p.add_argument("--capture-id", dest="capture_id", default="")
-    shot_p.add_argument("-o", "--path", default="", help="Output .png path")
-    shot_p.add_argument("--full-page", action="store_true")
-    shot_p.set_defaults(func=cmd_capture, capture_action="screenshot")
-
-    click_p = cap_sub.add_parser("click", help="Click an element on the live tab")
-    click_p.add_argument("--capture-id", dest="capture_id", default="")
-    click_p.add_argument(
-        "--ref",
-        default="",
-        help="Aria ref from `hardly capture aria` (e12 / [ref=e12])",
-    )
-    click_p.add_argument("--xpath", default="")
-    click_p.add_argument("--css", default="")
-    click_p.add_argument("--text", default="")
-    click_p.add_argument("--role", default="")
-    click_p.add_argument("--name", default="")
-    click_p.set_defaults(func=cmd_capture, capture_action="click")
-
-    fill_p = cap_sub.add_parser("fill", help="Fill an input on the live tab")
-    fill_p.add_argument("value")
-    fill_p.add_argument("--capture-id", dest="capture_id", default="")
-    fill_p.add_argument(
-        "--ref",
-        default="",
-        help="Aria ref from `hardly capture aria`",
-    )
-    fill_p.add_argument("--xpath", default="")
-    fill_p.add_argument("--css", default="")
-    fill_p.set_defaults(func=cmd_capture, capture_action="fill")
-
-    press_p = cap_sub.add_parser("press", help="Press a key on the live tab")
-    press_p.add_argument("key", nargs="?", default="Enter")
-    press_p.add_argument("--capture-id", dest="capture_id", default="")
-    press_p.add_argument("--ref", default="")
-    press_p.add_argument("--xpath", default="")
-    press_p.add_argument("--css", default="")
-    press_p.set_defaults(func=cmd_capture, capture_action="press")
-
-    url_p = cap_sub.add_parser("url", help="Show the live tab URL/title")
-    url_p.add_argument("--capture-id", dest="capture_id", default="")
-    url_p.set_defaults(func=cmd_capture, capture_action="url")
-
-    recipe_p = cap_sub.add_parser(
-        "recipe",
-        help="Run a JSON list of capture steps (goto/click/fill/wait/...)",
-    )
-    recipe_p.add_argument(
-        "steps_file",
-        help="JSON file: [{\"op\":\"goto\",\"url\":\"...\"}, ...]",
-    )
-    recipe_p.add_argument("--capture-id", dest="capture_id", default="")
-    recipe_p.add_argument(
-        "--continue-on-error",
-        action="store_true",
-        help="Keep going after a failed step",
-    )
-    recipe_p.set_defaults(func=cmd_capture, capture_action="recipe")
-
-    # Bare `hardly capture URL` (no subcommand) — argparse needs a default path.
-    _add_capture_flags(cap_p, url_default=argparse.SUPPRESS)
-    cap_p.set_defaults(func=cmd_capture, capture_action="run")
-
-    # Evidence-only is the default; canned prose (implication/advice/next/policy)
-    # comes back only with --explain.
-    for _name in ("stack", "auth-patterns", "gates", "wall", "challenges", "credentials",
-                  "redirects", "grids", "data-attrs", "crawl"):
-        _sp = sub.choices.get(_name)
-        if _sp is not None:
-            _sp.add_argument("--explain", action="store_true",
-                             help="Include canned prose (implications / advice / next steps)")
-
+    sp = top.add_parser("serve", help="Run the MCP server (stdio)")
+    sp.set_defaults(func=cmd_serve)
     return p
 
 
-_CAPTURE_ACTIONS = frozenset(
-    {"run", "start", "discover", "stop", "list", "status", "goto", "elements",
-     "aria", "doctor", "screenshot", "click", "fill", "press", "url", "recipe"}
-)
-
-
-def normalize_argv(argv: list[str]) -> list[str]:
-    """Make bare ``hardly capture [flags] URL`` mean ``hardly capture run ...``.
-
-    argparse cannot mix an optional positional with subcommands, so insert the
-    default ``run`` action when no capture subcommand is present.
-    """
-    if not argv or argv[0] != "capture":
-        return argv
-    rest = argv[1:]
-    if any(a in _CAPTURE_ACTIONS for a in rest if not a.startswith("-")):
-        # A subcommand word is present (flag values like "-o run" are rare).
-        return argv
-    if any(a in {"-h", "--help"} for a in rest):
-        return argv
-    return ["capture", "run", *rest]
+def _catalog_filters(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--tag", help="Required tags, comma separated")
+    p.add_argument("--group", action="append", help="Require group key=value (repeatable)")
+    p.add_argument("--role", help="Endpoint role")
+    p.add_argument("--status", choices=["unverified", "verified", "blocked", "dead", "needs_browser"])
+    p.add_argument("--target-id", help="Only this target")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -2622,9 +1474,10 @@ def main(argv: list[str] | None = None) -> None:
     if hasattr(signal, "SIGPIPE"):  # `hardly ... | head` must not traceback
         signal.signal(signal.SIGPIPE, signal.SIG_DFL)
     parser = build_parser()
-    import sys as _sys
-
-    args = parser.parse_args(normalize_argv(list(_sys.argv[1:] if argv is None else argv)))
+    args = parser.parse_args(list(sys.argv[1:] if argv is None else argv))
+    if not hasattr(args, "func"):
+        args.group_parser.print_help()
+        sys.exit(2)
     code = args.func(args)
     sys.exit(code)
 

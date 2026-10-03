@@ -71,7 +71,7 @@ def param_variance(
         "query": _classify(query_vals),
         "body": _classify(body_vals),
         "next": (
-            "dynamic fields need live extraction (hardly_correlate / hardly_trace). "
+            "dynamic fields need live extraction (hardly_session_trace_value / hardly_session_trace_value). "
             "static fields can be hard-coded in a client."
         ),
     }

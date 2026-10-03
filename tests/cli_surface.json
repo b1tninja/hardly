@@ -1,0 +1,3767 @@
+{
+ "auth report": {
+  "tool": "hardly_auth_report",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--sections"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--pattern-kinds"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--explain"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   }
+  ]
+ },
+ "browser capture-discover": {
+  "tool": "hardly_browser_capture_discover",
+  "args": [
+   {
+    "name": "url",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--wait-seconds"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--analyze"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--confirm"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-o",
+     "--har-output-path"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--headed",
+     "--no-headed"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--channel"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--url-filter"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--omit-content"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--label"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--same-tab",
+     "--no-same-tab"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--trace"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--slot-timeout-seconds"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--steps"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--budget-seconds"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--exclude-noise",
+     "--no-exclude-noise"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--open-session",
+     "--no-open-session"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--brief",
+     "--no-brief"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--diagnose-redirects"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   }
+  ]
+ },
+ "browser inspect": {
+  "tool": "hardly_browser_inspect",
+  "args": [
+   {
+    "flags": [
+     "--capture-id"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--sections"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--query"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--selector"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--mode"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": [
+     "ai",
+     "default"
+    ]
+   }
+  ]
+ },
+ "browser interact": {
+  "tool": "hardly_browser_interact",
+  "args": [
+   {
+    "name": "action",
+    "kind": "positional",
+    "nargs": null,
+    "choices": [
+     "goto",
+     "click",
+     "fill",
+     "press"
+    ]
+   },
+   {
+    "flags": [
+     "--capture-id"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--url"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--ref"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--css"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--xpath"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--text"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--role"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--name"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--value"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--key"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--timeout-seconds"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 10.0,
+    "choices": null
+   }
+  ]
+ },
+ "browser run-steps": {
+  "tool": "hardly_browser_run_steps",
+  "args": [
+   {
+    "name": "steps",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--capture-id"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--stop-on-error",
+     "--no-stop-on-error"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   }
+  ]
+ },
+ "browser start": {
+  "tool": "hardly_browser_start",
+  "args": [
+   {
+    "name": "url",
+    "kind": "positional",
+    "nargs": "?",
+    "choices": null
+   },
+   {
+    "flags": [
+     "-o",
+     "--har-output-path"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--headed",
+     "--no-headed"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--channel"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--url-filter"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--omit-content"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--label"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--same-tab",
+     "--no-same-tab"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--trace"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--slot-timeout-seconds"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--profile"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--foreground"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   }
+  ]
+ },
+ "browser stop": {
+  "tool": "hardly_browser_stop",
+  "args": [
+   {
+    "flags": [
+     "--capture-id"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--open-session",
+     "--no-open-session"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--force"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   }
+  ]
+ },
+ "capture list": {
+  "tool": "hardly_capture_list",
+  "args": [
+   {
+    "flags": [
+     "--capture-id"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "catalog export": {
+  "tool": null,
+  "args": [
+   {
+    "name": "catalog_path",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--format"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "json",
+    "choices": [
+     "json",
+     "yaml",
+     "csv"
+    ]
+   },
+   {
+    "flags": [
+     "-o",
+     "--output"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "catalog init": {
+  "tool": null,
+  "args": [
+   {
+    "name": "catalog_path",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--name"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "catalog",
+    "choices": null
+   },
+   {
+    "flags": [
+     "--force"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   }
+  ]
+ },
+ "catalog list": {
+  "tool": "hardly_catalog_list",
+  "args": [
+   {
+    "name": "catalog_path",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--tag"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--group"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--role"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--status"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": [
+     "unverified",
+     "verified",
+     "blocked",
+     "dead",
+     "needs_browser"
+    ]
+   },
+   {
+    "flags": [
+     "--target-id"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--detail"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "full",
+    "choices": [
+     "summary",
+     "full"
+    ]
+   }
+  ]
+ },
+ "catalog show": {
+  "tool": null,
+  "args": [
+   {
+    "name": "catalog_path",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "name": "target_id",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   }
+  ]
+ },
+ "client build": {
+  "tool": "hardly_client_build",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--entry-ids"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--class-name"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "PortalClient",
+    "choices": null
+   }
+  ]
+ },
+ "endpoint arcgis": {
+  "tool": "hardly_endpoint_arcgis",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "endpoint graphql": {
+  "tool": "hardly_endpoint_graphql",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 40,
+    "choices": null
+   }
+  ]
+ },
+ "endpoint list": {
+  "tool": "hardly_endpoint_list",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--exclude-noise",
+     "--no-exclude-noise"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 100,
+    "choices": null
+   }
+  ]
+ },
+ "endpoint pagination": {
+  "tool": "hardly_endpoint_pagination",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 20,
+    "choices": null
+   }
+  ]
+ },
+ "endpoint schema": {
+  "tool": "hardly_endpoint_schema",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "name": "method",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "name": "path_template",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--sections"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "endpoint streams": {
+  "tool": "hardly_endpoint_streams",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 40,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--kind"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "entry around": {
+  "tool": "hardly_entry_around",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "name": "entry_id",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--exclude-noise",
+     "--no-exclude-noise"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--before"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 5,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--after"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 15,
+    "choices": null
+   }
+  ]
+ },
+ "entry body-query": {
+  "tool": "hardly_entry_body_query",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "name": "entry_id",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--side"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "response",
+    "choices": [
+     "request",
+     "response"
+    ]
+   },
+   {
+    "flags": [
+     "--jsonpath"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--regex"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--offset"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 0,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 20,
+    "choices": null
+   }
+  ]
+ },
+ "entry build-curl": {
+  "tool": "hardly_entry_build_curl",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "name": "entry_id",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--redact",
+     "--no-redact"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--use-env-placeholders",
+     "--no-use-env-placeholders"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   }
+  ]
+ },
+ "entry compare": {
+  "tool": "hardly_entry_compare",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "name": "entry_id",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "name": "other_entry_id",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   }
+  ]
+ },
+ "entry dependencies": {
+  "tool": "hardly_entry_dependencies",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "name": "entry_id",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--max-depth"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 8,
+    "choices": null
+   }
+  ]
+ },
+ "entry get": {
+  "tool": "hardly_entry_get",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "name": "entry_id",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--max-body-chars"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 4000,
+    "choices": null
+   }
+  ]
+ },
+ "entry initiators": {
+  "tool": "hardly_entry_initiators",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "name": "entry_id",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--exclude-noise",
+     "--no-exclude-noise"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--child-limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 40,
+    "choices": null
+   }
+  ]
+ },
+ "entry outline": {
+  "tool": "hardly_entry_outline",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "name": "entry_id",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--format"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "all",
+    "choices": [
+     "all",
+     "markdown",
+     "tree",
+     "aria"
+    ]
+   },
+   {
+    "flags": [
+     "--max-depth"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 8,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--side"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "response",
+    "choices": null
+   },
+   {
+    "flags": [
+     "--markdown-only"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   }
+  ]
+ },
+ "entry search": {
+  "tool": "hardly_entry_search",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--exclude-noise",
+     "--no-exclude-noise"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 50,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--offset"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 0,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--path-contains"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "",
+    "choices": null
+   },
+   {
+    "flags": [
+     "--method"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "",
+    "choices": null
+   },
+   {
+    "flags": [
+     "--status"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--body-contains"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "",
+    "choices": null
+   },
+   {
+    "flags": [
+     "--header-name"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "",
+    "choices": null
+   },
+   {
+    "flags": [
+     "--header-contains"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "",
+    "choices": null
+   },
+   {
+    "flags": [
+     "--mime-contains"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "",
+    "choices": null
+   },
+   {
+    "flags": [
+     "--content-kind"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "",
+    "choices": null
+   }
+  ]
+ },
+ "gate bot-protection": {
+  "tool": "hardly_gate_bot_protection",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--sections"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--explain"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   }
+  ]
+ },
+ "guide help": {
+  "tool": "hardly_guide_help",
+  "args": [
+   {
+    "name": "topic",
+    "kind": "positional",
+    "nargs": "?",
+    "choices": null
+   }
+  ]
+ },
+ "guide mode": {
+  "tool": "hardly_guide_mode",
+  "args": [
+   {
+    "name": "mode",
+    "kind": "positional",
+    "nargs": "?",
+    "choices": null
+   },
+   {
+    "flags": [
+     "--goal"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--har-path"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--url"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "guide task-plan": {
+  "tool": "hardly_guide_task_plan",
+  "args": [
+   {
+    "flags": [
+     "--goal"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--har-path"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--url"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "har file-check": {
+  "tool": "hardly_har_file_check",
+  "args": [
+   {
+    "name": "har_path",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--config"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--checks"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--exclude"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--severity"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--max-entry-bytes"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--truncation-ratio"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--clock-skew-seconds"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--noise-ratio"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--strict"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--fail-on"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": [
+     "info",
+     "warn",
+     "error",
+     "never"
+    ]
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--ignore-host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--ignore-path"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--max-findings"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--no-fix"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   }
+  ]
+ },
+ "page embedded-routes": {
+  "tool": "hardly_page_embedded_routes",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--entry-id"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--sections"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--explain"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--offset"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "page forms": {
+  "tool": "hardly_page_forms",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--entry-id"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--side"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "response",
+    "choices": [
+     "response",
+     "request"
+    ]
+   },
+   {
+    "flags": [
+     "--exclude-noise",
+     "--no-exclude-noise"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--offset"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "page list": {
+  "tool": "hardly_page_list",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--exclude-noise",
+     "--no-exclude-noise"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 40,
+    "choices": null
+   }
+  ]
+ },
+ "page tables": {
+  "tool": "hardly_page_tables",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--entry-id"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "page ui": {
+  "tool": "hardly_page_ui",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--entry-id"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--side"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "response",
+    "choices": [
+     "response",
+     "request"
+    ]
+   },
+   {
+    "flags": [
+     "--sections"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--keywords"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--exclude-noise",
+     "--no-exclude-noise"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--offset"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "send arcgis-explore": {
+  "tool": "hardly_send_arcgis_explore",
+  "args": [
+   {
+    "name": "url",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--confirm"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   }
+  ]
+ },
+ "send catalog-verify": {
+  "tool": "hardly_send_catalog_verify",
+  "args": [
+   {
+    "name": "catalog_path",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--confirm"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--write-back"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--tag"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--group"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--role"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--status"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": [
+     "unverified",
+     "verified",
+     "blocked",
+     "dead",
+     "needs_browser"
+    ]
+   },
+   {
+    "flags": [
+     "--target-id"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--delay-seconds"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 1.0,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--max-requests"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 50,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--max-endpoints"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--recheck-after-seconds"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--force"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   }
+  ]
+ },
+ "send entry": {
+  "tool": "hardly_send_entry",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "name": "entry_id",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--confirm"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--timeout-seconds"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 30.0,
+    "choices": null
+   }
+  ]
+ },
+ "send entry-ablation": {
+  "tool": "hardly_send_entry_ablation",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "name": "entry_ids",
+    "kind": "positional",
+    "nargs": "+",
+    "choices": null
+   },
+   {
+    "flags": [
+     "--confirm"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--overrides"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--max-requests"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 15,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--delay-seconds"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 0.5,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--allow-unsafe"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--allow-gates"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "send entry-series": {
+  "tool": "hardly_send_entry_series",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--entry-id"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--entry-ids"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--confirm"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--env"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--delay-seconds"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 0.5,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--max-requests"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 20,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--allow-unsafe"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--allow-gates"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "send redirect-walk": {
+  "tool": "hardly_send_redirect_walk",
+  "args": [
+   {
+    "name": "url",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--confirm"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--max-hops"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 12,
+    "choices": null
+   }
+  ]
+ },
+ "send site-crawl": {
+  "tool": "hardly_send_site_crawl",
+  "args": [
+   {
+    "name": "url",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--confirm"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--keywords"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--max-pages"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 12,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--depth"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 2,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--delay-seconds"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 1.0,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--follow-external"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--respect-robots",
+     "--no-respect-robots"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--timeout-seconds"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 15.0,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--user-agent"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--explain"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   }
+  ]
+ },
+ "serve": {
+  "tool": null,
+  "args": []
+ },
+ "server status": {
+  "tool": "hardly_server_status",
+  "args": [
+   {
+    "flags": [
+     "--sections"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "session body-coverage": {
+  "tool": "hardly_session_body_coverage",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--exclude-noise",
+     "--no-exclude-noise"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 20,
+    "choices": null
+   }
+  ]
+ },
+ "session compare": {
+  "tool": "hardly_session_compare",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "name": "other_har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--exclude-noise",
+     "--no-exclude-noise"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--include-credentials",
+     "--no-include-credentials"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   }
+  ]
+ },
+ "session duplicates": {
+  "tool": "hardly_session_duplicates",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--exclude-noise",
+     "--no-exclude-noise"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 30,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--min-count"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 2,
+    "choices": null
+   }
+  ]
+ },
+ "session issues": {
+  "tool": "hardly_session_issues",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 40,
+    "choices": null
+   }
+  ]
+ },
+ "session list": {
+  "tool": "hardly_session_list",
+  "args": []
+ },
+ "session open": {
+  "tool": "hardly_session_open",
+  "args": [
+   {
+    "name": "har_path",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--force"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-o",
+     "--output"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--overwrite"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   }
+  ]
+ },
+ "session overview": {
+  "tool": "hardly_session_overview",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--exclude-noise",
+     "--no-exclude-noise"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "session plan-steps": {
+  "tool": "hardly_session_plan_steps",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 30,
+    "choices": null
+   }
+  ]
+ },
+ "session redirect-history": {
+  "tool": "hardly_session_redirect_history",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 30,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--explain"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   }
+  ]
+ },
+ "session report": {
+  "tool": "hardly_session_report",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--categories"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--detail"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "summary",
+    "choices": [
+     "summary",
+     "standard",
+     "full"
+    ]
+   },
+   {
+    "flags": [
+     "--format"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "json",
+    "choices": [
+     "json",
+     "md"
+    ]
+   },
+   {
+    "flags": [
+     "--explain"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   }
+  ]
+ },
+ "session site-brief": {
+  "tool": "hardly_session_site_brief",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "session slow-requests": {
+  "tool": "hardly_session_slow_requests",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--exclude-noise",
+     "--no-exclude-noise"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 20,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--min-elapsed-seconds"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 0.0,
+    "choices": null
+   }
+  ]
+ },
+ "session sql": {
+  "tool": "hardly_session_sql",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "name": "sql",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "session story": {
+  "tool": "hardly_session_story",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 40,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--exclude-noise",
+     "--no-exclude-noise"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--include-related",
+     "--no-include-related"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   }
+  ]
+ },
+ "session timeline": {
+  "tool": "hardly_session_timeline",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--exclude-noise",
+     "--no-exclude-noise"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 100,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--path-prefix"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "",
+    "choices": null
+   },
+   {
+    "flags": [
+     "--offset"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": 0,
+    "choices": null
+   }
+  ]
+ },
+ "session trace-value": {
+  "tool": "hardly_session_trace_value",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--name"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--value"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "session traffic-stats": {
+  "tool": "hardly_session_traffic_stats",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--exclude-noise",
+     "--no-exclude-noise"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--kind"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "skill install": {
+  "tool": null,
+  "args": [
+   {
+    "flags": [
+     "--dest"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "",
+    "choices": null
+   }
+  ]
+ },
+ "skill print": {
+  "tool": null,
+  "args": []
+ },
+ "soak live": {
+  "tool": null,
+  "args": [
+   {
+    "flags": [
+     "--ids"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "",
+    "choices": null
+   },
+   {
+    "flags": [
+     "--list"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--fail-soft"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--json"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--write-fixtures"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "",
+    "choices": null
+   }
+  ]
+ },
+ "spec contract-check": {
+  "tool": "hardly_spec_contract_check",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "name": "spec_path",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "tech stack": {
+  "tool": "hardly_tech_stack",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--explain"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   }
+  ]
+ },
+ "write catalog-record": {
+  "tool": "hardly_write_catalog_record",
+  "args": [
+   {
+    "name": "catalog_path",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--id"
+    ],
+    "kind": "value",
+    "required": true,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--name"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--tags"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--group"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--endpoint"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--merge",
+     "--no-merge"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--create"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   }
+  ]
+ },
+ "write export": {
+  "tool": "hardly_write_export",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--format"
+    ],
+    "kind": "value",
+    "required": true,
+    "default": null,
+    "choices": [
+     "openapi",
+     "postman",
+     "api_markdown",
+     "site_brief",
+     "report",
+     "client_python",
+     "plan_steps"
+    ]
+   },
+   {
+    "flags": [
+     "-o",
+     "--output"
+    ],
+    "kind": "value",
+    "required": true,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--host"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--exclude-noise",
+     "--no-exclude-noise"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--overwrite"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--title"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--max-endpoints"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--detail"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "standard",
+    "choices": [
+     "summary",
+     "standard",
+     "full"
+    ]
+   },
+   {
+    "flags": [
+     "--categories"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--entry-ids"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--class-name"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--limit"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   }
+  ]
+ },
+ "write har-merged": {
+  "tool": "hardly_write_har_merged",
+  "args": [
+   {
+    "name": "har_paths",
+    "kind": "positional",
+    "nargs": "+",
+    "choices": null
+   },
+   {
+    "flags": [
+     "-o",
+     "--output"
+    ],
+    "kind": "value",
+    "required": true,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--overwrite"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--dedupe",
+     "--no-dedupe"
+    ],
+    "kind": "bool",
+    "required": false,
+    "default": true,
+    "choices": null
+   }
+  ]
+ },
+ "write har-pruned": {
+  "tool": "hardly_write_har_pruned",
+  "args": [
+   {
+    "name": "har_path",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-o",
+     "--output"
+    ],
+    "kind": "value",
+    "required": true,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--overwrite"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--drop-hosts"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--drop-mime-types"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--drop-noise"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   }
+  ]
+ },
+ "write har-scrubbed": {
+  "tool": "hardly_write_har_scrubbed",
+  "args": [
+   {
+    "name": "har_path",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-o",
+     "--output"
+    ],
+    "kind": "value",
+    "required": true,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--overwrite"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   }
+  ]
+ },
+ "write har-split": {
+  "tool": "hardly_write_har_split",
+  "args": [
+   {
+    "name": "har_path",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--output-dir"
+    ],
+    "kind": "value",
+    "required": true,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--overwrite"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--by"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "host",
+    "choices": [
+     "host",
+     "page"
+    ]
+   }
+  ]
+ },
+ "write screenshot": {
+  "tool": "hardly_write_screenshot",
+  "args": [
+   {
+    "flags": [
+     "-o",
+     "--output"
+    ],
+    "kind": "value",
+    "required": true,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--capture-id"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--full-page"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--overwrite"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   }
+  ]
+ },
+ "write session-copy": {
+  "tool": "hardly_write_session_copy",
+  "args": [
+   {
+    "name": "har",
+    "kind": "positional",
+    "nargs": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "-o",
+     "--output"
+    ],
+    "kind": "value",
+    "required": true,
+    "default": null,
+    "choices": null
+   },
+   {
+    "flags": [
+     "--format"
+    ],
+    "kind": "value",
+    "required": false,
+    "default": "har",
+    "choices": [
+     "har",
+     "index"
+    ]
+   },
+   {
+    "flags": [
+     "--overwrite"
+    ],
+    "kind": "flag",
+    "required": false,
+    "default": false,
+    "choices": null
+   }
+  ]
+ }
+}
