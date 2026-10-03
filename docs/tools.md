@@ -270,7 +270,7 @@ Replay a request live. Requires confirm=true. Sensitive HAR headers are skipped 
 
 Live, polite exploration of an ArcGIS REST service or layer URL (needs confirm=true).
 
-### `hardly_crawl(start_url, keywords_json=None, confirm=False, max_pages=12, depth=2, delay_s=1.0, follow_external=False, respect_robots=True, timeout_s=15.0)`
+### `hardly_crawl(start_url, keywords_json=None, confirm=False, max_pages=12, depth=2, delay_s=1.0, follow_external=False, respect_robots=True, timeout_s=15.0, user_agent=None)`
 
 Curl-first, robots-aware, polite crawl that finds candidate pages. LIVE GETs: requires confirm=true.
 

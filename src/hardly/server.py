@@ -1206,6 +1206,7 @@ def hardly_crawl(
     follow_external: bool = False,
     respect_robots: bool = True,
     timeout_s: float = 15.0,
+    user_agent: str | None = None,
 ) -> str:
     """Curl-first, robots-aware, polite crawl that finds candidate pages. LIVE GETs: requires confirm=true.
 
@@ -1246,6 +1247,7 @@ def hardly_crawl(
                 follow_external=follow_external,
                 respect_robots=respect_robots,
                 timeout_s=timeout_s,
+                user_agent=user_agent,
             )
         )
     except Exception as exc:  # noqa: BLE001

@@ -531,6 +531,7 @@ def cmd_crawl(args: argparse.Namespace) -> int:
         follow_external=args.follow_external,
         respect_robots=not args.ignore_robots,
         timeout_s=args.timeout,
+        user_agent=args.user_agent,
     )
     _print(result)
     return 1 if "error" in result else 0
@@ -1698,6 +1699,7 @@ def build_parser() -> argparse.ArgumentParser:
     crawl_p.add_argument("--follow-external", action="store_true")
     crawl_p.add_argument("--ignore-robots", action="store_true", help="Only where you are permitted")
     crawl_p.add_argument("--timeout", type=float, default=15.0)
+    crawl_p.add_argument("--user-agent", default=None, help='Default is an honest hardly UA; "browser" or a custom string')
     crawl_p.add_argument("--yes", action="store_true", help="Confirm live requests")
     crawl_p.set_defaults(func=cmd_crawl)
 
