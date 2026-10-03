@@ -1081,6 +1081,31 @@ def hardly_recipe_plan(
 
 
 @mcp.tool
+def hardly_find_search(
+    session_id: str,
+    host: str | None = None,
+    keywords: list[str] | None = None,
+    limit: int = 15,
+) -> str:
+    """Rank links likely to lead to a search/lookup page.
+
+    Generic signals (search, lookup, find, viewer...) plus optional caller
+    ``keywords`` for the site's domain vocabulary. Returns candidates and a
+    ready ``next_step`` click for hardly_capture_recipe; repeat per hop until
+    a form with input fields appears.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.search_nav import find_search_entry
+
+    return _ok(
+        find_search_entry(conn, host=host, keywords=keywords or [], limit=min(limit, 40))
+    )
+
+
+@mcp.tool
 def hardly_redirects(
     session_id: str,
     host: str | None = None,

@@ -430,6 +430,22 @@ def cmd_diff(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_find_search(args: argparse.Namespace) -> int:
+    from hardly.core.search_nav import find_search_entry
+
+    result = sess.open_har(args.har)
+    if "error" in result:
+        _print(result)
+        return 1
+    conn = sess.require_conn(result["session_id"])
+    _print(
+        find_search_entry(
+            conn, host=args.host, keywords=args.keyword or [], limit=args.limit
+        )
+    )
+    return 0
+
+
 def cmd_recipe_plan(args: argparse.Namespace) -> int:
     from hardly.core.recipe_plan import recipe_from_story
 
@@ -1414,6 +1430,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip credentials/session map diff",
     )
     diff_p.set_defaults(func=cmd_diff)
+
+    find_search_p = sub.add_parser(
+        "find-search",
+        help="Rank links likely to lead to a search page in a capture",
+    )
+    find_search_p.add_argument("har")
+    find_search_p.add_argument("--host")
+    find_search_p.add_argument(
+        "--keyword", action="append", help="Domain term to boost (repeatable)"
+    )
+    find_search_p.add_argument("--limit", type=int, default=15)
+    find_search_p.set_defaults(func=cmd_find_search)
 
     recipe_plan_p = sub.add_parser(
         "recipe-plan",

@@ -68,6 +68,8 @@ Prefer MCP/CLI helpers over reading the HAR:
 5. Missing detail URL: `hardly_routes` + `handler_functions`, then
    `hardly_tree(entry_id=…)` / `hardly_around(entry_id=…)`. GraphQL:
    `hardly_graphql`. Param drift: `hardly_params`
+5b. Landing page, no search form yet: `hardly_find_search(keywords=[...])`
+   ranks links (generic signals + your domain terms) and returns a `next_step` click for the next headless hop
 6. Client sketch: `hardly_stub`; next capture: `hardly_recipe_plan`
 7. After a capture: `hardly_wall` (Akamai/CF), `hardly_issues` /
    `hardly_coverage` if bodies look empty; `hardly_slow` /
