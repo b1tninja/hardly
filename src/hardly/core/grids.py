@@ -261,3 +261,120 @@ def _top_keys(text: str) -> frozenset[str]:
     if isinstance(data, list) and data and isinstance(data[0], dict):
         return frozenset({"__list__"})
     return frozenset()
+
+
+# --- paging helpers for generated stubs ---------------------------------------
+# (style, offset-ish name, size-ish name, offset alone is enough)
+_OFFSET_SIZE: tuple[tuple[str, str, str, bool], ...] = (
+    ("datatables-server", "start", "length", False),
+    ("solr-es", "start", "rows", False),
+    ("kendo", "skip", "take", True),
+    ("odata", "$skip", "$top", True),
+    ("arcgis", "resultOffset", "resultRecordCount", True),
+    ("offset-limit", "offset", "limit", True),
+)
+_PAGE_NAMES = ("page", "pagenumber", "page_number", "pageindex", "pageno")
+_SIZE_NAMES = ("per_page", "perpage", "pagesize", "page_size", "size", "limit", "rows")
+_POSTBACK_PAGE = re.compile(r"^Page\$(\d+)$")
+
+
+def paging_params(params: dict[str, str]) -> dict[str, Any] | None:
+    """Paging config for ``iter_pages`` from request parameters, else None.
+
+    Only parameter names and small integers (page/offset/size) are returned.
+    """
+    lower = {k.lower(): k for k in params}
+
+    def num(name: str | None) -> int | None:
+        v = params.get(name or "", "")
+        return int(v) if isinstance(v, str) and v.isdigit() and len(v) < 7 else None
+
+    arg = params.get("__EVENTARGUMENT", "")
+    m = _POSTBACK_PAGE.match(arg) if isinstance(arg, str) else None
+    if m:
+        return {"style": "webforms-postback", "page_param": "__EVENTARGUMENT",
+                "value_fmt": "Page${n}", "first": int(m.group(1)), "size": None}
+    for style, off, size, alone in _OFFSET_SIZE:
+        if off in params and (size in params or alone):
+            return {"style": style, "offset_param": off,
+                    "size_param": size if size in params else None,
+                    "first": num(off) or 0, "size": num(size)}
+    page = next((lower[p] for p in _PAGE_NAMES if p in lower), None)
+    if page:
+        size = next((lower[s] for s in _SIZE_NAMES if s in lower), None)
+        first = num(page)
+        return {"style": "page-number", "page_param": page, "size_param": size,
+                "first": 1 if first is None else first, "size": num(size)}
+    return None
+
+
+def count_rows(body):
+    """Row count of a page body (JSON list / HTML table), None when unknown."""
+    import json
+    import re
+
+    text = (body or "").strip()
+    if not text:
+        return 0
+    if re.match(r"^\d+\|\w*\|", text):
+        return None
+    if text[:1] in "{[":
+        try:
+            data = json.loads(text)
+        except ValueError:
+            return None
+        if isinstance(data, dict) and isinstance(data.get("d"), str):
+            try:
+                data = json.loads(data["d"])
+            except ValueError:
+                pass
+        if isinstance(data, dict) and isinstance(data.get("d"), (dict, list)):
+            data = data["d"]
+        if isinstance(data, list):
+            return len(data)
+        if isinstance(data, dict):
+            for key in ("data", "rows", "results", "items", "content", "Data",
+                        "value", "features", "records", "hits", "edges"):
+                if isinstance(data.get(key), list):
+                    return len(data[key])
+                if isinstance(data.get(key), dict):
+                    for sub in data[key].values():
+                        if isinstance(sub, list):
+                            return len(sub)
+            for val in data.values():
+                if isinstance(val, list):
+                    return len(val)
+        return None
+    trs = len(re.findall(r"<tr[\s>]", text, re.I))
+    return max(0, trs - 1) if trs else None
+
+
+def iter_pages(fetch, *, page_param=None, offset_param=None, size_param=None,
+               first=None, size=None, value_fmt=None, max_pages=200):
+    """Yield page bodies from ``fetch(params)`` until empty, short or repeated."""
+    if not page_param and not offset_param:
+        raise ValueError("need page_param or offset_param")
+    n = int(first) if first is not None else (1 if page_param else 0)
+    seen = set()
+    for _ in range(max_pages):
+        params = {}
+        if size_param and size is not None:
+            params[size_param] = str(size)
+        key = page_param or offset_param
+        params[key] = value_fmt.format(n=n) if value_fmt else str(n)
+        body = fetch(params)
+        rows = count_rows(body)
+        if not body or rows == 0 or hash(body) in seen:
+            return
+        seen.add(hash(body))
+        yield body
+        if size is not None and rows is not None and rows < int(size):
+            return
+        n += 1 if page_param else int(size if size is not None else (rows or 1))
+
+
+def paging_helper_source() -> str:
+    """Source of the run-time paging helpers embedded in generated stubs."""
+    import inspect
+
+    return "\n\n\n".join(inspect.getsource(f) for f in (count_rows, iter_pages))
