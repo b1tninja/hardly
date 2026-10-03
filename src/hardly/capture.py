@@ -24,6 +24,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from hardly.core.browser_detect import (
+    expected_chromium_build,
+    pick_executable,
+    pin_hint,
+    scan_chromium_builds,
+)
+from hardly.core.capture_errors import TRANSIENT_NAV, with_error_class
+from hardly.core.slots import SlotTimeoutError, acquire_slot, capture_slot
 from hardly.session import resolve_path
 
 _BANNER_JS = """
@@ -94,6 +102,16 @@ _SAME_TAB_JS = """
 class CaptureError(RuntimeError):
     """Browser capture failed or Playwright is not installed."""
 
+    @property
+    def classification(self) -> dict[str, Any]:
+        from hardly.core.capture_errors import classify_capture_error
+
+        return classify_capture_error(str(self))
+
+    def to_dict(self) -> dict[str, Any]:
+        """Error dict with ``error_class`` / ``error_advice`` for tool results."""
+        return with_error_class({"status": "error", "error": str(self)})
+
 
 @dataclass
 class CaptureHandle:
@@ -143,7 +161,16 @@ def playwright_status() -> dict[str, Any]:
         },
         "env": {
             "HARDLY_BROWSER_CHANNEL": default_channel() or None,
+            "HARDLY_BROWSER_EXECUTABLE": (
+                os.environ.get("HARDLY_BROWSER_EXECUTABLE") or None
+            ),
         },
+        "installed_builds": [],
+        "expected_build": None,
+        "mismatch": False,
+        "suggested_executable": None,
+        "browser_executable_source": None,
+        "pin_hint": None,
         "install": [
             'pip install -e ".[capture]"',
             "playwright install chromium",
@@ -196,23 +223,32 @@ def playwright_status() -> dict[str, Any]:
             "Try: playwright install chromium"
         )
         out["browsers"] = browsers
+        _annotate_browser_detection(out, chromium_ok=False, channel=default_channel())
         return out
 
     out["browsers"] = browsers
     chromium_ok = bool((browsers.get("chromium") or {}).get("installed"))
     channel = default_channel()
-    # channel=chrome uses system Chrome — no playwright browser download needed
-    executable = default_executable()
-    out["browser_executable"] = executable or None
-    out["ready"] = chromium_ok or bool(channel) or bool(executable)
+    _annotate_browser_detection(out, chromium_ok=chromium_ok, channel=channel)
+    exe_override = bool(out.get("browser_executable_source") in ("env", "autodetect"))
+    exe_ok = exe_override and bool(out.get("suggested_executable"))
+    # channel=chrome uses system Chrome - no playwright browser download needed
+    out["ready"] = chromium_ok or bool(channel) or exe_ok
+    out["browser_executable"] = out["suggested_executable"] if exe_ok else None
     if not out["ready"]:
         out["hint"] = (
             "Chromium browser binary missing. Run: playwright install chromium "
             "(or set HARDLY_BROWSER_CHANNEL=chrome to use system Chrome, or "
             "HARDLY_BROWSER_EXECUTABLE=/path/to/chromium)"
         )
-    elif executable and not chromium_ok:
-        out["hint"] = f"Ready (executable={executable})."
+        if out.get("pin_hint"):
+            out["hint"] += f" {out['pin_hint']}"
+    elif exe_ok and not chromium_ok and not channel:
+        out["hint"] = (
+            f"Ready via {out['browser_executable_source']} executable "
+            f"{out['suggested_executable']}."
+            + (" Playwright build mismatch: " + out["pin_hint"] if out.get("mismatch") and out.get("pin_hint") else "")
+        )
     elif channel:
         out["hint"] = (
             f"Ready (channel={channel}). Prefer channel=chrome for Akamai / bot walls."
@@ -223,6 +259,36 @@ def playwright_status() -> dict[str, Any]:
             "channel=chrome (system Chrome)."
         )
     return out
+
+
+def _annotate_browser_detection(
+    out: dict[str, Any], *, chromium_ok: bool, channel: str
+) -> None:
+    """Fill installed_builds / expected_build / mismatch / source fields."""
+    builds = scan_chromium_builds()
+    out["installed_builds"] = [
+        {"build": b["build"], "kind": b["kind"], "path": b["path"]} for b in builds
+    ]
+    own = (out.get("browsers", {}).get("chromium") or {}).get("executable")
+    expected = expected_chromium_build(own)
+    out["expected_build"] = expected
+    have = {str(b["build"]) for b in builds}
+    out["mismatch"] = bool(builds) and (expected not in have) and not chromium_ok
+    picked = pick_executable(builds, headless=True)
+    out["suggested_executable"] = picked["path"] if picked else None
+    out["pin_hint"] = pin_hint(builds, expected) if (builds and out["mismatch"]) else None
+    env_exe = (os.environ.get("HARDLY_BROWSER_EXECUTABLE") or "").strip()
+    if env_exe and Path(env_exe).expanduser().is_file():
+        out["browser_executable_source"] = "env"
+        out["suggested_executable"] = env_exe
+    elif channel:
+        out["browser_executable_source"] = "channel"
+    elif chromium_ok:
+        out["browser_executable_source"] = "playwright"
+    elif picked and not env_exe:
+        out["browser_executable_source"] = "autodetect"
+    else:
+        out["browser_executable_source"] = "playwright"
 
 
 def require_playwright(*, need_browser: bool = True) -> dict[str, Any]:
@@ -257,14 +323,91 @@ def default_channel() -> str:
     return (os.environ.get("HARDLY_BROWSER_CHANNEL") or "").strip()
 
 
-def default_executable() -> str:
-    """Chromium binary to launch instead of Playwright's own download.
+# Navigation errors worth another try (list lives in core.capture_errors).
+_TRANSIENT_NAV = TRANSIENT_NAV
 
-    Set ``HARDLY_BROWSER_EXECUTABLE`` when the preinstalled browser build does
-    not match the installed Playwright version (common in managed containers).
+
+def _sync_playwright() -> Any:
+    from playwright.sync_api import sync_playwright
+
+    return sync_playwright()
+
+
+def _playwright_expected_path() -> str | None:
+    """Path Playwright's own chromium would use (starts the driver once)."""
+    try:
+        with _sync_playwright() as pw:
+            return str(pw.chromium.executable_path)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def resolve_browser_executable(
+    *,
+    channel: str = "",
+    headless: bool = True,
+    playwright_path: str | None = None,
+) -> dict[str, Any]:
+    """Decide which browser binary to launch.
+
+    Returns ``{"executable": str | None, "source": env|autodetect|playwright|channel}``.
+    ``executable`` is None when Playwright should pick its own (channel or
+    bundled chromium). Precedence: HARDLY_BROWSER_EXECUTABLE, channel,
+    Playwright's bundled chromium when present, then on-disk autodetect.
     """
-    path = (os.environ.get("HARDLY_BROWSER_EXECUTABLE") or "").strip()
-    return path if path and Path(path).is_file() else ""
+    env_exe = (os.environ.get("HARDLY_BROWSER_EXECUTABLE") or "").strip()
+    if env_exe and Path(env_exe).expanduser().is_file():
+        return {"executable": str(Path(env_exe).expanduser()), "source": "env"}
+    if env_exe:
+        # Explicit but missing: do not silently autodetect; doctor reports it.
+        return {"executable": None, "source": "playwright", "env_missing": env_exe}
+    if (channel or default_channel()).strip():
+        return {"executable": None, "source": "channel"}
+    if playwright_path is None:
+        playwright_path = _playwright_expected_path()
+    if playwright_path and Path(str(playwright_path)).is_file():
+        return {"executable": None, "source": "playwright"}
+    picked = pick_executable(scan_chromium_builds(), headless=headless)
+    if picked:
+        return {"executable": picked["path"], "source": "autodetect", "build": picked["build"]}
+    return {"executable": None, "source": "playwright"}
+
+
+def default_executable(
+    *, channel: str = "", headless: bool = True, playwright_path: str | None = None
+) -> str:
+    """Chromium executable to pass to Playwright, or '' to let Playwright choose.
+
+    Uses HARDLY_BROWSER_EXECUTABLE when set; otherwise, when Playwright's own
+    chromium is missing, scans PLAYWRIGHT_BROWSERS_PATH, /opt/pw-browsers and
+    ~/.cache/ms-playwright for a usable build.
+    """
+    return (
+        resolve_browser_executable(
+            channel=channel, headless=headless, playwright_path=playwright_path
+        ).get("executable")
+        or ""
+    )
+
+
+def apply_executable(
+    launch_kwargs: dict[str, Any],
+    playwright: Any,
+    *,
+    channel: str,
+    headless: bool,
+) -> str:
+    """Add ``executable_path`` to launch kwargs when needed; return the source."""
+    try:
+        pw_path: str | None = str(playwright.chromium.executable_path)
+    except Exception:  # noqa: BLE001
+        pw_path = ""
+    info = resolve_browser_executable(
+        channel=channel, headless=headless, playwright_path=pw_path or ""
+    )
+    if info.get("executable"):
+        launch_kwargs["executable_path"] = info["executable"]
+    return str(info["source"])
 
 
 def start_capture(
@@ -282,8 +425,12 @@ def start_capture(
     show_banner: bool = True,
     same_tab: bool = True,
     trace: bool | None = None,
+    slot_timeout_s: float | None = None,
 ) -> dict[str, Any]:
     """Launch Chromium with HAR recording in a durable subprocess.
+
+    Waits for a capture slot first (``HARDLY_CAPTURE_SLOTS``); the worker
+    process holds the slot until it exits.
 
     ``same_tab`` (default True) rewrites ``target=_blank`` / ``window.open``
     into the current tab. Popups in the same Playwright context are still
@@ -297,6 +444,52 @@ def start_capture(
     label_key = (label or _host_label(url) or "capture").strip()
     target = resolve_path(har_path) if har_path else default_har_path(label_key)
     target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        slot_handle = acquire_slot(slot_timeout_s)
+    except SlotTimeoutError as exc:
+        raise _classified(CaptureError(str(exc))) from exc
+    try:
+        return _start_capture_locked(
+            slot_handle,
+            url,
+            target,
+            label_key,
+            headed=headed,
+            channel=channel,
+            url_filter=url_filter,
+            omit_content=omit_content,
+            viewport_width=viewport_width,
+            viewport_height=viewport_height,
+            user_data_dir=user_data_dir,
+            show_banner=show_banner,
+            same_tab=same_tab,
+            trace=trace,
+        )
+    except BaseException:
+        slot_handle.release()
+        raise
+    finally:
+        # The worker inherited the descriptor; our copy is no longer needed.
+        slot_handle.close_fd()
+
+
+def _start_capture_locked(
+    slot_handle: Any,
+    url: str,
+    target: Path,
+    label_key: str,
+    *,
+    headed: bool,
+    channel: str,
+    url_filter: str,
+    omit_content: bool,
+    viewport_width: int,
+    viewport_height: int,
+    user_data_dir: str | Path | None,
+    show_banner: bool,
+    same_tab: bool,
+    trace: bool | None,
+) -> dict[str, Any]:
     if target.exists():
         target.unlink()
 
@@ -328,6 +521,7 @@ def start_capture(
         "same_tab": same_tab,
         "trace": bool(trace),
         "started_at": started_at,
+        "slot": {k: slot_handle.info[k] for k in ("waited_s", "queue_depth", "slot")},
     }
     job_path = active_dir() / f"{capture_id}.job.json"
     job_path.write_text(json.dumps(job, indent=2) + "\n", encoding="utf-8")
@@ -355,6 +549,7 @@ def start_capture(
             "har_bytes": 0,
             "pid": None,
             "pages": 0,
+            "slot": job["slot"],
         },
     )
 
@@ -371,6 +566,11 @@ def start_capture(
             stderr=subprocess.STDOUT,
             creationflags=creationflags,
             close_fds=False if sys.platform == "win32" else True,
+            **(
+                {"pass_fds": [slot_handle.fd]}
+                if slot_handle.fd is not None and sys.platform != "win32"
+                else {}
+            ),
         )
     except OSError as exc:
         log_handle.close()
@@ -392,16 +592,18 @@ def start_capture(
                     tail = log_path.read_text(encoding="utf-8")[-500:]
                 except OSError:
                     pass
-                raise CaptureError(
-                    row.get("error")
-                    or f"capture worker exited early (code={proc.returncode}): {tail}"
+                raise _classified(
+                    CaptureError(
+                        row.get("error")
+                        or f"capture worker exited early (code={proc.returncode}): {tail}"
+                    )
                 )
             break
         time.sleep(0.1)
 
     row = row or _load_sidecar(capture_id) or {}
     if row.get("status") == "error":
-        raise CaptureError(str(row.get("error") or "capture failed"))
+        raise _classified(CaptureError(str(row.get("error") or "capture failed")))
     if row.get("status") == "starting":
         raise CaptureError(
             "capture did not become ready in time; see "
@@ -503,6 +705,11 @@ def stop_capture(
     har = Path(str(result.get("har_path") or ""))
     result["har_exists"] = har.is_file()
     result["har_bytes"] = har.stat().st_size if har.is_file() else 0
+    if result.get("status") == "stopped" and not har.is_file():
+        # Never report success for a capture that produced no HAR.
+        result["status"] = "error"
+        result["error"] = result.get("error") or "capture finished but no HAR was written"
+    with_error_class(result)
     if result.get("entry_count_hint") is None and har.is_file():
         result["entry_count_hint"] = _count_har_entries(har)
 
@@ -743,8 +950,12 @@ def run_capture_recipe(
     *,
     capture_id: str | None = None,
     stop_on_error: bool = True,
+    deadline: float | None = None,
 ) -> dict[str, Any]:
     """Run a sequence of capture ops against the live browser.
+
+    ``deadline`` (``time.monotonic()`` instant) skips remaining steps once
+    passed; the result then carries ``skipped_steps``.
 
     Each step is ``{"op": "click"|"fill"|"goto"|"wait"|"elements"|"press"|"url",
     ...}``. ``wait`` takes ``ms`` (default 1000). Other ops mirror the
@@ -757,6 +968,14 @@ def run_capture_recipe(
         raise CaptureError("no running capture")
     results: list[dict[str, Any]] = []
     for i, raw in enumerate(steps):
+        if deadline is not None and time.monotonic() >= deadline:
+            return {
+                "capture_id": cid,
+                "completed": len(results),
+                "stopped_on_error": False,
+                "steps": results,
+                "skipped_steps": len(steps) - i,
+            }
         if not isinstance(raw, dict):
             raise CaptureError(f"step {i} must be an object")
         op = str(raw.get("op") or "").strip().lower()
@@ -835,6 +1054,7 @@ def run_capture_recipe(
         except CaptureError as exc:
             step_out["ok"] = False
             step_out["error"] = str(exc)
+            with_error_class(step_out)
             results.append(step_out)
             if stop_on_error:
                 return {
@@ -946,6 +1166,8 @@ def capture_for(
     open_session: bool = True,
     same_tab: bool = True,
     trace: bool | None = None,
+    budget_seconds: float | None = None,
+    block_noise: bool = False,
 ) -> dict[str, Any]:
     # Headless one-shots prefer in-process capture (no subprocess stop race).
     if not headed and not (os.environ.get("HARDLY_CAPTURE_SUBPROCESS") or "").strip():
@@ -960,6 +1182,8 @@ def capture_for(
             label=label,
             open_session=open_session,
             same_tab=same_tab,
+            budget_seconds=budget_seconds,
+            block_noise=block_noise,
         )
     info = start_capture(
         url,
@@ -993,8 +1217,17 @@ def capture_headless(
     open_session: bool = True,
     same_tab: bool = True,
     brief: bool = False,
+    budget_seconds: float | None = None,
+    block_noise: bool = False,
+    slot_timeout_s: float | None = None,
 ) -> dict[str, Any]:
     """In-process headless HAR capture for soak / unit tests.
+
+    Waits for a cross-process capture slot (``HARDLY_CAPTURE_SLOTS``), then
+    runs. ``budget_seconds`` (env ``HARDLY_CAPTURE_BUDGET``) is a hard wall
+    budget measured from slot acquisition: once exceeded, remaining recipe
+    steps and the settle wait are skipped but the HAR is still written.
+    ``block_noise`` aborts analytics/ads/font/map-tile/heavy-media requests.
 
     Unlike ``start_capture`` (subprocess worker for interactive MCP use), this
     runs Playwright in the current process, flushes the HAR on context close,
@@ -1016,85 +1249,121 @@ def capture_headless(
     recipe_result: dict[str, Any] | None = None
     started_at = time.time()
 
-    from playwright.sync_api import sync_playwright
+    budget_limit = resolve_budget(budget_seconds)
+    blocker = None
+    if block_noise:
+        from hardly.core.noise_hosts import NoiseBlocker
 
-    with sync_playwright() as playwright:
-        launch_kwargs: dict[str, Any] = {"headless": True}
-        if use_channel:
-            launch_kwargs["channel"] = use_channel
-        elif default_executable():
-            launch_kwargs["executable_path"] = default_executable()
-        context_kwargs: dict[str, Any] = {
-            "record_har_path": str(target),
-            "record_har_mode": "full",
-            "record_har_content": "omit" if omit_content else "embed",
-            "viewport": {"width": 1280, "height": 900},
-            "ignore_https_errors": True,
-        }
-        if url_filter:
-            context_kwargs["record_har_url_filter"] = url_filter
+        blocker = NoiseBlocker()
+    try:
+        slot_cm = capture_slot(slot_timeout_s)
+        slot = slot_cm.__enter__()
+    except SlotTimeoutError as exc:
+        raise CaptureError(str(exc)) from exc
+    exe_source = ""
+    t0 = time.monotonic()
+    deadline = t0 + budget_limit if budget_limit else None
+    try:
+        with _sync_playwright() as playwright:
+            launch_kwargs: dict[str, Any] = {"headless": True}
+            if use_channel:
+                launch_kwargs["channel"] = use_channel
+            exe_source = apply_executable(
+                launch_kwargs, playwright, channel=use_channel, headless=True
+            )
+            context_kwargs: dict[str, Any] = {
+                "record_har_path": str(target),
+                "record_har_mode": "full",
+                "record_har_content": "omit" if omit_content else "embed",
+                "viewport": {"width": 1280, "height": 900},
+                "ignore_https_errors": True,
+            }
+            if url_filter:
+                context_kwargs["record_har_url_filter"] = url_filter
 
-        browser = playwright.chromium.launch(**launch_kwargs)
-        try:
-            context = browser.new_context(**context_kwargs)
-            if same_tab:
-                context.add_init_script(_SAME_TAB_JS)
-            if not omit_content:
-                from hardly.core.har_bodies import interesting_mime, shape_body
-
-                def on_response(response: Any) -> None:
-                    try:
-                        mime = (response.headers or {}).get("content-type") or ""
-                        if not interesting_mime(mime):
-                            return
-                        text = response.text()
-                        if not text:
-                            return
-                        body_sidecar.append(
-                            {
-                                "method": response.request.method,
-                                "url": response.url,
-                                "status": response.status,
-                                "mime": mime,
-                                "text": shape_body(text),
-                            }
-                        )
-                    except Exception:  # noqa: BLE001
-                        return
-
-                context.on("response", on_response)
-
-            page = context.new_page()
-            goto_error: str | None = None
+            browser = playwright.chromium.launch(**launch_kwargs)
             try:
-                if target_url and target_url != "about:blank":
-                    _goto_with_retry(page, target_url)
-                elif target_url == "about:blank":
-                    page.goto("about:blank")
-            except Exception as exc:  # noqa: BLE001
-                # API roots that return 204 / abort navigation still allow
-                # recipe fetch/evaluate against absolute URLs.
-                goto_error = str(exc)
-                if not recipe:
-                    raise CaptureError(goto_error) from exc
+                context = browser.new_context(**context_kwargs)
+                if blocker is not None:
+                    blocker.install(context)
+                if same_tab:
+                    context.add_init_script(_SAME_TAB_JS)
+                if not omit_content:
+                    from hardly.core.har_bodies import interesting_mime, shape_body
+
+                    def on_response(response: Any) -> None:
+                        try:
+                            mime = (response.headers or {}).get("content-type") or ""
+                            if not interesting_mime(mime):
+                                return
+                            text = response.text()
+                            if not text:
+                                return
+                            body_sidecar.append(
+                                {
+                                    "method": response.request.method,
+                                    "url": response.url,
+                                    "status": response.status,
+                                    "mime": mime,
+                                    "text": shape_body(text),
+                                }
+                            )
+                        except Exception:  # noqa: BLE001
+                            return
+
+                    context.on("response", on_response)
+
+                page = context.new_page()
+                goto_error: str | None = None
+                goto_timeout = 60_000
+                if deadline is not None:
+                    goto_timeout = int(
+                        min(60_000, max(1_000, (deadline - time.monotonic()) * 1000))
+                    )
                 try:
-                    page.goto("about:blank")
-                except Exception:  # noqa: BLE001
-                    pass
-            if recipe:
-                recipe_result = _run_inprocess_recipe(page, recipe)
-                if goto_error:
-                    recipe_result = {
-                        **(recipe_result or {}),
-                        "goto_error": goto_error,
-                        "goto_recovered": True,
-                    }
-            settle_ms = int(max(0.0, float(wait_seconds)) * 1000)
-            if settle_ms:
-                page.wait_for_timeout(min(settle_ms, 60_000))
-            context.close()  # flushes HAR
-        finally:
-            browser.close()
+                    if target_url and target_url != "about:blank":
+                        _goto_with_retry(page, target_url, timeout=goto_timeout)
+                    elif target_url == "about:blank":
+                        page.goto("about:blank")
+                except Exception as exc:  # noqa: BLE001
+                    # API roots that return 204 / abort navigation still allow
+                    # recipe fetch/evaluate against absolute URLs.
+                    goto_error = str(exc)
+                    if not recipe:
+                        raise CaptureError(goto_error) from exc
+                    try:
+                        page.goto("about:blank")
+                    except Exception:  # noqa: BLE001
+                        pass
+                if recipe:
+                    recipe_result = _run_inprocess_recipe(
+                        page, recipe, deadline=deadline
+                    )
+                    if goto_error:
+                        recipe_result = {
+                            **(recipe_result or {}),
+                            "goto_error": goto_error,
+                            "goto_recovered": True,
+                            **{
+                                k.replace("error_", "goto_error_"): v
+                                for k, v in with_error_class({"error": goto_error}).items()
+                                if k != "error"
+                            },
+                        }
+                settle_ms = int(max(0.0, float(wait_seconds)) * 1000)
+                if deadline is not None:
+                    settle_ms = min(
+                        settle_ms, int(max(0.0, deadline - time.monotonic()) * 1000)
+                    )
+                if settle_ms:
+                    page.wait_for_timeout(min(settle_ms, 60_000))
+                context.close()  # flushes HAR
+            finally:
+                browser.close()
+    except CaptureError as exc:
+        raise _classified(exc) from exc
+    finally:
+        slot_cm.__exit__(None, None, None)
 
     bodies_filled = 0
     if body_sidecar and target.is_file():
@@ -1125,9 +1394,23 @@ def capture_headless(
             "recipe": recipe_result,
             "inprocess": True,
         },
+        "slot": {k: slot[k] for k in ("waited_s", "queue_depth", "slot")},
+        "browser_executable_source": exe_source or None,
     }
+    if budget_limit:
+        used = round(time.monotonic() - t0, 3)
+        out["budget"] = {
+            "limit_s": budget_limit,
+            "used_s": used,
+            "exceeded": used >= budget_limit,
+            "skipped_steps": int((recipe_result or {}).get("skipped_steps") or 0),
+        }
+    if blocker is not None:
+        out.update(blocker.summary())
     if out["status"] != "stopped":
-        out["error"] = "HAR was not written"
+        out["error"] = "capture finished but no HAR was written"
+        out["har_exists"] = False
+        with_error_class(out)
         return out
 
     if open_session:
@@ -1149,11 +1432,24 @@ def capture_headless(
     return out
 
 
-_TRANSIENT_NAV = (
-    "ERR_TOO_MANY_RETRIES", "ERR_CONNECTION_RESET", "ERR_CONNECTION_CLOSED",
-    "ERR_EMPTY_RESPONSE", "ERR_NETWORK_CHANGED", "ERR_HTTP2_PROTOCOL_ERROR",
-    "ERR_SOCKET_NOT_CONNECTED", "is interrupted by another navigation",
-)
+def resolve_budget(budget_seconds: float | None) -> float:
+    """Effective per-call budget in seconds (0 = none); env HARDLY_CAPTURE_BUDGET."""
+    if budget_seconds is None:
+        raw = (os.environ.get("HARDLY_CAPTURE_BUDGET") or "").strip()
+        try:
+            budget_seconds = float(raw) if raw else 0.0
+        except ValueError:
+            budget_seconds = 0.0
+    return max(0.0, float(budget_seconds or 0.0))
+
+
+def _classified(exc: CaptureError) -> CaptureError:
+    """Attach error_class/advice text to a CaptureError message (once)."""
+    msg = str(exc)
+    if "[error_class=" in msg:
+        return exc
+    info = exc.classification
+    return CaptureError(f"{msg} [error_class={info['class']}] {info['advice']}")
 
 
 def _goto_with_retry(
@@ -1298,10 +1594,20 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
     return {"reached": form is not None, "form": form, "hops": hops, "url": page.url}
 
 
-def _run_inprocess_recipe(page: Any, steps: list[dict[str, Any]]) -> dict[str, Any]:
-    """Minimal recipe runner for in-process headless capture (goto/wait/click/fill)."""
+def _run_inprocess_recipe(
+    page: Any, steps: list[dict[str, Any]], *, deadline: float | None = None
+) -> dict[str, Any]:
+    """Minimal recipe runner for in-process headless capture (goto/wait/click/fill).
+
+    ``deadline`` is a ``time.monotonic()`` instant; once passed, remaining
+    steps are skipped (counted in ``skipped_steps``).
+    """
     results: list[dict[str, Any]] = []
-    for raw in steps:
+    skipped = 0
+    for idx, raw in enumerate(steps):
+        if deadline is not None and time.monotonic() >= deadline:
+            skipped = len(steps) - idx
+            break
         if not isinstance(raw, dict):
             results.append({"ok": False, "error": "step must be an object"})
             continue
@@ -1392,12 +1698,16 @@ def _run_inprocess_recipe(page: Any, steps: list[dict[str, Any]]) -> dict[str, A
         except Exception as exc:  # noqa: BLE001
             step_out["ok"] = False
             step_out["error"] = str(exc)
+            with_error_class(step_out)
         results.append(step_out)
-    return {
+    out: dict[str, Any] = {
         "steps": results,
-        "ok": all(s.get("ok") for s in results),
+        "ok": all(s.get("ok") for s in results) and not skipped,
         "step_count": len(results),
     }
+    if skipped:
+        out["skipped_steps"] = skipped
+    return out
 
 
 def discover_apis(
@@ -1414,6 +1724,8 @@ def discover_apis(
     brief: bool = True,
     same_tab: bool = True,
     trace: bool | None = None,
+    budget_seconds: float | None = None,
+    block_noise: bool = False,
 ) -> dict[str, Any]:
     """Headless mode: load URL, optional recipe, stop, open session, brief.
 
@@ -1460,6 +1772,8 @@ def discover_apis(
             open_session=open_session,
             same_tab=same_tab,
             brief=brief,
+            budget_seconds=budget_seconds,
+            block_noise=block_noise,
         )
         session_id = out.get("session_id")
         if brief and session_id and open_session and "brief" in out:

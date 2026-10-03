@@ -75,7 +75,12 @@ def run_job(job: dict) -> int:
             "pid": __import__("os").getpid(),
             "pages": 0,
         }
+        payload["slot"] = job.get("slot")
         payload.update(extra)
+        if payload.get("error"):
+            from hardly.core.capture_errors import with_error_class
+
+            with_error_class(payload)
         payload["har_exists"] = har_path.is_file()
         payload["har_bytes"] = har_path.stat().st_size if har_path.is_file() else 0
         _persist_payload(capture_id, payload)
@@ -107,11 +112,12 @@ def run_job(job: dict) -> int:
             launch_kwargs: dict = {"headless": not headed}
             if channel:
                 launch_kwargs["channel"] = channel
-            else:
-                from hardly.capture import default_executable
+            from hardly.capture import apply_executable
 
-                if default_executable():
-                    launch_kwargs["executable_path"] = default_executable()
+            exe_source = apply_executable(
+                launch_kwargs, playwright, channel=channel, headless=not headed
+            )
+            publish(browser_executable_source=exe_source)
 
             context_kwargs: dict = {
                 "record_har_path": str(har_path),
