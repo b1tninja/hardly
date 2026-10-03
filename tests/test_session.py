@@ -157,5 +157,29 @@ def test_stale_index_version_is_rebuilt(tmp_path, monkeypatch):
     assert meta["index_version"] >= 3
     meta["index_version"] = 1
     meta_path.write_text(_json.dumps(meta))
-    sess._sessions.pop(info["session_id"], None)
+    sess.close_session(info["session_id"])
     assert sess.open_har(FIXTURE).get("cached") is False
+
+
+def test_previous_connection_is_closed_before_reingest(tmp_path, monkeypatch):
+    """Ingest deletes the db file; on Windows that fails while the old connection is open."""
+    import sqlite3
+
+    monkeypatch.setattr(sess, "cache_dir", lambda: tmp_path / "cache")
+    info = sess.open_har(FIXTURE, force=True)
+    old_conn = sess._sessions[info["session_id"]]["conn"]
+    seen = {}
+    real_ingest = sess.ingest_har
+
+    def checking_ingest(har_path, db_path):
+        try:
+            old_conn.execute("SELECT 1")
+            seen["closed"] = False
+        except sqlite3.ProgrammingError:
+            seen["closed"] = True
+        return real_ingest(har_path, db_path)
+
+    monkeypatch.setattr(sess, "ingest_har", checking_ingest)
+    sess.open_har(FIXTURE, force=True)
+    assert seen == {"closed": True}
+    sess.close_session(info["session_id"])

@@ -134,6 +134,14 @@ def open_har(har_path: str | Path, *, force: bool = False) -> dict:
             except (OSError, json.JSONDecodeError):
                 need_ingest = True
 
+        # Close the previous connection first: ingest deletes the database file,
+        # which fails on Windows while a connection to it is still open.
+        if sid in _sessions:
+            try:
+                _sessions[sid]["conn"].close()
+            except sqlite3.Error:
+                pass
+
         if need_ingest:
             stats = ingest_har(path, db_path)
             meta_path.write_text(json.dumps(stats, indent=2), encoding="utf-8")
@@ -141,13 +149,6 @@ def open_har(har_path: str | Path, *, force: bool = False) -> dict:
         else:
             stats = json.loads(meta_path.read_text(encoding="utf-8"))
             cached = True
-
-        # Close previous connection if reopening
-        if sid in _sessions:
-            try:
-                _sessions[sid]["conn"].close()
-            except sqlite3.Error:
-                pass
 
         conn = connect(str(db_path))
         _sessions[sid] = {
