@@ -32,6 +32,8 @@ def test_cli_has_core_analysis_commands():
         "sessions",
         "brief",
         "help-tools",
+        "modes",
+        "capabilities",
     ):
         assert name in choices, name
 

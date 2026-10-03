@@ -14,9 +14,14 @@ def test_help_catalog_and_topic():
     all_help = tool_help()
     assert all_help["tool_count"] >= 40
     assert any(c["id"] == "portal" for c in all_help["categories"])
+    assert any(c["id"] == "modes" for c in all_help["categories"])
+    names = {w["name"] for w in all_help["workflows"]}
+    assert {"archive", "headless", "interactive"} <= names
     portal = tool_help("portal")
     tools = {t for c in portal["categories"] for t in c["tools"]}
     assert "hardly_brief" in tools
+    archive = tool_help("archive")
+    assert archive.get("playbook", {}).get("mode") == "archive"
 
 
 def test_openapi_security_schemes(tmp_path, monkeypatch):

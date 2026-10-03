@@ -11,6 +11,24 @@ Browser HAR captures are often tens of megabytes. Agents that `Read` them burn
 tokens and still miss structure. **hardly** streams a HAR into SQLite once, then
 exposes small, redacted, paginated tools over MCP (and a matching CLI).
 
+## Quick start
+
+```bash
+# 1) Have a HAR? → archive mode
+hardly modes archive --har path/to/capture.har
+hardly brief path/to/capture.har
+
+# 2) Only a URL, agent can drive? → headless
+hardly capture discover https://example.com --channel chrome
+
+# 3) Need a person (walls / MFA / complex UI)? → interactive
+hardly capture start https://example.com --channel chrome
+# ask them to click, then:
+hardly capture stop
+```
+
+MCP agents: call `hardly_modes` first, then `hardly_mode` / the entry tools above.
+
 ## Install
 
 ```bash
@@ -77,43 +95,57 @@ The image carries an `io.docker.server.metadata` label for Docker MCP Toolkit
 profiles (`docker mcp profile server add …`). The direct `hardly` entry above is
 usually simpler (tools appear as `hardly_*`).
 
-## Agent workflow
+## Three modes
 
-Prefer tools over reading the HAR file:
+Call `hardly_modes` / `hardly_mode` (or `hardly modes`) before other tools:
 
-1. `hardly_capabilities` if tools look missing (stale MCP) → restart server  
-2. `hardly_open(path)` → `session_id` + counts (`hardly_reopen` after restart)  
-3. `hardly_hosts` → note `preferred_host` (apex HTML page, not payment CDNs)  
-4. `hardly_endpoints` / `hardly_content` — API surface and payload kinds  
-5. HTML portals: `hardly_brief`, then `hardly_story` / `hardly_forms` /
-   `hardly_ui` / `hardly_outline` (markdown / tag tree / approx ARIA from HAR
-   bodies — do not parse raw HTML in the model)  
-6. Tokens: `hardly_correlate` / `hardly_trace` / `hardly_cookies` /
-   `hardly_secrets` (names only; values never returned)  
-7. Missing detail URLs: `hardly_routes` + `hardly_around(entry_id)` /
-   `hardly_tree`  
-8. Client sketch: `hardly_stub`; next capture: `hardly_recipe_plan`  
-9. Quality: `hardly_wall` / `hardly_issues` / `hardly_coverage` /
-   `hardly_diff` vs an earlier session  
+| Mode | When | Entry |
+|------|------|--------|
+| **archive** | HAR path already exists | `hardly_open` → brief / endpoints |
+| **headless** | URL only; agent can drive the page | `hardly_discover(url)` (or start headed=false + aria/recipe) |
+| **interactive** | Bot wall, CAPTCHA, MFA, complex UI | `hardly_capture_start(headed=true, channel=chrome)` → **ask the person** → stop |
 
-Prompts `document_api`, `find_auth_flow`, and `capture_portal` guide those paths.
-`hardly_help("portal"|"tokens"|"capture")` and `hardly_recommend` pick tools.
+```bash
+hardly modes
+hardly modes archive --har path/to/capture.har
+hardly modes headless --url https://portal.example.com
+hardly modes --goal "ask the user to search the county portal"
+```
 
-### Record a portal (Playwright)
+MCP prompts: `analyze_har`, `discover_apis`, `capture_portal`.
 
-Cursor’s IDE browser does **not** hand hardly a HAR path. Use Playwright:
+### Archive — existing HAR file
+
+1. `hardly_open(path)` → `session_id`  
+2. `hardly_hosts` → `preferred_host` (apex HTML, not payment CDNs)  
+3. Portal: `hardly_brief` → forms / outline / correlate / trace  
+4. JSON API: `hardly_endpoints` → content → auth → schema  
+5. Export: stub / export_brief / export_openapi  
+
+Never `Read` the raw HAR into the model.
+
+### Headless — agent discovers APIs
+
+```bash
+hardly capture discover https://example.com --channel chrome --wait 8
+# optional: --recipe steps.json
+```
+
+MCP: `hardly_discover(url, channel="chrome")` loads headless, optional
+`recipe_json`, stops, opens a session, and returns a brief. Or loop with
+`hardly_capture_start(headed=false)` → aria → click/fill refs → stop.
+If the page walls headless Chrome, switch to **interactive**.
+
+### Interactive — person drives the browser
+
+Cursor’s IDE browser does **not** hand hardly a HAR path.
 
 1. `hardly_capture_doctor` if `capture_available` is false  
 2. `hardly_capture_start(url=…, headed=true, channel="chrome")`  
-   (Chrome channel helps on Akamai/bot walls; optional `trace=true`)  
-3. Drive UI: `hardly_capture_aria` (`mode=ai`) →
-   `hardly_capture_click` / `fill` with `ref` from `refs[]`  
-   (fallback: `hardly_capture_elements` → xpath/css, or a person clicks)  
-4. `hardly_capture_stop` → `session_id` + analysis hint  
-5. Continue with `hardly_brief` / the workflow above  
+3. **Ask the person** to use the open window (search, detail, login, …)  
+4. `hardly_capture_stop` → continue in archive mode on `session_id`  
 
-Capture backfills text/JSON/HTML bodies that Playwright’s HAR recorder often
-leaves as `content.size == -1`, so forms and entry tools see portal XHR payloads.
+Capture backfills bodies that Playwright often leaves as `content.size == -1`.
 
 For California county portals, prefer `python -m asspy.sample <county>` (writes
 under `$ASSPY_HOME/samples/`).
@@ -122,7 +154,8 @@ under `$ASSPY_HOME/samples/`).
 
 | Area | Tools |
 |------|--------|
-| Session | `capabilities`, `help`, `open`, `reopen`, `list_sessions`, `close` |
+| Modes | `modes`, `mode`, `capabilities`, `help`, `recommend` |
+| Session | `open`, `reopen`, `list_sessions`, `close`, `summary`, `stats`, `coverage` |
 | Discovery | `summary`, `stats`, `hosts` (`preferred_host`), `endpoints`, `content`, `search`, `entry`, `compare_entries` |
 | Portal / HTML | `brief`, `story`, `forms`, `ui`, `outline`, `pages`, `wall` |
 | Tokens | `correlate`, `trace`, `cookies`, `secrets`, `redirects` |
@@ -131,7 +164,7 @@ under `$ASSPY_HOME/samples/`).
 | Auth / schema | `auth`, `flow`, `schema` |
 | Export | `export_md`, `export_openapi`, `export_postman`, `export_brief`, `stub`, `recipe_plan`, `curl`, `sql` |
 | Live probe | `probe` (`confirm=true`; secrets only via overrides) |
-| Capture | `capture_doctor`, `capture_start` / `stop` / `list` / `status`, `capture_aria`, `capture_screenshot`, `capture_elements`, `capture_click` / `fill` / `press`, `capture_goto` / `url`, `capture_recipe` |
+| Capture | `discover`, `capture_doctor`, `capture_start` / `stop` / `list` / `status`, `capture_aria`, `capture_screenshot`, `capture_elements`, `capture_click` / `fill` / `press`, `capture_goto` / `url`, `capture_recipe`, `capture_once` |
 
 **Token rules:** bodies truncated, secrets redacted, lists paginated. Never
 returns the full HAR.
@@ -142,21 +175,25 @@ returns the full HAR.
 pip install -e ".[capture]"
 playwright install chromium   # or HARDLY_BROWSER_CHANNEL=chrome
 hardly capture doctor
-hardly capabilities           # playwright: {ready, version, hint}
+hardly capabilities           # modes + playwright: {ready, version, hint}
+hardly modes                  # archive / headless / interactive
 
-# Interactive: browser opens; press Enter or close the window
+# Headless discover (agent, no person)
+hardly capture discover https://example.com --channel chrome --wait 8
+hardly capture discover https://example.com --recipe steps.json
+
+# Interactive: browser opens; person clicks; Enter or close to stop
 hardly capture https://example.com -o D:/code/captures/example.har
 
-# Agent-style: start / aria-ref / stop
-hardly capture start https://example.com -o out.har --channel chrome
+# Agent click loop (headless or headed)
+hardly capture start https://example.com -o out.har --channel chrome --headless
 hardly capture aria                      # YAML + refs[] (mode=ai)
 hardly capture click --ref e15
 hardly capture fill "EXAMPLE" --ref e12
-hardly capture click --xpath '/html/body/div[1]/a[1]'   # fallback
 hardly capture recipe steps.json
 hardly capture stop                      # optional --trace
 
-# Timed / headless / filtered
+# Timed / filtered
 hardly capture https://example.com -o out.har --wait 20 --headless
 hardly capture start https://apps.example.org/ --url-filter "**/api/**"
 ```
@@ -222,6 +259,7 @@ print(q.list_endpoints(conn, host="api.example.com"))
 - Session reopen after MCP restart; categorized help; tool recommend  
 - OpenAPI (with `securitySchemes`), Postman, brief Markdown, urllib stubs  
 - Recipe planning with aria-ref steps after goto  
+- Three agent modes: archive (HAR file), headless discover, interactive person  
 - Optional Playwright capture: doctor, aria refs, screenshot, trace on stop  
 - Body backfill for Playwright `content.size == -1` portal XHR  
 - Gated live probe via `httpx`

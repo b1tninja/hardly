@@ -108,7 +108,16 @@ def open_har(har_path: str | Path, *, force: bool = False) -> dict:
             conn = _sessions[sid]["conn"]
             from hardly.index.query import summary
 
-            return {"session_id": sid, "cached": True, **summary(conn)}
+            return {
+                "session_id": sid,
+                "cached": True,
+                "mode": "archive",
+                "next": (
+                    "Mode=archive. Use hardly_hosts / hardly_brief / "
+                    "hardly_endpoints — do not Read the HAR."
+                ),
+                **summary(conn),
+            }
 
         need_ingest = force or not db_path.exists() or not meta_path.exists()
         if not need_ingest:
@@ -149,6 +158,7 @@ def open_har(har_path: str | Path, *, force: bool = False) -> dict:
         return {
             "session_id": sid,
             "cached": cached,
+            "mode": "archive",
             "har_path": stats.get("har_path", str(path)),
             "entries": stats.get("entries"),
             "noise": stats.get("noise"),
@@ -156,6 +166,10 @@ def open_har(har_path: str | Path, *, force: bool = False) -> dict:
             "hosts": stats.get("hosts"),
             "methods": stats.get("methods"),
             "statuses": stats.get("statuses"),
+            "next": (
+                "Mode=archive. Use hardly_hosts / hardly_brief / "
+                "hardly_endpoints — do not Read the HAR."
+            ),
         }
 
 

@@ -392,11 +392,28 @@ def start_capture(
             "capture did not become ready in time; see "
             f"{log_path}"
         )
-    next_bits = [
-        "Drive UI: hardly_capture_aria -> click/fill with ref='eN' "
-        "(or elements -> xpath/css).",
-        "Then hardly_capture_stop / close the window.",
-    ]
+    mode = "interactive" if headed else "headless"
+    row["mode"] = mode
+    if headed:
+        next_bits = [
+            "Mode=interactive: ASK THE PERSON to use the open browser "
+            "(search, open detail, accept cookies, login).",
+            "Optional: hardly_capture_screenshot / _status while they work.",
+            "When they finish: hardly_capture_stop(open_session=true) then "
+            "hardly_brief.",
+        ]
+        row["ask_user"] = (
+            "A headed browser is recording. Ask the person to complete the "
+            "portal steps you need traffic for, then call hardly_capture_stop."
+        )
+    else:
+        next_bits = [
+            "Mode=headless: drive with hardly_capture_aria -> "
+            "click/fill ref='eN' (or hardly_capture_recipe), then "
+            "hardly_capture_stop.",
+            "Or use hardly_discover(url) for a one-shot load+optional recipe.",
+        ]
+        row["ask_user"] = None
     if not use_channel:
         next_bits.insert(
             0,
@@ -473,6 +490,9 @@ def stop_capture(
         from hardly import session as sess
 
         result["session"] = sess.open_har(str(har), force=force)
+    # After stop, analysis is always archive mode (query the HAR on disk).
+    if result.get("status") == "stopped":
+        result["mode"] = "archive"
     result["next"] = _next_steps(result)
     return result
 
@@ -923,6 +943,92 @@ def capture_for(
     return stop_capture(info["capture_id"], open_session=open_session)
 
 
+def discover_apis(
+    url: str,
+    har_path: str | Path | None = None,
+    *,
+    recipe: list[dict[str, Any]] | None = None,
+    wait_seconds: float = 5,
+    channel: str = "",
+    url_filter: str = "",
+    omit_content: bool = False,
+    label: str = "",
+    open_session: bool = True,
+    brief: bool = True,
+    same_tab: bool = True,
+    trace: bool | None = None,
+) -> dict[str, Any]:
+    """Headless mode: load URL, optional recipe, stop, open session, brief.
+
+    For agent-driven API discovery without asking a person to click. If the
+    page walls the headless browser, switch to interactive mode
+    (``hardly_capture_start(headed=true, channel=chrome)``).
+    """
+    target = str(url or "").strip()
+    if not target:
+        raise CaptureError("discover_apis requires url")
+
+    info = start_capture(
+        target,
+        har_path,
+        headed=False,
+        channel=channel,
+        url_filter=url_filter,
+        omit_content=omit_content,
+        label=label,
+        same_tab=same_tab,
+        trace=trace,
+        show_banner=False,
+    )
+    cid = str(info["capture_id"])
+    recipe_result: dict[str, Any] | None = None
+    try:
+        if recipe:
+            # Keep going even if a step fails — stop_capture still indexes traffic.
+            recipe_result = run_capture_recipe(
+                recipe, capture_id=cid, stop_on_error=False
+            )
+        settle = max(0.0, float(wait_seconds))
+        if settle:
+            time.sleep(settle)
+    except BaseException:
+        stop_capture(cid, open_session=False)
+        raise
+
+    out = stop_capture(cid, open_session=open_session)
+    out["mode"] = "headless"
+    out["discover"] = {
+        "url": target,
+        "recipe_steps": len(recipe or []),
+        "wait_seconds": float(wait_seconds),
+        "recipe": recipe_result,
+    }
+    session_id = out.get("session_id")
+    if brief and session_id and open_session:
+        try:
+            from hardly.core.brief import portal_brief
+            from hardly.session import require_conn
+
+            conn = require_conn(str(session_id))
+            out["brief"] = portal_brief(conn)
+            out["next"] = (
+                "Headless discover finished. Drill with hardly_endpoints / "
+                "hardly_content / hardly_correlate; if brief shows a wall or "
+                "empty bodies, retry interactive with channel=chrome."
+            )
+        except Exception as exc:  # noqa: BLE001
+            out["brief_error"] = str(exc)
+            out["next"] = (
+                "Session opened; call hardly_brief / hardly_endpoints next."
+            )
+    else:
+        out["next"] = (
+            "Headless capture stopped. Open the HAR or use session_id with "
+            "hardly_brief / hardly_endpoints."
+        )
+    return out
+
+
 def _persist_payload(capture_id: str, payload: dict[str, Any]) -> None:
     path = active_dir() / f"{capture_id}.json"
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -946,10 +1052,14 @@ def _next_steps(result: dict[str, Any]) -> str:
     sid = session.get("session_id")
     if sid:
         return (
-            f"Indexed as session_id={sid}. Use hardly_hosts / hardly_endpoints "
-            f"/ hardly_flow — do not Read the HAR."
+            f"Mode=archive. Indexed as session_id={sid}. "
+            "Call hardly_brief (portals) or hardly_endpoints (APIs); "
+            "then correlate / forms / schema as needed — do not Read the HAR."
         )
-    return f"HAR at {result.get('har_path')}. Call hardly_open on that path."
+    return (
+        f"Mode=archive. HAR at {result.get('har_path')}. "
+        "Call hardly_open on that path."
+    )
 
 
 def _version_tuple(version: str | None) -> tuple[int, ...]:

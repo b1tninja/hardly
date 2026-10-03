@@ -19,7 +19,14 @@ def test_capabilities_lists_current_tools():
     assert "hardly_trace" in caps["tools"]
     assert "hardly_secrets" in caps["tools"]
     assert "hardly_recommend" in caps["tools"]
+    assert "hardly_modes" in caps["tools"]
+    assert "hardly_mode" in caps["tools"]
+    assert "hardly_discover" in caps["tools"]
+    assert "modes" in caps
+    assert len(caps["modes"]) == 3
     assert "hardly_export_postman" in caps["tools"]
+    assert "modes" in caps["features"]
+    assert "discover" in caps["features"]
     assert "hardly_export_brief" in caps["tools"]
     assert "hardly_tree" in caps["tools"]
     assert "hardly_params" in caps["tools"]

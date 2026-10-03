@@ -680,6 +680,35 @@ def cmd_capabilities(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_modes(args: argparse.Namespace) -> int:
+    from hardly.core.modes import list_modes, mode_playbook, pick_mode
+
+    mode = (getattr(args, "mode", None) or "").strip()
+    if mode:
+        _print(
+            mode_playbook(
+                mode,
+                har_path=getattr(args, "har", "") or "",
+                url=getattr(args, "url", "") or "",
+                goal=getattr(args, "goal", "") or "",
+            )
+        )
+        return 0
+    if getattr(args, "goal", None) or getattr(args, "har", None) or getattr(
+        args, "url", None
+    ):
+        _print(
+            pick_mode(
+                goal=getattr(args, "goal", "") or "",
+                har_path=getattr(args, "har", "") or "",
+                url=getattr(args, "url", "") or "",
+            )
+        )
+        return 0
+    _print(list_modes())
+    return 0
+
+
 def cmd_help(args: argparse.Namespace) -> int:
     from hardly.core.help import tool_help
 
@@ -775,6 +804,7 @@ def cmd_capture(args: argparse.Namespace) -> int:
         capture_page_url,
         capture_screenshot,
         click_capture,
+        discover_apis,
         fill_capture,
         get_capture,
         list_capture_elements,
@@ -883,6 +913,30 @@ def cmd_capture(args: argparse.Namespace) -> int:
                     steps,
                     capture_id=args.capture_id or None,
                     stop_on_error=not args.continue_on_error,
+                )
+            )
+            return 0
+        if action == "discover":
+            steps = None
+            recipe_file = getattr(args, "recipe", "") or ""
+            if recipe_file:
+                steps = json.loads(Path(recipe_file).read_text(encoding="utf-8"))
+            _print(
+                discover_apis(
+                    args.url,
+                    args.output,
+                    recipe=steps,
+                    wait_seconds=float(
+                        args.wait if getattr(args, "wait", None) is not None else 5
+                    ),
+                    channel=args.channel or "",
+                    url_filter=args.url_filter or "",
+                    omit_content=args.omit_content,
+                    label=args.label or "",
+                    open_session=not getattr(args, "no_open", False),
+                    brief=not getattr(args, "no_brief", False),
+                    same_tab=not getattr(args, "allow_popups", False),
+                    trace=True if getattr(args, "trace", False) else None,
                 )
             )
             return 0
@@ -1007,6 +1061,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show version / features (detect stale MCP installs)",
     )
     caps_p.set_defaults(func=cmd_capabilities)
+
+    modes_p = sub.add_parser(
+        "modes",
+        help="List operating modes (archive / headless / interactive)",
+    )
+    modes_p.add_argument(
+        "mode",
+        nargs="?",
+        default="",
+        help="archive | headless | interactive (optional playbook)",
+    )
+    modes_p.add_argument("--goal", default="", help="Free-text goal for auto-pick")
+    modes_p.add_argument("--har", default="", help="Existing HAR path hint")
+    modes_p.add_argument("--url", default="", help="Target URL hint")
+    modes_p.set_defaults(func=cmd_modes)
 
     help_p = sub.add_parser(
         "help-tools",
@@ -1476,6 +1545,20 @@ def build_parser() -> argparse.ArgumentParser:
     start_p = cap_sub.add_parser("start", help="Start recording; leave browser open")
     _add_capture_flags(start_p)
     start_p.set_defaults(func=cmd_capture, capture_action="start")
+
+    discover_p = cap_sub.add_parser(
+        "discover",
+        help="Headless mode: load URL, optional recipe, open session + brief",
+    )
+    discover_p.add_argument("url")
+    _add_capture_flags(discover_p)
+    discover_p.add_argument(
+        "--recipe",
+        default="",
+        help="JSON recipe steps file (goto/wait/aria/click/fill/…)",
+    )
+    discover_p.add_argument("--no-brief", action="store_true")
+    discover_p.set_defaults(func=cmd_capture, capture_action="discover")
 
     stop_p = cap_sub.add_parser("stop", help="Stop a capture (latest if id omitted)")
     stop_p.add_argument("capture_id", nargs="?", default="")

@@ -20,21 +20,16 @@ from hardly.index import query as q
 mcp = FastMCP(
     "hardly",
     instructions=(
-        "HAR analysis tools. Call hardly_capabilities / hardly_help first if "
-        "unsure. Always open a HAR with hardly_open first, then use "
-        "session_id with other tools. After MCP restart, hardly_reopen or any "
-        "tool auto-reattaches a cached session_id. Responses are redacted and "
-        "truncated — never read the raw HAR file into context. "
-        "For HTML portals: start with hardly_brief (or hardly_recommend), "
-        "then hardly_forms / hardly_correlate / hardly_trace / hardly_secrets; "
-        "hardly_routes + hardly_tree + hardly_around for detail XHRs; "
-        "hardly_params for static/dynamic fields; hardly_graphql when relevant. "
-        "hardly_stub / hardly_recipe_plan for client sketches. "
-        "Exports: md / openapi / postman / brief. "
-        "If urllib gets 403, check hardly_wall before retrying. "
-        "To record: hardly_capture_start (prefer channel=chrome), drive with "
-        "hardly_capture_elements / _recipe / _click / _fill, then "
-        "hardly_capture_stop."
+        "HAR analysis tools. Pick a mode with hardly_modes / hardly_mode first: "
+        "(1) archive — open an existing HAR file and query it; "
+        "(2) headless — hardly_discover or capture_start(headed=false) so the "
+        "agent auto-drives the page and discovers APIs; "
+        "(3) interactive — capture_start(headed=true, channel=chrome) and ASK "
+        "THE PERSON to use the browser, then capture_stop. "
+        "Never read the raw HAR into context. After open/discover/stop, use "
+        "session_id with brief/endpoints/forms/correlate/…. "
+        "hardly_help / hardly_recommend if unsure. After MCP restart, "
+        "hardly_reopen or any tool auto-reattaches a cached session_id."
     ),
 )
 
@@ -48,8 +43,49 @@ def hardly_capabilities() -> str:
 
 
 @mcp.tool
+def hardly_modes() -> str:
+    """List the three operating modes: archive, headless, interactive."""
+    from hardly.core.modes import list_modes
+
+    return _ok(list_modes())
+
+
+@mcp.tool
+def hardly_mode(
+    mode: str = "",
+    goal: str = "",
+    har_path: str = "",
+    url: str = "",
+) -> str:
+    """Playbook for one mode, or auto-pick from goal / har_path / url.
+
+    Modes: archive (existing HAR file), headless (agent discovers APIs),
+    interactive (ask the person to drive the headed browser). Pass mode= to
+    force one; otherwise heuristics pick from the other args.
+    """
+    from hardly.core.modes import mode_playbook, pick_mode
+
+    if (mode or "").strip():
+        return _ok(
+            mode_playbook(
+                mode,
+                har_path=har_path or "",
+                url=url or "",
+                goal=goal or "",
+            )
+        )
+    return _ok(
+        pick_mode(
+            goal=goal or "",
+            har_path=har_path or "",
+            url=url or "",
+        )
+    )
+
+
+@mcp.tool
 def hardly_help(topic: str = "") -> str:
-    """Categorized tool catalog and workflows. Pass topic e.g. portal, tokens, capture."""
+    """Categorized tool catalog and workflows. Pass topic e.g. portal, tokens, capture, modes."""
     from hardly.core.help import tool_help
 
     return _ok(tool_help(topic or None))
@@ -87,15 +123,13 @@ def hardly_capture_start(
 ) -> str:
     """Spawn Chromium with Playwright HAR recording.
 
-    Requires optional deps: ``pip install -e ".[capture]"`` and
-    ``playwright install chromium``. Leave headed=true so a person can click
-    through portals that block plain urllib (e.g. Acclaim). Returns capture_id;
-    call hardly_capture_stop when done (capture_id optional = latest running).
-    channel may be \"chrome\" or \"msedge\". url_filter is a Playwright glob
-    (e.g. ``**/searchPost/**``) to keep the HAR small. profile keeps cookies.
-    same_tab (default true) forces target=_blank / window.open into the current
-    tab; set false to allow real popups (still recorded in the same context).
-    trace=true writes a ``.trace.zip`` beside the HAR (or set HARDLY_CAPTURE_TRACE=1).
+    Modes: headed=true (default) = interactive — ASK THE PERSON to use the
+    window, then hardly_capture_stop. headed=false = headless — agent drives
+    with hardly_capture_aria / click / recipe (or use hardly_discover).
+    Requires ``pip install -e ".[capture]"`` + ``playwright install chromium``.
+    Prefer channel=\"chrome\" for Akamai/bot walls. url_filter is a Playwright
+    glob. profile keeps cookies. same_tab (default true) forces target=_blank
+    into the current tab. trace=true writes a ``.trace.zip`` beside the HAR.
     """
     try:
         from hardly.capture import CaptureError, start_capture
@@ -440,7 +474,7 @@ def hardly_capture_once(
     url_filter: str = "",
     open_session: bool = True,
 ) -> str:
-    """Scripted capture: open URL, wait, stop, optionally open a session."""
+    """Timed capture: open URL, wait, stop. Prefer hardly_discover for headless API discovery."""
     try:
         from hardly.capture import CaptureError, capture_for
     except ImportError as exc:
@@ -455,6 +489,54 @@ def hardly_capture_once(
                 channel=channel,
                 url_filter=url_filter,
                 open_session=open_session,
+            )
+        )
+    except CaptureError as exc:
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_discover(
+    url: str,
+    wait_seconds: float = 5,
+    har_path: str = "",
+    channel: str = "",
+    url_filter: str = "",
+    recipe_json: str = "",
+    open_session: bool = True,
+    brief: bool = True,
+) -> str:
+    """Headless mode: load URL, optional recipe, stop, open session, brief.
+
+    Agent-driven API discovery — no person needed. ``recipe_json`` is a JSON
+    list of steps (goto/wait/aria/click/fill/…) or empty for a plain load+wait.
+    If the page walls headless Chrome, switch to interactive:
+    hardly_capture_start(headed=true, channel=chrome) and ask the person.
+    """
+    try:
+        from hardly.capture import CaptureError, discover_apis
+    except ImportError as exc:
+        return _err(exc)
+    steps: list | None = None
+    if (recipe_json or "").strip():
+        try:
+            parsed = json.loads(recipe_json)
+        except json.JSONDecodeError as exc:
+            return _err(exc)
+        if not isinstance(parsed, list):
+            return _err(ValueError("recipe_json must be a JSON list of steps"))
+        steps = parsed
+    try:
+        return _ok(
+            discover_apis(
+                url,
+                har_path or None,
+                recipe=steps,
+                wait_seconds=wait_seconds,
+                channel=channel,
+                url_filter=url_filter,
+                open_session=open_session,
+                brief=brief,
             )
         )
     except CaptureError as exc:
@@ -1490,11 +1572,45 @@ def hardly_probe(
 
 
 @mcp.prompt
-def document_api(host: str) -> str:
-    """Guide for documenting an API host from a loaded HAR."""
+def analyze_har(har_path: str) -> str:
+    """Archive mode: analyze an existing HAR file without Playwright."""
     return (
-        f"Document the API for host `{host}` using hardly tools only "
-        f"(do not read the HAR file). Steps:\n"
+        f"Mode=archive. Analyze `{har_path}` with hardly tools only "
+        "(do not Read the HAR file):\n"
+        "1. hardly_open(har_path) -> session_id\n"
+        "2. hardly_hosts — use preferred_host for portals\n"
+        "3. Portal: hardly_brief -> forms / outline / correlate / trace\n"
+        "4. JSON API: hardly_endpoints -> content -> auth -> schema\n"
+        "5. Export: hardly_stub / export_brief / export_openapi as needed\n"
+        "If you only have a URL (no HAR), switch to headless (hardly_discover) "
+        "or interactive (capture_portal)."
+    )
+
+
+@mcp.prompt
+def discover_apis(url: str) -> str:
+    """Headless mode: agent loads a URL and discovers APIs automatically."""
+    return (
+        f"Mode=headless. Discover APIs for `{url}` without asking a person:\n"
+        "1. hardly_capture_doctor if capture_available is false.\n"
+        "2. Prefer hardly_discover(url, channel='chrome', wait_seconds=8) "
+        "for a one-shot load (+ optional recipe_json).\n"
+        "3. Or loop: hardly_capture_start(url, headed=false) -> "
+        "hardly_capture_aria -> click/fill with ref -> "
+        "hardly_capture_stop(open_session=true).\n"
+        "4. Continue in archive mode: hardly_brief / endpoints / correlate.\n"
+        "5. If wall/CAPTCHA/empty bodies: switch to interactive "
+        "(hardly_capture_start headed=true channel=chrome) and ASK THE PERSON.\n"
+        "Never Read the HAR file into context."
+    )
+
+
+@mcp.prompt
+def document_api(host: str) -> str:
+    """Guide for documenting an API host from a loaded HAR (archive mode)."""
+    return (
+        f"Mode=archive. Document the API for host `{host}` using hardly "
+        "tools only (do not read the HAR file). Steps:\n"
         "1. hardly_summary / hardly_endpoints(host=...)\n"
         "2. hardly_auth(host=...) and hardly_flow(host=...)\n"
         "3. hardly_entry / hardly_schema for important endpoints\n"
@@ -1505,36 +1621,32 @@ def document_api(host: str) -> str:
 
 @mcp.prompt
 def find_auth_flow(host: str) -> str:
-    """Guide for tracing login/MFA on a host."""
+    """Guide for tracing login/MFA on a host (archive mode)."""
     return (
-        f"Trace authentication for `{host}` with hardly tools:\n"
+        f"Mode=archive. Trace authentication for `{host}` with hardly:\n"
         "1. hardly_auth(host=...)\n"
         "2. hardly_flow(host=..., path_prefix=/login or similar)\n"
         "3. hardly_compare_entries on pre/post MFA login requests\n"
-        "4. Note tokens in response bodies (Chrome may strip Authorization cookies)."
+        "4. Note tokens in response bodies (Chrome may strip Authorization cookies).\n"
+        "If login needs a person/CAPTCHA, use interactive capture_portal first."
     )
 
 
 @mcp.prompt
 def capture_portal(url: str) -> str:
-    """Guide for recording a browser HAR of a portal that needs human clicks."""
+    """Interactive mode: person drives the browser; agent records and analyzes."""
     return (
-        f"Capture network traffic for `{url}` then analyze it:\n"
+        f"Mode=interactive. Record `{url}` with a person in the headed browser:\n"
         "1. hardly_capture_doctor if capture_available is false.\n"
-        "2. hardly_capture_start(url=..., headed=true, channel='chrome' "
-        "for Akamai/bot walls; optional trace=true).\n"
-        "3. Drive UI: hardly_capture_aria (mode=ai) -> "
-        "hardly_capture_click/fill with ref from refs[] "
-        "(fallback: elements -> xpath/css), or ask a person to click.\n"
-        "4. hardly_capture_stop(capture_id, open_session=true).\n"
-        "5. hardly_brief(session_id) — one-shot portal RE summary "
-        "(do not Read the HAR file).\n"
-        "6. Drill: hardly_content / hardly_outline / hardly_forms / "
-        "hardly_ui / hardly_correlate / hardly_cookies.\n"
-        "7. hardly_routes() + hardly_around(entry_id) for detail XHRs.\n"
-        "8. hardly_stub / hardly_recipe_plan for a client sketch or next capture.\n"
-        "Note: Cursor's built-in browser does not feed HARs into hardly; "
-        "Playwright capture (or a manual DevTools HAR export) is required."
+        "2. hardly_capture_start(url=..., headed=true, channel='chrome').\n"
+        "3. ASK THE PERSON to complete the portal steps "
+        "(cookies, search, open detail, login). Do not pretend you can see "
+        "their screen — tell them what to do, then wait.\n"
+        "4. Optional: hardly_capture_screenshot / _status while they work.\n"
+        "5. When they finish: hardly_capture_stop(open_session=true).\n"
+        "6. hardly_brief(session_id), then forms/correlate/routes as needed.\n"
+        "If the flow is fully scriptable, prefer headless hardly_discover instead.\n"
+        "Cursor's IDE browser does not feed HARs into hardly."
     )
 
 

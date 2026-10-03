@@ -9,6 +9,18 @@ from hardly.capabilities import TOOLS
 
 _CATEGORIES: tuple[dict[str, Any], ...] = (
     {
+        "id": "modes",
+        "title": "Operating modes",
+        "when": "Choose archive / headless / interactive before other tools",
+        "tools": [
+            "hardly_modes",
+            "hardly_mode",
+            "hardly_capabilities",
+            "hardly_help",
+            "hardly_recommend",
+        ],
+    },
+    {
         "id": "session",
         "title": "Session",
         "when": "Open / reattach a HAR; check version after MCP restart",
@@ -109,8 +121,9 @@ _CATEGORIES: tuple[dict[str, Any], ...] = (
     {
         "id": "capture",
         "title": "Live capture",
-        "when": "Record with Playwright (prefer channel=chrome)",
+        "when": "Headless discover or interactive record (prefer channel=chrome)",
         "tools": [
+            "hardly_discover",
             "hardly_capture_start",
             "hardly_capture_stop",
             "hardly_capture_goto",
@@ -133,11 +146,39 @@ _CATEGORIES: tuple[dict[str, Any], ...] = (
         "id": "guide",
         "title": "Guidance",
         "when": "Not sure which tool to call",
-        "tools": ["hardly_help", "hardly_recommend", "hardly_capabilities"],
+        "tools": [
+            "hardly_modes",
+            "hardly_mode",
+            "hardly_help",
+            "hardly_recommend",
+            "hardly_capabilities",
+        ],
     },
 )
 
 _WORKFLOWS: tuple[dict[str, str], ...] = (
+    {
+        "name": "archive",
+        "steps": (
+            "hardly_mode(mode=archive, har_path=…) -> hardly_open -> "
+            "hardly_brief / endpoints -> correlate / schema / export"
+        ),
+    },
+    {
+        "name": "headless",
+        "steps": (
+            "hardly_mode(mode=headless, url=…) -> hardly_discover(url) "
+            "(or capture_start headed=false + aria/recipe) -> brief"
+        ),
+    },
+    {
+        "name": "interactive",
+        "steps": (
+            "hardly_mode(mode=interactive, url=…) -> "
+            "capture_start(headed=true, channel=chrome) -> ASK PERSON -> "
+            "capture_stop -> brief"
+        ),
+    },
     {
         "name": "guest_portal",
         "steps": (
@@ -152,13 +193,6 @@ _WORKFLOWS: tuple[dict[str, str], ...] = (
             "hardly_schema -> hardly_export_openapi"
         ),
     },
-    {
-        "name": "record_then_analyze",
-        "steps": (
-            "hardly_capture_start(channel=chrome) -> elements/click/fill "
-            "or recipe -> stop -> brief"
-        ),
-    },
 )
 
 
@@ -166,7 +200,15 @@ def tool_help(topic: str | None = None) -> dict[str, Any]:
     """Return categorized tools, optionally filtered by topic/category/name."""
     text = (topic or "").strip().lower()
     cats = list(_CATEGORIES)
-    if text:
+    playbook: dict[str, Any] | None = None
+    if text in {"archive", "headless", "interactive", "file", "har", "offline"}:
+        from hardly.core.modes import mode_playbook
+
+        playbook = mode_playbook(text)
+        # Prefer the modes + capture/session categories for mode topics.
+        want = {"modes", "session", "capture", "portal", "guide"}
+        cats = [c for c in cats if c["id"] in want] or cats
+    elif text:
         filtered = []
         for cat in cats:
             if text in cat["id"] or text in cat["title"].lower() or text in cat["when"].lower():
@@ -178,15 +220,16 @@ def tool_help(topic: str | None = None) -> dict[str, Any]:
         cats = filtered or cats
 
     known = set(TOOLS) | {"hardly_help", "hardly_list_sessions", "hardly_close"}
-    return {
+    out: dict[str, Any] = {
         "version": __version__,
         "topic": topic,
         "categories": cats,
         "workflows": list(_WORKFLOWS),
         "tool_count": len(TOOLS),
         "next": (
-            "Pass topic like 'portal', 'tokens', 'capture', or a tool name. "
-            "Or hardly_recommend(\"guest portal csrf\")."
+            "Pass topic like 'modes', 'archive', 'headless', 'interactive', "
+            "'portal', 'tokens', 'capture', or a tool name. "
+            "Or hardly_modes / hardly_recommend(\"guest portal csrf\")."
         ),
         "note": (
             None
@@ -198,3 +241,6 @@ def tool_help(topic: str | None = None) -> dict[str, Any]:
             else "catalog may list aliases"
         ),
     }
+    if playbook:
+        out["playbook"] = playbook
+    return out

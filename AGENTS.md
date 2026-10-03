@@ -16,26 +16,40 @@ pytest
 ```
 
 ```bash
+hardly modes                              # pick archive / headless / interactive
 hardly summary path/to/capture.har
 hardly endpoints path/to/capture.har --host api.example.com
 hardly content path/to/capture.har --host portal.example.com
 hardly outline path/to/capture.har 12 --format markdown
 hardly export-md path/to/capture.har -o API.md --host api.example.com
 hardly capture doctor
-hardly capture https://example.com -o capture.har   # needs [capture]
+hardly capture discover https://example.com --channel chrome
+hardly capture https://example.com -o capture.har   # interactive; needs [capture]
 hardly serve
-# or: python -m hardly
 ```
 
 Docker deploy for Cursor: `powershell -File scripts\deploy-docker.ps1` (see
 README). Headed capture needs the **local venv** MCP entry (not Docker).
 
-## Agent workflow
+## Three modes (pick one first)
+
+Call `hardly_modes` / `hardly_mode` (or `hardly modes` / `hardly help-tools archive`):
+
+| Mode | Entry | Prompt |
+|------|--------|--------|
+| **archive** | `hardly_open` → brief / endpoints | `analyze_har` |
+| **headless** | `hardly_discover(url)` (or start headed=false + aria) | `discover_apis` |
+| **interactive** | start headed=true channel=chrome → **ASK PERSON** → stop | `capture_portal` |
+
+Rule: HAR path → archive. Scriptable URL → headless. Person / wall / MFA → interactive.
+After any capture stop, continue in **archive** mode on the new `session_id`.
+
+## Agent workflow (after a session exists)
 
 Prefer MCP/CLI helpers over reading the HAR:
 
 0. `hardly_capabilities` if tools look missing (stale MCP) -> restart server;
-   `hardly_help("portal")` / `hardly_recommend` to pick tools
+   `hardly_help("modes"|"portal")` / `hardly_recommend` to pick tools
 1. `hardly_open` / `hardly summary` -> counts. After MCP restart,
    `hardly_reopen(session_id)` (other tools also auto-reattach from cache)
 2. `hardly_hosts` -> use `preferred_host` (apex HTML), not payment/CDN hosts;
@@ -57,14 +71,10 @@ Prefer MCP/CLI helpers over reading the HAR:
    `hardly_diff` vs an earlier session
 8. `hardly_entry` / `hardly_schema` / export — only for needed details
 
-To **record**: `hardly_capture_doctor` if `capture_available` is false;
-`hardly_capture_start(channel=chrome)` -> `hardly_capture_aria` ->
-`hardly_capture_click`/`fill` with `ref` from `refs[]` (or elements/xpath) ->
-`hardly_capture_stop` (optional `trace=true`). Optional dep:
-`pip install -e ".[capture]"` + `playwright install chromium` (or
-`HARDLY_BROWSER_CHANNEL=chrome`). For CA counties:
-`python -m asspy.sample <county>`. Do not use Cursor's IDE browser expecting
-a HAR path.
+Optional dep for capture: `pip install -e ".[capture]"` +
+`playwright install chromium` (or `HARDLY_BROWSER_CHANNEL=chrome`). For CA
+counties: `python -m asspy.sample <county>`. Do not use Cursor's IDE browser
+expecting a HAR path.
 
 ## Boundaries
 
@@ -77,3 +87,4 @@ a HAR path.
 - Capture writes full request/response bodies into the HAR — treat like any
   other secret capture.
 - Live Playwright tests require `HARDLY_LIVE_CAPTURE=1`; default CI stays offline.
+- In interactive mode, ask the person — do not claim you can see their screen.

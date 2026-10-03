@@ -6,6 +6,45 @@ from typing import Any
 
 _RULES: tuple[tuple[tuple[str, ...], list[str], str], ...] = (
     (
+        (
+            "mode",
+            "archive",
+            "headless",
+            "interactive",
+            "which mode",
+            "how to start",
+        ),
+        ["hardly_modes", "hardly_mode", "hardly_capabilities"],
+        "Pick archive (HAR file), headless (hardly_discover), or interactive.",
+    ),
+    (
+        ("discover", "auto discover", "no har", "headless", "automate"),
+        [
+            "hardly_mode",
+            "hardly_discover",
+            "hardly_capture_doctor",
+            "hardly_brief",
+        ],
+        "Headless: hardly_discover(url) or capture_start(headed=false).",
+    ),
+    (
+        (
+            "ask user",
+            "ask the user",
+            "interactive",
+            "headed",
+            "person click",
+            "human",
+        ),
+        [
+            "hardly_mode",
+            "hardly_capture_start",
+            "hardly_capture_stop",
+            "hardly_brief",
+        ],
+        "Interactive: start headed chrome, ask the person, then stop + brief.",
+    ),
+    (
         ("portal", "guest", "county", "acclaim", "recorder", "search form"),
         ["hardly_brief", "hardly_forms", "hardly_correlate", "hardly_stub"],
         "Start with a portal brief, then forms/CSRF, then a client sketch.",
@@ -79,18 +118,18 @@ _RULES: tuple[tuple[tuple[str, ...], list[str], str], ...] = (
     (
         ("capture", "record", "playwright", "browser", "recipe", "aria ref"),
         [
+            "hardly_modes",
             "hardly_capture_doctor",
+            "hardly_discover",
             "hardly_capture_start",
             "hardly_capture_aria",
-            "hardly_capture_click",
-            "hardly_capture_recipe",
         ],
-        "Doctor → start (channel=chrome) → aria → click/fill with ref → stop.",
+        "Pick a mode first; headless=discover, interactive=ask person + start.",
     ),
     (
         ("akamai", "cloudflare", "bot wall", "captcha", "403", "blocked"),
-        ["hardly_wall", "hardly_capture_start", "hardly_issues"],
-        "Wall detected — use headed channel=chrome, not plain HTTP.",
+        ["hardly_wall", "hardly_mode", "hardly_capture_start", "hardly_issues"],
+        "Wall — interactive headed channel=chrome; ask the person to click.",
     ),
     (
         ("slow", "latency", "timeout", "waterfall", "performance"),
@@ -154,14 +193,14 @@ def recommend_tools(goal: str) -> dict[str, Any]:
             "suggestions": [
                 {
                     "tools": [
+                        "hardly_modes",
                         "hardly_help",
-                        "hardly_capabilities",
                         "hardly_open",
-                        "hardly_brief",
+                        "hardly_discover",
                     ],
                     "reason": (
-                        "Browse the catalog, open a HAR, then brief for portals "
-                        "or endpoints for APIs."
+                        "Pick a mode: open a HAR (archive), "
+                        "hardly_discover(url) (headless), or interactive capture."
                     ),
                 }
             ],

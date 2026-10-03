@@ -25,6 +25,8 @@ FEATURES = (
     "redirects",
     "issues",
     "recommend",
+    "modes",
+    "discover",
     "tree",
     "params",
     "graphql",
@@ -63,6 +65,8 @@ FEATURES = (
 
 TOOLS = (
     "hardly_capabilities",
+    "hardly_modes",
+    "hardly_mode",
     "hardly_help",
     "hardly_open",
     "hardly_reopen",
@@ -125,6 +129,7 @@ TOOLS = (
     "hardly_capture_list",
     "hardly_capture_status",
     "hardly_capture_once",
+    "hardly_discover",
     "hardly_capture_doctor",
 )
 
@@ -139,18 +144,21 @@ def capabilities() -> dict[str, Any]:
         capture_ok = bool(playwright.get("ready"))
     except Exception as exc:  # noqa: BLE001
         playwright = {"package": False, "ready": False, "error": str(exc)}
+    from hardly.core.modes import list_modes
+
     return {
         "name": "hardly",
         "version": __version__,
         "features": list(FEATURES),
         "tools": list(TOOLS),
         "tool_count": len(TOOLS),
+        "modes": list_modes()["modes"],
         "capture_available": capture_ok,
         "playwright": playwright,
         "next": (
-            "If this tool list is missing expected names (e.g. hardly_brief, "
-            "hardly_trace, hardly_export_postman), restart the hardly MCP "
-            "server / Cursor MCP entry so it loads the current package. "
+            "Pick a mode with hardly_modes / hardly_mode. "
+            "If this tool list is missing expected names (e.g. hardly_modes, "
+            "hardly_discover), restart the hardly MCP server. "
             "If capture_available is false, see playwright.hint / "
             "hardly_capture_doctor."
         ),
