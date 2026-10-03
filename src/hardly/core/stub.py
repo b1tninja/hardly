@@ -12,11 +12,12 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
-from hardly.core.redact import is_sensitive_key
+from hardly.core.redact import classify_value_shape, is_sensitive_key
 from hardly.core.story import portal_story
 
 _MAX_CODE_CHARS = 60_000
@@ -179,7 +180,10 @@ def client_stub(
     steps_code: list[str] = []
     used_hosts: set[str] = set()
     for entry_id in ids:
-        piece = _entry_step(conn, entry_id, wires.get(entry_id, []), inputs)
+        piece = _entry_step(
+            conn, entry_id, wires.get(entry_id, []), inputs,
+            prior_ids=ids[: position[entry_id]],
+        )
         if not piece:
             continue
         used_hosts.add(piece["host"])
@@ -330,6 +334,84 @@ def _source_expr(conn: sqlite3.Connection, hit: dict[str, Any]) -> str | None:
     return None
 
 
+def _auth_scheme(conn: sqlite3.Connection, entry_id: int) -> str:
+    """Authorization scheme prefix from the stored value shape (headers are redacted)."""
+    row = conn.execute(
+        "SELECT shape FROM value_shapes WHERE entry_id = ? "
+        "AND lower(name) = 'authorization' LIMIT 1",
+        (entry_id,),
+    ).fetchone()
+    shape = row["shape"] if row else None
+    if shape in ("bearer_jwt", "bearer_token"):
+        return "Bearer "
+    if shape == "basic_auth":
+        return "Basic "
+    return ""
+
+
+_TOKEN_CHARS = re.compile(r"^[A-Za-z0-9+/=_\-.~%]{16,}$")
+
+
+def _tokenish_value(val: str) -> bool:
+    """True for opaque token-looking literals that must never be inlined."""
+    if not isinstance(val, str) or not val:
+        return False
+    if classify_value_shape(val):
+        return True
+    return bool(
+        _TOKEN_CHARS.match(val)
+        and re.search(r"\d", val)
+        and re.search(r"[A-Za-z]", val)
+    )
+
+
+class _HiddenScan(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.names: set[str] = set()
+
+    def handle_starttag(self, tag, attrs):
+        if tag != "input":
+            return
+        a = {k.lower(): (v or "") for k, v in attrs}
+        if a.get("type", "").lower() == "hidden":
+            n = a.get("name") or a.get("id")
+            if n:
+                self.names.add(n)
+
+
+def _hidden_names(html: str | None) -> set[str]:
+    if not html:
+        return set()
+    p = _HiddenScan()
+    try:
+        p.feed(html)
+    except Exception:  # noqa: BLE001
+        pass
+    return p.names
+
+
+def _earlier_hidden_sources(
+    conn: sqlite3.Connection, entry_id: int, prior_ids: list[int]
+) -> dict[str, int]:
+    """field name -> most recent earlier entry whose HTML response has that hidden input."""
+    found: dict[str, int] = {}
+    for eid in prior_ids:
+        row = conn.execute(
+            "SELECT preview_text, content_type FROM bodies "
+            "WHERE entry_id = ? AND side = 'response'",
+            (eid,),
+        ).fetchone()
+        if not row or not row["preview_text"]:
+            continue
+        text = row["preview_text"]
+        if "html" not in (row["content_type"] or "").lower() and "<input" not in text.lower():
+            continue
+        for n in _hidden_names(text):
+            found[n] = eid
+    return found
+
+
 def _render(obj: Any, level: int = 0) -> str:
     pad = "    " * (level + 1)
     end = "    " * level
@@ -364,6 +446,7 @@ def _entry_step(
     entry_id: int,
     wires: list[dict[str, Any]],
     inputs: dict[str, str],
+    prior_ids: list[int] | None = None,
 ) -> dict[str, Any] | None:
     row = conn.execute(
         "SELECT * FROM entries WHERE entry_id = ?", (entry_id,)
@@ -425,7 +508,7 @@ def _entry_step(
                     f"({w['from_where']})"
                 )
                 query[k] = _Expr(_source_expr(conn, w))
-            elif is_sensitive_key(k) or len(v) > 80:
+            elif is_sensitive_key(k) or len(v) > 80 or _tokenish_value(v):
                 query[k] = _input(k, inputs)
             else:
                 query[k] = v
@@ -445,8 +528,9 @@ def _entry_step(
             f"# {hname}: carried from entry {w['from_entry_id']} ({w['from_where']})"
         )
         hdrs[hname] = _Expr(_source_expr(conn, w))
+    auth_scheme = _auth_scheme(conn, entry_id)
     for w in by_where.get("authorization", []):
-        scheme = "Bearer " if "bearer" in str(headers.get("Authorization", "")).lower() else ""
+        scheme = auth_scheme
         lines.append(
             f"# Authorization: carried from entry {w['from_entry_id']} "
             f"({w['from_where']})"
@@ -483,6 +567,7 @@ def _entry_step(
                 }
             )
             carry_all = bool(hidden_srcs)
+            hidden_any = _earlier_hidden_sources(conn, entry_id, prior_ids or [])
             form: dict[str, Any] = {}
             if carry_all:
                 src = hidden_srcs[0]
@@ -503,6 +588,12 @@ def _entry_step(
                         f"({w['from_where']})"
                     )
                     form[name] = _Expr(_source_expr(conn, w))
+                elif name in hidden_any:
+                    src = hidden_any[name]
+                    lines.append(
+                        f"# {name}: hidden input carried from entry {src}"
+                    )
+                    form[name] = _Expr(f"_hidden(self.resp[{src}], {name!r})")
                 elif carry_all and _ALWAYS_PLACEHOLDER.match(name):
                     if re.match(r"^__EVENT(TARGET|ARGUMENT)$", name, re.I):
                         form[name] = val
@@ -511,6 +602,7 @@ def _entry_step(
                     is_sensitive_key(name)
                     or _ALWAYS_PLACEHOLDER.match(name)
                     or len(val) > 80
+                    or _tokenish_value(val)
                 ):
                     form[name] = _input(name, inputs)
                 else:
@@ -556,7 +648,7 @@ def _redact_obj(data: Any, inputs: dict[str, str]) -> Any:
         return out
     if isinstance(data, list):
         return [_redact_obj(data[0], inputs)] if data else []
-    if isinstance(data, str) and len(data) > 80:
+    if isinstance(data, str) and (len(data) > 80 or _tokenish_value(data)):
         return "PLACEHOLDER_LONG"
     return data
 

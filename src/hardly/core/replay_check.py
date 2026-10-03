@@ -16,6 +16,7 @@ Safety rules:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sqlite3
@@ -110,6 +111,40 @@ def _unresolved(value: Any) -> bool:
 # --------------------------------------------------------------------------
 
 
+def _captured_cookie_names(conn: sqlite3.Connection, entry_id: int) -> list[str]:
+    """Cookie NAMES sent with an entry (values are never read into output)."""
+    names: list[str] = []
+    for r in conn.execute(
+        "SELECT value_raw, value_redacted FROM headers "
+        "WHERE entry_id = ? AND side = 'request' AND lower(name) = 'cookie'",
+        (entry_id,),
+    ).fetchall():
+        text = r["value_raw"] or r["value_redacted"] or ""
+        for part in text.split(";"):
+            n = part.split("=", 1)[0].strip()
+            if n and "=" in part and n not in names:
+                names.append(n)
+    # Cookie headers are stored redacted; ingest still records NAMES of token-shaped cookies.
+    for r in conn.execute(
+        "SELECT DISTINCT name FROM value_shapes "
+        "WHERE entry_id = ? AND side = 'request' AND where_kind = 'cookie' AND name IS NOT NULL",
+        (entry_id,),
+    ).fetchall():
+        if r["name"] not in names:
+            names.append(r["name"])
+    return names
+
+
+def parse_cookie_header(value: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for part in str(value).split(";"):
+        if "=" in part:
+            k, v = part.split("=", 1)
+            if k.strip():
+                out[k.strip()] = v.strip()
+    return out
+
+
 def _empty_names() -> dict[str, list[str]]:
     return {"headers": [], "cookies": [], "query": [], "fields": [], "prior_steps": []}
 
@@ -162,7 +197,12 @@ def _build_step(
         ).fetchone()
     )
     if cookie_header_captured and not overrides.get("cookies") and "cookie" not in ov_headers:
-        if "Cookie" not in needs["headers"]:
+        names = _captured_cookie_names(conn, entry_id)
+        if names:
+            for cn in names:
+                if cn not in needs["cookies"]:
+                    needs["cookies"].append(cn)
+        elif "Cookie" not in needs["headers"]:
             needs["headers"].append("Cookie")
     have = {k.lower() for k in headers}
     for low, (name, val) in ov_headers.items():
@@ -295,6 +335,29 @@ def _kind_of(resp: httpx.Response) -> str:
     return "other"
 
 
+_VOLATILE_KEY = re.compile(r"(time|date|stamp|^ts$|nonce|token|expires|^id$|uuid|trace|request_?id)", re.I)
+
+
+def _canon(obj: Any, depth: int = 0) -> Any:
+    if depth > 6:
+        return "~"
+    if isinstance(obj, dict):
+        return {
+            str(k): _canon(v, depth + 1)
+            for k, v in sorted(obj.items(), key=lambda kv: str(kv[0]))
+            if not _VOLATILE_KEY.search(str(k))
+        }
+    if isinstance(obj, list):
+        return [_canon(v, depth + 1) for v in obj[:200]]
+    return obj
+
+
+def body_fingerprint(data: Any) -> str:
+    """Short value-sensitive hash of a JSON body (volatile keys skipped)."""
+    blob = json.dumps(_canon(data), sort_keys=True, default=str)
+    return hashlib.sha1(blob.encode()).hexdigest()[:10]
+
+
 def outcome_signature(resp: httpx.Response) -> dict:
     """Coarse, value-free outcome description."""
     kind = _kind_of(resp)
@@ -306,8 +369,11 @@ def outcome_signature(resp: httpx.Response) -> dict:
             data = None
         if isinstance(data, dict):
             sig["keys"] = sorted(str(k) for k in data.keys())
+            sig["body_fp"] = body_fingerprint(data)
         elif isinstance(data, list):
             sig["keys"] = ["[list]"]
+            sig["length"] = len(data)
+            sig["body_fp"] = body_fingerprint(data)
     elif kind == "html":
         n = len(resp.content)
         band = "xs" if n < 1024 else "s" if n < 10_240 else "m" if n < 102_400 else "l"
@@ -320,7 +386,7 @@ def _describe(status: int, sig: dict) -> str:
     return f"{status} {str(sig.get('kind', '?')).upper()}"
 
 
-def _gate_stop(resp: httpx.Response) -> str | None:
+def _gate_stop(resp: httpx.Response, allow: frozenset[str] = frozenset()) -> str | None:
     status = resp.status_code
     if status == 429:
         return "http_429"
@@ -335,7 +401,10 @@ def _gate_stop(resp: httpx.Response) -> str | None:
         try:
             for g in _classify_response(status, dict(resp.headers), body, str(resp.request.url)) or []:
                 if isinstance(g, dict) and g.get("action") == "stop":
-                    return str(g.get("kind") or g.get("gate") or g.get("name") or "gate")
+                    cls = str(g.get("class") or g.get("kind") or g.get("gate") or g.get("name") or "gate")
+                    if cls in allow:
+                        continue
+                    return f"gate:{cls}"
         except Exception:
             pass
     elif status == 403 and any(w in body.lower() for w in _CHALLENGE_WORDS):
@@ -349,7 +418,16 @@ def _gate_stop(resp: httpx.Response) -> str | None:
 
 
 class _Runner:
-    def __init__(self, client: httpx.Client, *, max_requests: int, delay_s: float):
+    def __init__(
+        self,
+        client: httpx.Client,
+        *,
+        max_requests: int,
+        delay_s: float,
+        allow_gates: frozenset[str] = frozenset(),
+    ):
+        self.allow_gates = allow_gates
+        self.ablating = False
         self.client = client
         self.max_requests = max_requests
         self.delay_s = delay_s
@@ -379,13 +457,17 @@ class _Runner:
                 out.append(c.name)
         return out
 
-    def send(self, step: dict, drop: tuple[str, str] | None = None) -> tuple[httpx.Response, list[int]]:
+    def send(
+        self,
+        step: dict,
+        drop: tuple[str, str] | None = None,
+        drop_many: list[tuple[str, str]] | None = None,
+    ) -> tuple[httpx.Response, list[int]]:
         """Send a step (following up to 5 same-host redirects). Returns (final response, chain statuses)."""
         headers = dict(step["headers"])
         query = list(step["query"])
         fields = dict(step["fields"])
-        if drop:
-            cat, name = drop
+        for cat, name in ([drop] if drop else []) + list(drop_many or []):
             if cat == "headers":
                 headers = {k: v for k, v in headers.items() if k.lower() != name.lower()}
             elif cat == "query":
@@ -419,7 +501,9 @@ class _Runner:
             except httpx.HTTPError as exc:
                 raise _Halt(f"transport_error:{type(exc).__name__}", step["path"]) from None
             chain.append(resp.status_code)
-            stop = _gate_stop(resp)
+            # After the baseline, a login wall appearing means a removed piece carried the
+            # session: that is an outcome to report, not a reason to stop.
+            stop = _gate_stop(resp, self.allow_gates | ({"login"} if self.ablating else frozenset()))
             if stop:
                 raise _Halt(stop, f"entry {step['entry_id']}")
             loc = resp.headers.get("location")
@@ -435,6 +519,10 @@ class _Runner:
                 continue
             return resp, chain
         return resp, chain
+
+
+def _is_sec_header(name: str) -> bool:
+    return name.lower().startswith("sec-")
 
 
 def _ordered_headers(names: list[str]) -> list[str]:
@@ -458,12 +546,27 @@ def replay_check(
     delay_s: float = 0.5,
     allow_unsafe: bool = False,
     client: httpx.Client | None = None,
+    allow_gates: list[str] | None = None,
 ) -> dict:
     """Report which headers/cookies/params/fields/prior steps a replay REQUIRES vs. tolerates."""
     ids = [entry_ids] if isinstance(entry_ids, int) else [int(i) for i in entry_ids]
     if not ids:
         return {"error": "entry_ids is empty"}
-    overrides = overrides or {}
+    if overrides is not None and not isinstance(overrides, dict):
+        return {"error": "overrides must be an object like {headers, cookies, query, body}"}
+    overrides = dict(overrides or {})
+    for part in ("headers", "cookies", "query", "body"):
+        if part in overrides and not isinstance(overrides[part], dict):
+            return {"error": f"overrides.{part} must be an object (name -> value)"}
+    # A Cookie header override is itemised into named cookies for the jar.
+    hdr_ov = dict(overrides.get("headers") or {})
+    cookie_key = next((k for k in hdr_ov if str(k).lower() == "cookie"), None)
+    if cookie_key is not None:
+        merged = parse_cookie_header(str(hdr_ov.pop(cookie_key)))
+        merged.update({str(k): str(v) for k, v in (overrides.get("cookies") or {}).items()})
+        overrides["headers"] = hdr_ov
+        overrides["cookies"] = merged
+    gate_ok = frozenset(str(g) for g in (allow_gates or []))
 
     needs = _empty_names()
     needs_by_step: list[dict[str, list[str]]] = []
@@ -495,7 +598,7 @@ def replay_check(
 
     own_client = client is None
     cl = client or httpx.Client(timeout=20.0, follow_redirects=False)
-    runner = _Runner(cl, max_requests=max_requests, delay_s=delay_s)
+    runner = _Runner(cl, max_requests=max_requests, delay_s=delay_s, allow_gates=gate_ok)
     target = steps[-1]
     prior = steps[:-1]
     ov_cookies = {str(k): str(v) for k, v in (overrides.get("cookies") or {}).items()}
@@ -514,6 +617,17 @@ def replay_check(
             "path": target["path"],
         },
     }
+
+    cap = conn.execute("SELECT status FROM entries WHERE entry_id = ?", (target["entry_id"],)).fetchone()
+    cap_status = int(cap["status"]) if cap and cap["status"] else None
+    if cap_status:
+        result["captured"] = {"status": cap_status, "status_class": f"{cap_status // 100}xx"}
+
+    def _halted(reason: str, at: str) -> dict:
+        d: dict[str, Any] = {"reason": reason, "at": at}
+        if reason.startswith("gate:"):
+            d["gate_class"] = reason.split(":", 1)[1]
+        return d
 
     def run_full(skip_idx: int | None = None):
         runner.reset_jar(ov_cookies, target["host"])
@@ -534,7 +648,7 @@ def replay_check(
             return {
                 **result,
                 "baseline": None,
-                "halted": {"reason": h.reason, "at": h.at or "baseline"},
+                "halted": _halted(h.reason, h.at or "baseline"),
                 "needs_override": needs_out,
                 "skipped_captcha": captcha,
                 "requests_used": runner.used,
@@ -544,6 +658,16 @@ def replay_check(
         base_status = resp.status_code
         result["baseline"] = {"status": base_status, "signature": base_sig, "redirect_chain": chain}
         jar_names = runner.cookie_names()  # state after baseline
+        runner.ablating = True
+        if cap_status:
+            same = base_status // 100 == cap_status // 100
+            result["baseline_matches_captured"] = same
+            if not same:
+                findings.append(
+                    f"baseline status {base_status} differs from the captured {cap_status}: "
+                    "the replay is missing credentials or state, so required/optional results "
+                    "may not reflect the original outcome"
+                )
 
         if base_status >= 400:
             findings.append(
@@ -552,6 +676,7 @@ def replay_check(
             )
             halted = {"reason": "baseline_not_ok", "at": "baseline"}
             plan: list[tuple[str, str]] = []
+            sec_group: list[str] = []
         else:
             plan = []
             hdrs = _ordered_headers(list(target["headers"].keys()))
@@ -563,9 +688,28 @@ def replay_check(
             plan += [("cookies", c) for c in cookie_names]
             plan += [("query", k) for k in dict.fromkeys(k for k, _ in target["query"])]
             plan += [("fields", k) for k in target["fields"]]
+            sec_group = [h for h in rest_h if _is_sec_header(h)]
+            rest_h = [h for h in rest_h if h not in sec_group]
             plan += [("headers", h) for h in rest_h]
+            if len(sec_group) > 1:
+                plan.append(("hgroup", "Sec-*"))
+            else:
+                plan += [("headers", h) for h in sec_group]
 
         def record(cat: str, name: str, changed: bool, trial_resp: httpx.Response | None) -> None:
+            if cat == "hgroup":
+                members = sec_group
+                if changed:
+                    required["headers"].extend(members)
+                    assert trial_resp is not None
+                    findings.append(
+                        f"removing the Sec-*/sec-ch-* header group ({len(members)} headers, not bisected) changed "
+                        f"{_describe(base_status, base_sig)} -> "
+                        f"{_describe(trial_resp.status_code, outcome_signature(trial_resp))}"
+                    )
+                else:
+                    optional["headers"].extend(members)
+                return
             label = {"headers": "header", "cookies": "cookie", "query": "query param", "fields": "field", "prior_steps": "prior step"}[cat]
             if changed:
                 required[cat].append(int(name) if cat == "prior_steps" else name)
@@ -595,6 +739,8 @@ def replay_check(
                     if cat == "cookies":
                         runner.drop_cookie(name)
                         t_resp, _chain = runner.send(target)
+                    elif cat == "hgroup":
+                        t_resp, _chain = runner.send(target, drop_many=[("headers", h) for h in sec_group])
                     else:
                         t_resp, _chain = runner.send(target, drop=(cat, name))
             except _Budget:
@@ -602,13 +748,43 @@ def replay_check(
                     not_tested[c2].append(int(n2) if c2 == "prior_steps" else n2)
                 break
             except _Halt as h:
-                halted = {"reason": h.reason, "at": f"removing {cat} {name}"}
+                halted = _halted(h.reason, f"removing {cat} {name}")
                 findings.append(f"hard stop ({h.reason}) while removing {cat.rstrip('s')} {name}; remaining elements not tested")
                 for c2, n2 in plan[idx:]:
                     not_tested[c2].append(int(n2) if c2 == "prior_steps" else n2)
                 break
             changed = outcome_signature(t_resp) != base_sig
             record(cat, name, changed, t_resp)
+
+        # Joint ablation: either-or credentials (e.g. Authorization OR a session cookie)
+        # each look optional alone; remove every optional credential piece together.
+        if not halted and base_status < 400:
+            ov_hdr_names = {str(k).lower() for k in (overrides.get("headers") or {})}
+            cred_h = [
+                h for h in optional["headers"]
+                if is_sensitive_header(h) or is_sensitive_key(h) or h.lower() in ov_hdr_names
+            ]
+            cred_c = [c for c in optional["cookies"] if c in ov_cookies or is_sensitive_key(c)]
+            if len(cred_h) + len(cred_c) >= 2 and runner.used < max_requests:
+                try:
+                    runner.restore(snap)
+                    for c in cred_c:
+                        runner.drop_cookie(c)
+                    t_resp, _c = runner.send(target, drop_many=[("headers", h) for h in cred_h])
+                except _Budget:
+                    pass
+                except _Halt as h:
+                    halted = _halted(h.reason, "joint credential removal")
+                    findings.append(f"hard stop ({h.reason}) during joint credential removal")
+                else:
+                    group = cred_h + cred_c
+                    if outcome_signature(t_resp) != base_sig:
+                        result["required_any_of"] = [group]
+                        findings.append(
+                            "credential pieces are individually optional but jointly required "
+                            "(at least one of: " + ", ".join(group) + ") -> "
+                            f"{_describe(t_resp.status_code, outcome_signature(t_resp))}"
+                        )
     finally:
         if own_client:
             cl.close()
