@@ -347,6 +347,9 @@ def _json_values(
 ) -> list[tuple[str, str, str | None]]:
     try:
         data = json.loads(text)
+        # Double-encoded JSON: keep parsing while the result is a JSON string.
+        while isinstance(data, str) and data.lstrip()[:1] in ("{", "["):
+            data = json.loads(data)
     except (json.JSONDecodeError, TypeError):
         return []
     out: list[tuple[str, str, str | None]] = []

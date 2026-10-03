@@ -287,6 +287,8 @@ def _json_key_path(text: str | None, key: str) -> str:
     """Dotted path to ``key`` in a (possibly truncated) JSON preview, else key."""
     try:
         data = json.loads(text or "")
+        while isinstance(data, str) and data.lstrip()[:1] in ("{", "["):
+            data = json.loads(data)
     except (ValueError, TypeError):
         return key
 
@@ -392,7 +394,12 @@ def _entry_step(
     for k in list(headers):
         low = k.lower()
         if low == "authorization":
-            basic = str(headers[k]).lower().startswith("basic")
+            shape = conn.execute(
+                "SELECT shape FROM value_shapes WHERE entry_id = ? "
+                "AND lower(name) = 'authorization' LIMIT 1",
+                (entry_id,),
+            ).fetchone()
+            basic = bool(shape) and shape["shape"] == "basic_auth"
             interesting[k] = (
                 "Basic PLACEHOLDER_BASIC_CREDENTIALS" if basic
                 else "Bearer PLACEHOLDER_TOKEN"
