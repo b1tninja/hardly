@@ -1151,6 +1151,50 @@ def capture_headless(
     return out
 
 
+def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
+    """Follow ranked links/buttons hop by hop until a search form appears.
+
+    Step fields: ``keywords`` (list of domain terms), ``max_hops`` (default 4,
+    cap 8), ``min_fields`` (default 2). Generic signals plus caller keywords
+    choose the click; visited targets are never re-clicked.
+    """
+    from hardly.core.search_nav import page_candidates, search_form_reached
+
+    keywords = [str(k) for k in (raw.get("keywords") or [])]
+    max_hops = min(max(int(raw.get("max_hops") or 4), 1), 8)
+    min_fields = max(int(raw.get("min_fields") or 2), 1)
+    visited: set[str] = set()
+    hops: list[dict[str, Any]] = []
+    form = None
+    for _ in range(max_hops + 1):
+        html = page.content()
+        cands, structure = page_candidates(html, base_url=page.url, keywords=keywords)
+        form = search_form_reached(structure, min_fields=min_fields)
+        if form:
+            break
+        if len(hops) >= max_hops:
+            break
+        pick = next((c for c in cands if c["click"]["css"] not in visited), None)
+        if pick is None:
+            break
+        visited.add(pick["click"]["css"])
+        before = page.url
+        try:
+            page.locator(pick["click"]["css"]).first.click(timeout=8_000)
+        except Exception as exc:  # noqa: BLE001
+            hops.append({"from": before, "clicked": pick["text"], "error": str(exc)[:120]})
+            continue
+        try:
+            page.wait_for_load_state("domcontentloaded", timeout=8_000)
+        except Exception:  # noqa: BLE001
+            pass
+        page.wait_for_timeout(400)
+        hops.append(
+            {"from": before, "clicked": pick["text"], "css": pick["click"]["css"], "to": page.url}
+        )
+    return {"reached": form is not None, "form": form, "hops": hops, "url": page.url}
+
+
 def _run_inprocess_recipe(page: Any, steps: list[dict[str, Any]]) -> dict[str, Any]:
     """Minimal recipe runner for in-process headless capture (goto/wait/click/fill)."""
     results: list[dict[str, Any]] = []
@@ -1190,6 +1234,8 @@ def _run_inprocess_recipe(page: Any, steps: list[dict[str, Any]]) -> dict[str, A
             elif op == "press":
                 page.keyboard.press(str(raw.get("key") or "Enter"))
                 step_out["result"] = {"url": page.url}
+            elif op == "find_click":
+                step_out["result"] = _find_click(page, raw)
             elif op == "evaluate":
                 js = str(raw.get("js") or raw.get("expression") or "").strip()
                 if not js:

@@ -47,7 +47,8 @@ hardly outline a.har 12 --format markdown
 hardly params a.har POST site.example /search   # which parameters vary across calls to one route
 ```
 
-If you have only a landing page, `hardly find-search a.har --keyword <term>`
+`hardly capture discover … --recipe` can do the clicking for you with the
+`find_click` recipe step (see [capture.md](capture.md#recipes)). If you have only a landing page, `hardly find-search a.har --keyword <term>`
 ranks links, buttons and postback targets likely to lead to a search/lookup
 UI and returns a ready `click` step. You supply the domain vocabulary; hardly
 supplies generic signals only.

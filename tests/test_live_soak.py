@@ -149,3 +149,29 @@ def test_local_challenges_captured(tmp_path, monkeypatch):
     )
     assert any(t["status"] == 429 for t in out["throttling"])
     assert {"turnstile", "hcaptcha"} <= {c["name"] for c in out["captcha_widgets"]}
+
+
+@pytest.mark.skipif(not playwright_available(), reason="playwright not installed")
+def test_find_click_navigates_to_search_form(tmp_path, monkeypatch):
+    """Landing -> services (link) -> lookup (JS button) -> real search form."""
+    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    if not playwright_status().get("ready"):
+        pytest.skip("Playwright browser not ready")
+
+    from hardly.capture import capture_headless
+    from hardly.local_site import serve
+
+    with serve() as base:
+        recipe = [
+            {"op": "goto", "url": f"{base}/portal"},
+            {"op": "find_click", "keywords": ["widget"], "max_hops": 4},
+        ]
+        cap = capture_headless(
+            f"{base}/portal", wait_seconds=0.3, recipe=recipe, open_session=False, brief=False
+        )
+    steps = cap["discover"]["recipe"]["steps"]
+    result = next(s for s in steps if s["op"] == "find_click")["result"]
+    assert result["reached"], result
+    assert result["url"].endswith("/portal/lookup")
+    assert [h["clicked"] for h in result["hops"]] == ["Online services", "Widget lookup"]
+    assert set(result["form"]["fields"]) == {"name", "category"}

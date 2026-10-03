@@ -511,7 +511,9 @@ def hardly_discover(
     Agent-driven API discovery — no person needed. Returns ``session_id``,
     ``brief``, ``capture_mode=headless``, and ``mode=archive`` for drill-down.
     ``recipe_json`` is a JSON list of steps (goto/wait/aria/click/fill/…) or
-    empty for a plain load+wait. If the brief shows a wall, switch to
+    empty for a plain load+wait. A ``find_click`` step
+    (``{"op":"find_click","keywords":["your","terms"],"max_hops":4}``) follows
+    ranked links/buttons until a real search form appears. If the brief shows a wall, switch to
     interactive: hardly_capture_start(headed=true, channel=chrome) and ask
     the person.
     """

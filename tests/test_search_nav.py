@@ -44,3 +44,28 @@ def test_js_actions_are_candidates():
     assert top[0]["text"] == "Gadget Search" and top[0]["kind"] == "js_link"
     texts = [r["text"] for r in top]
     assert "Find a Widget" in texts and "Lookup" in texts and "Sign in" not in texts
+
+
+def test_search_form_reached_skips_login_and_site_search():
+    from hardly.core.search_nav import search_form_reached
+
+    site = extract_html_structure('<form action="/f"><input type="search" name="q"></form>')
+    assert search_form_reached(site) is None  # header search box is not the goal
+    login = extract_html_structure(
+        '<form><input name="u"><input type="password" name="p"></form>'
+    )
+    assert search_form_reached(login) is None
+    real = extract_html_structure(
+        '<form action="/r"><input name="name"><select name="cat"><option>a</option></select></form>'
+    )
+    hit = search_form_reached(real)
+    assert hit and set(hit["fields"]) == {"name", "cat"}
+    single = extract_html_structure('<form><input type="text" name="parcel_id"></form>')
+    assert search_form_reached(single)["fields"] == ["parcel_id"]  # one specific field counts
+
+
+def test_gateway_words_use_link_text_only():
+    from hardly.core.search_nav import score_link
+
+    assert score_link("Online services", "/x")[0] > 0
+    assert score_link("About us", "/portal/about")[0] == 0  # path alone is not a gateway

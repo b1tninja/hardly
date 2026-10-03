@@ -25,6 +25,13 @@ _NEGATIVE = re.compile(
     r"accessib|sitemap|mailto|\.pdf|translate|subscribe|calendar|holiday",
     re.I,
 )
+# Low-weight "gateway" wording: pages that usually lead on to a search UI.
+_GATEWAY = re.compile(
+    r"\b(online|e-?services?|services|public (access|records?)|records?|research|"
+    r"tools|resources|databases?|portal|applications?|apps|self[- ]service)\b",
+    re.I,
+)
+_GATEWAY_WEIGHT = 2
 _KEYWORD_WEIGHT = 10
 _GENERIC_WEIGHT = 3
 
@@ -41,6 +48,8 @@ def score_link(
     score += _KEYWORD_WEIGHT * len(matched)
     if _GENERIC.search(hay):
         score += _GENERIC_WEIGHT
+    if _GATEWAY.search(text or ""):
+        score += _GATEWAY_WEIGHT
     # A keyword alone (no search-ish word) is only a weak lead.
     return score, matched
 
@@ -96,6 +105,60 @@ def actions_as_links(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return [o for o in out if o["css"]]
+
+
+_SITE_SEARCH_NAME = re.compile(
+    r"^(q|s|search|query|keyword|keywords|term|searchterm|site-search)$", re.I
+)
+_ENTRY_TYPES = frozenset(
+    {"text", "search", "number", "date", "email", "tel", "select", "textarea", "datetime-local", "month"}
+)
+
+
+def search_form_reached(
+    structure: dict[str, Any], *, min_fields: int = 2
+) -> dict[str, Any] | None:
+    """First form that looks like a real search/lookup form, else ``None``.
+
+    Skips login forms (password field) and one-box site-search widgets, so a
+    landing page's header search does not end navigation early.
+    """
+    for form in structure.get("forms") or []:
+        fields = form.get("fields") or []
+        if any((f.get("type") or "").lower() == "password" for f in fields):
+            continue
+        entry = [
+            f for f in fields
+            if (f.get("type") or f.get("kind") or "").lower() in _ENTRY_TYPES
+            or f.get("kind") in {"select", "textarea"}
+        ]
+        if not entry:
+            continue
+        if len(entry) < min_fields and not (
+            len(entry) == 1
+            and not _SITE_SEARCH_NAME.match(str(entry[0].get("name") or entry[0].get("id") or ""))
+        ):
+            continue
+        return {
+            "action": form.get("action") or "",
+            "method": form.get("method") or "",
+            "fields": [f.get("name") or f.get("id") or "" for f in entry][:12],
+        }
+    return None
+
+
+def page_candidates(
+    html: str,
+    *,
+    base_url: str = "",
+    keywords: tuple[str, ...] | list[str] = (),
+    limit: int = 15,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Ranked click targets for one page plus its parsed structure."""
+    structure = extract_html_structure(html, base_url=base_url)
+    links = (structure.get("links") or []) + actions_as_links(structure.get("actions") or [])
+    kw = tuple(k.strip() for k in keywords if k and k.strip())
+    return rank_search_links(links, keywords=kw, limit=limit), structure
 
 
 def _q(value: str) -> str:

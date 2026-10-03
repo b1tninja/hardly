@@ -39,6 +39,24 @@ _CAPTCHA = """<!doctype html><html><body><form method="post" action="/login.acti
 <textarea name="cf-turnstile-response"></textarea><textarea name="h-captcha-response"></textarea>
 </form><script src="https://challenges.cloudflare.com/turnstile/v0/api.js"></script></body></html>"""
 
+# Multi-hop portal: landing (header search box only) -> services (JS button)
+# -> lookup (real form). Used to test navigation helpers.
+_PORTAL = """<!doctype html><html><head><title>Portal</title></head><body>
+<form action="/portal/find"><input type="search" name="q" placeholder="Search site"></form>
+<nav><a href="/portal/about">About us</a> <a href="/login">Sign in</a>
+<a href="/portal/pay">Pay a bill</a> <a href="/portal/services">Online services</a></nav>
+</body></html>"""
+
+_PORTAL_SERVICES = """<!doctype html><html><body><h1>Online services</h1>
+<a href="/portal/faq">FAQ</a>
+<button id="go-widgets" onclick="location.href='/portal/lookup'">Widget lookup</button>
+<a href="/portal/about">About us</a></body></html>"""
+
+_PORTAL_LOOKUP = """<!doctype html><html><body><h1>Widget lookup</h1>
+<form method="get" action="/portal/results"><label>Widget name <input type="text" name="name"></label>
+<label>Category <select name="category"><option>a</option><option>b</option></select></label>
+<input type="submit" value="Search"></form></body></html>"""
+
 _INDEX = """<!doctype html><html><head><title>Local demo</title></head><body>
 <a href="/directory.aspx">Widget directory search</a> <a href="/login">Sign in</a>
 <a href="/api/items">items</a></body></html>"""
@@ -73,6 +91,14 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(_WEBFORMS, cookie="ASP.NET_SessionId=localdemo0001; path=/; HttpOnly")
         elif path == "/login":
             self._send(_LOGIN, cookie="JSESSIONID=localdemo0002; path=/; HttpOnly; SameSite=Lax")
+        elif path == "/portal":
+            self._send(_PORTAL)
+        elif path == "/portal/services":
+            self._send(_PORTAL_SERVICES)
+        elif path == "/portal/lookup":
+            self._send(_PORTAL_LOOKUP)
+        elif path.startswith("/portal/"):
+            self._send("<html><body><p>" + path.rsplit("/", 1)[-1] + "</p></body></html>")
         elif path == "/private":
             if self.headers.get("Authorization"):
                 self._send("ok")

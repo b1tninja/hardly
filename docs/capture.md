@@ -33,10 +33,12 @@ A recipe is a JSON list of steps. Headless one-shots run **in-process**:
 | `click` | `css` (or `selector`), `timeout_ms` | Playwright selectors: `#id`, `a:has-text("Next")` |
 | `fill` | `css`, `value` | |
 | `press` | `key` | default `Enter` |
+| `find_click` | `keywords` (your domain terms), `max_hops` (default 4, max 8), `min_fields` (default 2) | follows the best-ranked link/button/postback each hop until a real search form appears (login forms and one-box site search are skipped); result has `reached`, `form`, `hops` |
 | `evaluate` | `js` | result is returned in the step output |
 | `fetch` | `url`, `method`, `headers`, `body` | same-tab `fetch`, so APIs/GraphQL land in the HAR without clicking through a UI |
 
-The live capture session (`hardly_capture_start` + `hardly_capture_recipe`)
+`find_click` is available in headless one-shots only (not in the live session
+runner). The live capture session (`hardly_capture_start` + `hardly_capture_recipe`)
 additionally supports `elements`, `aria`, `screenshot`, `note`, `url`, and
 selecting by `ref`/`text`/`role` from the accessibility snapshot. Use
 `hardly_capture_aria` to get Playwright accessibility YAML with `refs[]`, then
