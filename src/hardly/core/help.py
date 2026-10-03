@@ -52,7 +52,7 @@ _CATEGORIES: tuple[dict[str, Any], ...] = (
     {
         "id": "portal",
         "title": "HTML guest portals",
-        "when": "County / ASP.NET / search-grid UIs",
+        "when": "Server-rendered HTML portals: ASP.NET WebForms, search grids, detail pages",
         "tools": [
             "hardly_brief",
             "hardly_story",

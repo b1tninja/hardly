@@ -105,7 +105,7 @@ def detect_walls(
         "hits": hits,
         "next": (
             "Bot walls need headed Chrome capture (channel=chrome), not urllib. "
-            "Use hardly_capture_start; for CA counties prefer asspy.sample."
+            "Use hardly_capture_start; then continue in archive mode on the saved HAR."
         ),
     }
 

@@ -28,16 +28,19 @@ from hardly.core.wall import detect_walls
 from hardly.index import query as q
 
 # (path, preferred_host substring that must win — guards CDN/payment seed bugs)
-HARS: list[tuple[Path, str | None]] = [
-    (Path(r"D:\code\jason\recordersdocumentindex.saccounty.gov.har"), "saccounty"),
-    (Path(r"D:\code\i-doxs\secure8.i-doxs.net2.har"), "i-doxs"),
-    (Path(r"D:\code\jason\app.jobtread.com.har"), "jobtread"),
-    (Path(r"D:\code\jason\aca-prod.accela.com.har"), "accela"),
-    (Path(r"D:\code\payhoa\app.payhoa.com.har"), "payhoa"),
-    (Path(r"D:\code\jason\assessorparcelviewer.saccounty.gov.har"), "saccounty"),
-    (Path(r"D:\code\jason\countyfusion4.kofiletech.us.har"), "kofile"),
-    (Path(r"D:\code\jason\common1.mptsweb.com.har"), "mptsweb"),
-]
+def _har_list() -> list[tuple[Path, str | None]]:
+    """HARs come from ``HARDLY_SOAK_HARS``: ``path[=host_substring]`` entries
+    separated by ``os.pathsep``. Nothing site-specific is checked in."""
+    import os
+
+    out: list[tuple[Path, str | None]] = []
+    for item in filter(None, os.environ.get("HARDLY_SOAK_HARS", "").split(os.pathsep)):
+        path, _, host = item.partition("=")
+        out.append((Path(path), host or None))
+    return out
+
+
+HARS = _har_list()
 
 # Patterns that must never appear in soak JSON (values from fixtures / live HARs).
 _LEAK_RE = __import__("re").compile(
@@ -190,12 +193,6 @@ def run_one(path: Path, *, expect_host: str | None = None) -> dict:
             if len(sample_labels) >= 8:
                 break
         out["label_sample"] = sample_labels
-        # Placer detail HARs should expose label rows without custom scripts.
-        if expect_host in {"kofile", "mptsweb"} and label_total == 0:
-            out["ok"] = False
-            out["error"] = f"expected label rows for {expect_host}, got 0"
-            out["total_s"] = round(time.perf_counter() - t0, 2)
-            return out
 
         t1 = time.perf_counter()
         cred = map_credentials(

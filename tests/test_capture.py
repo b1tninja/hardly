@@ -20,9 +20,9 @@ from hardly.capture import (
 
 def test_default_har_path_under_cache(tmp_path, monkeypatch):
     monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
-    path = default_har_path("arcc-acclaim.sdcounty.ca.gov")
+    path = default_har_path("portal.example.com")
     assert path.parent == tmp_path / "captures"
-    assert "arcc-acclaim" in path.name
+    assert "portal" in path.name
     assert path.suffix == ".har"
 
 

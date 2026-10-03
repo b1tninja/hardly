@@ -214,7 +214,7 @@ def playwright_status() -> dict[str, Any]:
         )
     else:
         out["hint"] = (
-            "Ready with bundled Chromium. For county / Akamai portals prefer "
+            "Ready with bundled Chromium. For bot-walled sites (Akamai etc.) prefer "
             "channel=chrome (system Chrome)."
         )
     return out

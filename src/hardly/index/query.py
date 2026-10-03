@@ -516,8 +516,7 @@ def list_forms(
     if exclude_noise:
         clauses.append("e.is_noise = 0")
     where = " AND ".join(clauses)
-    # Oversample then rank by label_count so detail pages (KoFile transAddDoc,
-    # MPTSWEB AsrMain) beat early login/search shells within the first page.
+    # Oversample then rank by label_count so detail pages (label-rich) beat early login/search shells within the first page.
     scan = min(150, max(min(limit, 100) * 5, min(limit, 100) + offset + 10))
     rows = conn.execute(
         f"""

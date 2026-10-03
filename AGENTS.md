@@ -56,8 +56,8 @@ Prefer MCP/CLI helpers over reading the HAR:
    `hardly_endpoints` / `hardly_content` for API surface and payload kinds
 3. HTML portals: `hardly_brief` first (includes a credentials summary +
    cookie flags), then `hardly_story` / `hardly_forms` / `hardly_ui` /
-   `hardly_outline`. `hardly_forms` labels cover Acclaim detailLabel,
-   th/td, dt/dd, MPTSWEB bold cells, and KoFile `span.base` rows — prefer
+   `hardly_outline`. `hardly_forms` labels cover div label/value pairs,
+   th/td, dt/dd, bold-cell tables, and `span.base` rows — prefer
    those over scraping bodies. Live tab: `hardly_capture_aria` for
    Playwright accessibility YAML + `refs[]`
 4. Credentials / login: `hardly_credentials` for the full map (password +
@@ -78,8 +78,8 @@ Prefer MCP/CLI helpers over reading the HAR:
 8. `hardly_entry` / `hardly_schema` / export — only for needed details
 
 Optional dep for capture: `pip install -e ".[capture]"` +
-`playwright install chromium` (or `HARDLY_BROWSER_CHANNEL=chrome`). For CA
-counties: `python -m asspy.sample <county>`. Do not use Cursor's IDE browser
+`playwright install chromium` (or `HARDLY_BROWSER_CHANNEL=chrome`). hardly stays content-neutral (technology helpers and generic
+resource kinds only; no site-specific logic). Do not use Cursor's IDE browser
 expecting a HAR path.
 
 ## Boundaries

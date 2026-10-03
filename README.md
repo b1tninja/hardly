@@ -109,7 +109,7 @@ Call `hardly_modes` / `hardly_mode` (or `hardly modes`) before other tools:
 hardly modes
 hardly modes archive --har path/to/capture.har
 hardly modes headless --url https://portal.example.com
-hardly modes --goal "ask the user to search the county portal"
+hardly modes --goal "ask the user to search the portal"
 ```
 
 MCP prompts: `analyze_har`, `discover_apis`, `capture_portal`.
@@ -148,8 +148,10 @@ Cursor’s IDE browser does **not** hand hardly a HAR path.
 
 Capture backfills bodies that Playwright often leaves as `content.size == -1`.
 
-For California county portals, prefer `python -m asspy.sample <county>` (writes
-under `$ASSPY_HOME/samples/`).
+hardly is content-neutral: it ships helpers for common technologies (ASP.NET
+WebForms, GraphQL, OAuth/cookie auth) and generic resource classes (forms, data,
+media, credentials), not site- or domain-specific logic. Keep site recipes and
+samples in separate projects.
 
 ## MCP tools
 
@@ -158,7 +160,7 @@ under `$ASSPY_HOME/samples/`).
 | Modes | `modes`, `mode`, `capabilities`, `help`, `recommend` |
 | Session | `open`, `reopen`, `list_sessions`, `close`, `summary`, `stats`, `coverage` |
 | Discovery | `summary`, `stats`, `hosts` (`preferred_host`), `endpoints`, `content`, `search`, `entry`, `compare_entries` |
-| Portal / HTML | `brief`, `story`, `forms` / `ui` (incl. Acclaim / MPTSWEB / KoFile labels), `outline`, `pages`, `wall` |
+| Portal / HTML | `brief`, `story`, `forms` / `ui` (incl. common label/value layouts), `outline`, `pages`, `wall` |
 | Tokens / credentials | `credentials` (login map + jwt/hex/base64 shapes), `correlate`, `trace`, `cookies`, `secrets`, `redirects` |
 | Structure | `routes`, `around`, `tree`, `params`, `graphql`, `duplicates`, `slow` |
 | Quality | `coverage`, `issues`, `diff`, `recommend` |
