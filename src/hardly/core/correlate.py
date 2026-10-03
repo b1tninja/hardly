@@ -7,7 +7,7 @@ import re
 import sqlite3
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl, unquote_plus, urlparse
+from urllib.parse import parse_qsl, unquote, unquote_plus, urlparse
 
 import ijson
 
@@ -96,6 +96,8 @@ def correlate_tokens(
                     "to_path": item["path"],
                     "to_where": loc,
                     "name_hint": name_hint or prod.get("name_hint"),
+                    "from_name_hint": prod.get("name_hint"),
+                    "to_name_hint": name_hint,
                     "value_kind": _value_kind(value),
                     "value_length": len(value),
                 }
@@ -255,6 +257,9 @@ def _extract_produce(resp: dict) -> list[tuple[str, str, str | None]]:
             cookie_name, cookie_val = value.split(";", 1)[0].split("=", 1)
             if _keep_value(cookie_val):
                 found.append(("set-cookie", cookie_val, cookie_name.strip()))
+            decoded = unquote(cookie_val)
+            if decoded != cookie_val and _keep_value(decoded):
+                found.append(("set-cookie", decoded, cookie_name.strip()))
         elif name == "location" and value:
             # path ids in redirects
             for part in urlparse(value).path.strip("/").split("/"):
@@ -342,6 +347,9 @@ def _json_values(
 ) -> list[tuple[str, str, str | None]]:
     try:
         data = json.loads(text)
+        # Double-encoded JSON: keep parsing while the result is a JSON string.
+        while isinstance(data, str) and data.lstrip()[:1] in ("{", "["):
+            data = json.loads(data)
     except (json.JSONDecodeError, TypeError):
         return []
     out: list[tuple[str, str, str | None]] = []
