@@ -6,6 +6,7 @@ import json
 import re
 import sqlite3
 from pathlib import Path
+from urllib.parse import parse_qsl, urlparse
 from typing import Any
 import ijson
 
@@ -88,13 +89,16 @@ def map_credentials(
     )
     oauth = _oauth_signals(conn, host=host, query_secrets=query_secrets, limit=limit)
 
+    cookie_names = (cookies.get("names_set") or []) + (cookies.get("names_sent") or [])
     session_cookies = sorted(
         {
             n
-            for n in (cookies.get("names_set") or []) + (cookies.get("names_sent") or [])
+            for n in cookie_names
             if _SESSION_COOKIE_RE.search(n)
+            and not _CSRF_RE.search(n)  # csrftoken guards forms; it is not the session
             and "(redacted" not in n.lower()
-        },
+        }
+        | _behavioral_session_cookies(conn, cookies, password_fields),
         key=str.lower,
     )
     csrf_names = sorted(
@@ -104,7 +108,8 @@ def map_credentials(
                 for h in secrets.get("hits") or []
                 if _CSRF_RE.search(str(h.get("name") or ""))
             ),
-            *(n for n in session_cookies if _CSRF_RE.search(n)),
+            *(n for n in cookie_names if _CSRF_RE.search(n) and "(redacted" not in n.lower()),
+            *_credential_post_csrf_names(conn, password_fields),
             *(
                 qs["name"]
                 for qs in query_secrets
@@ -115,6 +120,9 @@ def map_credentials(
     )
 
     shapes = _shape_hits(conn, har_path=har_path, host=host, limit=limit)
+    webauthn = _webauthn_signals(conn, host=host)
+    spa_suspected = _spa_login_suspected(conn, host=host, password_fields=password_fields)
+    aborted = _aborted_entries(conn, host=host)
     flow = _login_flow(
         conn,
         host=host,
@@ -124,6 +132,7 @@ def map_credentials(
         session_cookies=session_cookies,
         shapes=shapes,
         oauth=oauth,
+        webauthn_steps=webauthn.get("steps"),
     )
 
     by_shape: dict[str, int] = {}
@@ -145,6 +154,9 @@ def map_credentials(
         "cookie_flags_by": cookies.get("by_flag") or {},
         "csrf_names": csrf_names,
         "anti_forgery_forms": _anti_forgery_forms(conn, host=host, limit=limit),
+        "webauthn": webauthn,
+        "spa_login_suspected": spa_suspected,
+        "aborted_entries": aborted,
         "oauth": oauth,
         "query_secrets": query_secrets[:limit],
         "shapes": shapes[:limit],
@@ -153,6 +165,21 @@ def map_credentials(
         "secret_names": secrets.get("names") or [],
         "notes": [
             "Names and value *shapes* only — never secret values.",
+            *(
+                [
+                    "Client-rendered page(s) with no form markup: login inputs are probably "
+                    "created by JavaScript. Use hardly_capture_aria or a recipe `evaluate` "
+                    "step after load to read the rendered fields."
+                ]
+                if spa_suspected
+                else []
+            ),
+            *(
+                [f"{aborted['count']} of {aborted['total']} entries have no response "
+                 "(status -1/0: aborted, blocked, or capture stopped early)."]
+                if aborted["count"] >= 3 and aborted["count"] * 5 >= aborted["total"]
+                else []
+            ),
             "Chrome HARs often strip Authorization / Cookie; bodies still help.",
             *(auth.get("notes") or []),
         ],
@@ -719,6 +746,40 @@ def _oauth_signals(
             if len(hits) >= limit:
                 break
 
+    # Token requests carry code_verifier/grant_type/... in the POST body.
+    for p in list(paths):
+        if (p.get("method") or "").upper() == "POST":
+            for name in _request_field_names(conn, int(p["entry_id"])):
+                if _OAUTH_PARAM_RE.match(name) and (int(p["entry_id"]), name.lower()) not in seen:
+                    seen.add((int(p["entry_id"]), name.lower()))
+                    hits.append({"entry_id": p["entry_id"], "method": p["method"], "path": p["path"],
+                                 "side": "request", "kind": "oauth_body", "name": name})
+    # A 3xx whose Location carries code/id_token is the callback hop.
+    for r in conn.execute(
+        """
+        SELECT e.entry_id, e.method, e.host, e.path, e.status, h.value_raw AS loc
+        FROM entries e JOIN headers h ON h.entry_id = e.entry_id AND h.side = 'response'
+        WHERE e.status BETWEEN 300 AND 399 AND lower(h.name) = 'location'
+        ORDER BY e.entry_id LIMIT 200
+        """
+    ):
+        try:
+            names = {k.lower() for k, _ in parse_qsl(urlparse(r["loc"] or "").query or (r["loc"] or "").split("#", 1)[-1])}
+        except ValueError:
+            continue
+        if not ({"code", "id_token", "access_token"} & names) or "error" in names and "code" not in names:
+            continue
+        for name in sorted(names & {"code", "state", "session_state", "id_token", "access_token"}):
+            hits.append({"entry_id": r["entry_id"], "method": r["method"], "path": r["path"],
+                         "side": "response", "kind": "oauth_redirect", "name": name})
+        if not any(p["entry_id"] == r["entry_id"] for p in paths):
+            paths.append({"entry_id": r["entry_id"], "method": r["method"], "host": r["host"],
+                          "path": r["path"], "status": r["status"], "callback_redirect": True})
+        else:
+            for p in paths:
+                if p["entry_id"] == r["entry_id"]:
+                    p["callback_redirect"] = True
+
     flow = _oauth_flow_steps(paths, hits)
     return {
         "param_hits": hits[:limit],
@@ -744,7 +805,9 @@ def _oauth_flow_steps(
         path_l = (p.get("path") or "").lower()
         names = params_by_entry.get(int(p["entry_id"]), set())
         role = "oauth_other"
-        if "authorize" in path_l or path_l.endswith("/auth") or "/oauth2/auth" in path_l:
+        if p.get("callback_redirect"):
+            role = "callback"
+        elif "authorize" in path_l or path_l.endswith("/auth") or "/oauth2/auth" in path_l:
             role = "authorize"
         elif "token" in path_l and "authorize" not in path_l:
             role = "token"
@@ -791,6 +854,7 @@ def _login_flow(
     session_cookies: list[str],
     shapes: list[dict[str, Any]],
     oauth: dict[str, Any],
+    webauthn_steps: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Hypothesize a login sequence from password posts → tokens/cookies."""
     steps: list[dict[str, Any]] = []
@@ -816,9 +880,13 @@ def _login_flow(
         ).fetchone()
         if not row:
             continue
+        is_submit = (row["method"] or "").upper() in {"POST", "PUT", "PATCH"}
         role = "credential_submit"
         if AUTH_PATH_RE.search(row["path"] or ""):
             role = "login_submit"
+        if not is_submit:
+            # A GET that merely contains a password input is the login *page*.
+            role = "login_page"
         step: dict[str, Any] = {
             "role": role,
             "entry_id": row["entry_id"],
@@ -829,6 +897,8 @@ def _login_flow(
         }
         if eid in id_by_entry:
             step["identity_field"] = id_by_entry[eid]
+        if is_submit:
+            step.update(_submit_outcome(conn, row))
         steps.append(step)
 
     for tr in auth.get("token_response_entries") or []:
@@ -858,6 +928,9 @@ def _login_flow(
                     "name": s.get("name"),
                 }
             )
+
+    for wa in (webauthn_steps or [])[:6]:
+        steps.append(wa)
 
     for p in (oauth.get("paths") or [])[:10]:
         steps.append(
@@ -955,3 +1028,152 @@ def _anti_forgery_forms(
             if len(out) >= limit:
                 return out
     return out
+
+
+# --- helpers added from live testing ---------------------------------------
+
+_BODY_CSRF_RE = re.compile(
+    r"^_?(token|csrf\w*|xsrf\w*|authenticity_token|csrfmiddlewaretoken|__requestverificationtoken|nonce)$", re.I
+)
+_SPA_ROOT_RE = re.compile(
+    r"""<div[^>]+id=["'](root|app|__next|__nuxt)["']|<app-root|ng-app|__NEXT_DATA__|data-reactroot""", re.I
+)
+
+
+def _request_field_names(conn: sqlite3.Connection, entry_id: int) -> list[str]:
+    """Top-level field names of a request body (form or JSON); never values."""
+    row = conn.execute(
+        "SELECT preview_text FROM bodies WHERE entry_id = ? AND side = 'request'", (entry_id,)
+    ).fetchone()
+    text = (row["preview_text"] if row else None) or ""
+    text = text.strip()
+    if not text:
+        return []
+    if text.startswith("{"):
+        try:
+            data = json.loads(text)
+        except ValueError:
+            return re.findall(r'"([^"\\]{1,60})"\s*:', text[:2000])[:40]
+        return [str(k) for k in data][:40] if isinstance(data, dict) else []
+    if "<" in text[:20]:
+        return []
+    return [k for k, _ in parse_qsl(text, keep_blank_values=True)][:40]
+
+
+def _credential_post_csrf_names(conn: sqlite3.Connection, password_fields: list[dict[str, Any]]) -> list[str]:
+    """Token-ish field names sent alongside the credentials (e.g. ``_token``)."""
+    out: set[str] = set()
+    for eid in {int(h["entry_id"]) for h in password_fields if h.get("entry_id") is not None}:
+        for name in _request_field_names(conn, eid):
+            if _BODY_CSRF_RE.match(name.split("$")[-1]):
+                out.add(name)
+    return sorted(out)
+
+
+def _behavioral_session_cookies(
+    conn: sqlite3.Connection, cookies: dict[str, Any], password_fields: list[dict[str, Any]]
+) -> set[str]:
+    """HttpOnly cookies first set by/after a credential POST are the session."""
+    post_ids = [
+        int(h["entry_id"])
+        for h in password_fields
+        if h.get("entry_id") is not None
+    ]
+    if not post_ids:
+        return set()
+    posts = conn.execute(
+        f"SELECT entry_id FROM entries WHERE method IN ('POST','PUT','PATCH') AND entry_id IN ({','.join('?' * len(post_ids))})",
+        post_ids,
+    ).fetchall()
+    if not posts:
+        return set()
+    first = min(int(r["entry_id"]) for r in posts)
+    return {
+        f["name"]
+        for f in cookies.get("flags") or []
+        if f.get("httponly") and int(f.get("entry_id") or 0) >= first and not _CSRF_RE.search(f["name"])
+    }
+
+
+def _submit_outcome(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
+    """How a credential POST ended: redirect target path, rejection, or page."""
+    status = int(row["status"] or 0)
+    if 300 <= status < 400:
+        loc = conn.execute(
+            "SELECT value_raw FROM headers WHERE entry_id = ? AND side = 'response' AND lower(name) = 'location'",
+            (row["entry_id"],),
+        ).fetchone()
+        target = urlparse((loc["value_raw"] if loc else "") or "").path or None
+        return {"outcome": "redirect", **({"redirect_to": target} if target else {})}
+    if status in (401, 403, 422, 429):
+        return {"outcome": "rejected"}
+    if 200 <= status < 300:
+        ctype = conn.execute(
+            "SELECT content_type FROM bodies WHERE entry_id = ? AND side = 'response'", (row["entry_id"],)
+        ).fetchone()
+        kind = (ctype["content_type"] or "").lower() if ctype else ""
+        return {
+            "outcome": "ok_json" if "json" in kind else "page_returned",
+            **({"note": "200 HTML after a credential POST is often a failed login redisplayed; compare with a redirect"} if "html" in kind else {}),
+        }
+    return {"outcome": "unknown"}
+
+
+def _aborted_entries(conn: sqlite3.Connection, *, host: str | None) -> dict[str, int]:
+    total = conn.execute("SELECT COUNT(*) FROM entries").fetchone()[0]
+    count = conn.execute("SELECT COUNT(*) FROM entries WHERE status IS NULL OR status <= 0").fetchone()[0]
+    return {"count": int(count), "total": int(total)}
+
+
+def _spa_login_suspected(conn: sqlite3.Connection, *, host: str | None, password_fields: list[dict[str, Any]]) -> bool:
+    if password_fields:
+        return False
+    for row in conn.execute(
+        """
+        SELECT b.preview_text FROM entries e JOIN bodies b ON b.entry_id = e.entry_id AND b.side = 'response'
+        WHERE e.status = 200 AND b.content_type LIKE '%html%' AND length(b.preview_text) BETWEEN 1 AND 12000
+        ORDER BY e.entry_id LIMIT 40
+        """
+    ):
+        text = row["preview_text"] or ""
+        if _SPA_ROOT_RE.search(text) and "<form" not in text.lower():
+            return True
+    return False
+
+
+_WEBAUTHN_OPTION_KEYS = {"challenge", "pubkeycredparams", "rp", "allowcredentials", "authenticatorselection", "excludecredentials", "rpid"}
+_WEBAUTHN_RESPONSE_KEYS = {"clientdatajson", "attestationobject", "authenticatordata", "signature", "userhandle", "rawid"}
+
+
+def _webauthn_signals(conn: sqlite3.Connection, *, host: str | None) -> dict[str, Any]:
+    """Passkey/WebAuthn ceremony: option fetch (challenge…) and verify (clientDataJSON…)."""
+    steps: list[dict[str, Any]] = []
+    for row in conn.execute(
+        """
+        SELECT e.entry_id, e.method, e.path, e.status, b.side, b.preview_text
+        FROM entries e JOIN bodies b ON b.entry_id = e.entry_id
+        WHERE b.preview_text LIKE '%{%' AND (
+            lower(b.preview_text) LIKE '%challenge%' OR lower(b.preview_text) LIKE '%clientdatajson%'
+            OR lower(b.preview_text) LIKE '%attestationobject%' OR lower(b.preview_text) LIKE '%authenticatordata%')
+        ORDER BY e.entry_id LIMIT 200
+        """
+    ):
+        text = (row["preview_text"] or "")[:20000]
+        keys = {k.lower() for k in re.findall(r'"([A-Za-z]{2,40})"\s*:', text)}
+        opt = len(keys & _WEBAUTHN_OPTION_KEYS)
+        resp = len(keys & _WEBAUTHN_RESPONSE_KEYS)
+        if row["side"] == "response" and "challenge" in keys and opt >= 2:
+            role = "webauthn_options"
+        elif row["side"] == "request" and ("clientdatajson" in keys or "attestationobject" in keys or resp >= 2):
+            role = "webauthn_verify"
+        else:
+            continue
+        steps.append({"role": role, "entry_id": row["entry_id"], "method": row["method"],
+                      "path": row["path"], "status": row["status"],
+                      "fields": sorted(keys & (_WEBAUTHN_OPTION_KEYS | _WEBAUTHN_RESPONSE_KEYS))})
+    return {
+        "likely": bool(steps),
+        "has_options": any(s["role"] == "webauthn_options" for s in steps),
+        "has_verify": any(s["role"] == "webauthn_verify" for s in steps),
+        "steps": steps[:10],
+    }

@@ -74,6 +74,23 @@ identifies likely session cookies by name.
 
 Values are never returned; probes take secrets only through overrides.
 
+Login steps carry a role and, for credential POSTs, an **outcome**: a GET that
+merely contains a password input is `login_page`; a POST ends in `redirect`
+(with the target path), `rejected` (401/403/422/429), `ok_json`, or
+`page_returned` (a 200 HTML page after a credential POST is often a failed
+login redisplayed — compare with a redirect). Session cookies are the
+name-matched ones **plus** HttpOnly cookies first set by or after the credential
+POST; CSRF cookies (`csrftoken`) and token-ish fields sent with the credentials
+(`_token`) are reported under `csrf_names`, not as the session. OAuth/OIDC
+stitching follows `Location` headers: a 3xx whose target carries `code` or
+`id_token` is the callback hop, and token requests contribute their body field
+names (`grant_type`, `code_verifier`…). WebAuthn/passkey ceremonies appear under
+`webauthn` (option fetch with `challenge`/`rp`/`pubKeyCredParams`, verify with
+`clientDataJSON`/`attestationObject`) and as `webauthn_*` login steps. Pages
+that are empty client-rendered shells set `spa_login_suspected`, because their
+password inputs only exist after JavaScript runs; entries with no response
+(status -1/0) are counted in `aborted_entries`.
+
 ## HTML data attributes
 
 `hardly_data_attrs` (CLI `hardly data-attrs`) applies the MDN
