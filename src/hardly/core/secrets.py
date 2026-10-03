@@ -90,6 +90,45 @@ def locate_secrets(
             if len(hits) >= _MAX:
                 break
 
+    if len(hits) < _MAX:
+        for row in conn.execute(
+            f"""
+            SELECT e.entry_id, e.method, e.path, e.query_json
+            FROM entries e
+            WHERE {where} AND e.query_json IS NOT NULL
+            ORDER BY e.entry_id ASC
+            LIMIT 400
+            """,
+            params,
+        ):
+            try:
+                query = json.loads(row["query_json"] or "{}")
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if not isinstance(query, dict):
+                continue
+            for name in query:
+                if not name or not is_sensitive_key(str(name)):
+                    continue
+                key = (row["entry_id"], "request", "query_param", str(name).lower())
+                if key in seen:
+                    continue
+                seen.add(key)
+                hits.append(
+                    {
+                        "entry_id": row["entry_id"],
+                        "method": row["method"],
+                        "path": row["path"],
+                        "side": "request",
+                        "kind": "query_param",
+                        "name": str(name),
+                    }
+                )
+                if len(hits) >= _MAX:
+                    break
+            if len(hits) >= _MAX:
+                break
+
     hits = hits[: min(limit, _MAX)]
     by_name: dict[str, int] = {}
     for h in hits:
@@ -102,7 +141,8 @@ def locate_secrets(
         "hits": hits,
         "next": (
             "Names only — values are redacted in the index. "
-            "Rotate credentials if a HAR was shared; use hardly_trace(name=...)."
+            "For a login/session map use hardly_credentials; "
+            "trace a name with hardly_trace(name=...)."
         ),
     }
 

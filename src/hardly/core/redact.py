@@ -62,6 +62,48 @@ JWT_RE = re.compile(
     r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"
 )
 LONG_HEX_RE = re.compile(r"\b[0-9a-fA-F]{32,}\b")
+# URL-safe or std base64-ish blob (not a pure word); length keeps noise down.
+BASE64_RE = re.compile(r"\b(?:[A-Za-z0-9+/_-]{24,}={0,2})\b")
+BEARER_RE = re.compile(r"^\s*Bearer\s+(\S+)\s*$", re.I)
+BASIC_RE = re.compile(r"^\s*Basic\s+(\S+)\s*$", re.I)
+
+
+def classify_value_shape(value: str | None) -> str | None:
+    """Return a shape label for a secret-looking value — never echo the value.
+
+    Labels: jwt | bearer_jwt | bearer_token | basic_auth | hex | base64 | uuid
+    """
+    if not value or not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text or text == REDACTED:
+        return None
+    bearer = BEARER_RE.match(text)
+    if bearer:
+        inner = classify_value_shape(bearer.group(1))
+        if inner == "jwt":
+            return "bearer_jwt"
+        return "bearer_token"
+    if BASIC_RE.match(text):
+        return "basic_auth"
+    if JWT_RE.search(text):
+        return "jwt"
+    if re.fullmatch(
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+        text,
+    ):
+        return "uuid"
+    if LONG_HEX_RE.fullmatch(text) or (
+        len(text) >= 32 and LONG_HEX_RE.fullmatch(text.replace("-", ""))
+    ):
+        return "hex"
+    # Base64: long, alphabet-ish, not a plain English word.
+    if len(text) >= 24 and BASE64_RE.fullmatch(text) and not text.isalpha():
+        # Prefer hex when the charset is only hex.
+        if re.fullmatch(r"[0-9a-fA-F]+", text) and len(text) >= 32:
+            return "hex"
+        return "base64"
+    return None
 
 
 def is_sensitive_header(name: str) -> bool:

@@ -71,6 +71,7 @@ _CATEGORIES: tuple[dict[str, Any], ...] = (
         "title": "Tokens & secrets",
         "when": "CSRF, ViewState, cookies, credentials",
         "tools": [
+            "hardly_credentials",
             "hardly_correlate",
             "hardly_trace",
             "hardly_cookies",

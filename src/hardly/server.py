@@ -1147,9 +1147,10 @@ def hardly_secrets(
     host: str | None = None,
     limit: int = 40,
 ) -> str:
-    """Locate sensitive header/field *names* (password, token, cookie, …).
+    """Locate sensitive header/field/query *names* (password, token, cookie, …).
 
-    Never returns values — only entry ids and names for rotation awareness.
+    Never returns values — only entry ids and names. Prefer hardly_credentials
+    for a login/session/JWT/hex/base64 map.
     """
     try:
         conn = sess.require_conn(session_id)
@@ -1158,6 +1159,33 @@ def hardly_secrets(
     from hardly.core.secrets import locate_secrets
 
     return _ok(locate_secrets(conn, host=host, limit=min(limit, 60)))
+
+
+@mcp.tool
+def hardly_credentials(
+    session_id: str,
+    host: str | None = None,
+    limit: int = 40,
+) -> str:
+    """Map login/credential evidence: passwords, session cookies, CSRF, JWT/hex/base64 shapes.
+
+    Names and value *shapes* only — never secret values. Builds a hypothesized
+    login_flow from password submits → token responses → auth material.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.credentials import map_credentials
+
+    return _ok(
+        map_credentials(
+            conn,
+            har_path=sess.get_har_path(session_id),
+            host=host,
+            limit=min(limit, 60),
+        )
+    )
 
 
 @mcp.tool

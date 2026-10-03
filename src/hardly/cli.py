@@ -504,6 +504,25 @@ def cmd_secrets(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_credentials(args: argparse.Namespace) -> int:
+    from hardly.core.credentials import map_credentials
+
+    result = sess.open_har(args.har)
+    if "error" in result:
+        _print(result)
+        return 1
+    conn = sess.require_conn(result["session_id"])
+    _print(
+        map_credentials(
+            conn,
+            har_path=sess.get_har_path(result["session_id"]),
+            host=args.host,
+            limit=args.limit,
+        )
+    )
+    return 0
+
+
 def cmd_recommend(args: argparse.Namespace) -> int:
     from hardly.core.recommend import recommend_tools
 
@@ -1386,6 +1405,15 @@ def build_parser() -> argparse.ArgumentParser:
     secrets_p.add_argument("--host")
     secrets_p.add_argument("--limit", type=int, default=40)
     secrets_p.set_defaults(func=cmd_secrets)
+
+    cred_p = sub.add_parser(
+        "credentials",
+        help="Login/session map: passwords, cookies, JWT/hex/base64 shapes",
+    )
+    cred_p.add_argument("har")
+    cred_p.add_argument("--host")
+    cred_p.add_argument("--limit", type=int, default=40)
+    cred_p.set_defaults(func=cmd_credentials)
 
     rec_p = sub.add_parser(
         "recommend",

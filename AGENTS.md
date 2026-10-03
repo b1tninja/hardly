@@ -58,9 +58,11 @@ Prefer MCP/CLI helpers over reading the HAR:
    `hardly_ui` / `hardly_outline` (markdown/tree/aria from HAR bodies — do not
    parse raw HTML in the model). Live tab: `hardly_capture_aria` for Playwright
    accessibility YAML + `refs[]`
-4. Dynamic tokens: `hardly_correlate` / `hardly_trace` (CSRF / ViewState /
-   session reuse); `hardly_cookies` / `hardly_secrets` (names only);
-   `hardly_redirects` for 3xx hops. Unsure? `hardly_recommend("…")`
+4. Credentials / login: `hardly_credentials` (password fields, session
+   cookies, CSRF names, jwt/hex/base64 *shapes*, hypothesized login_flow —
+   never values). Then `hardly_correlate` / `hardly_trace` /
+   `hardly_cookies` / `hardly_secrets`; `hardly_redirects` for 3xx. Unsure?
+   `hardly_recommend("…")`
 5. Missing detail URL: `hardly_routes` + `handler_functions`, then
    `hardly_tree(entry_id=…)` / `hardly_around(entry_id=…)`. GraphQL:
    `hardly_graphql`. Param drift: `hardly_params`

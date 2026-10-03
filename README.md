@@ -159,7 +159,7 @@ under `$ASSPY_HOME/samples/`).
 | Session | `open`, `reopen`, `list_sessions`, `close`, `summary`, `stats`, `coverage` |
 | Discovery | `summary`, `stats`, `hosts` (`preferred_host`), `endpoints`, `content`, `search`, `entry`, `compare_entries` |
 | Portal / HTML | `brief`, `story`, `forms`, `ui`, `outline`, `pages`, `wall` |
-| Tokens | `correlate`, `trace`, `cookies`, `secrets`, `redirects` |
+| Tokens / credentials | `credentials` (login map + jwt/hex/base64 shapes), `correlate`, `trace`, `cookies`, `secrets`, `redirects` |
 | Structure | `routes`, `around`, `tree`, `params`, `graphql`, `duplicates`, `slow` |
 | Quality | `coverage`, `issues`, `diff`, `recommend` |
 | Auth / schema | `auth`, `flow`, `schema` |
@@ -219,6 +219,7 @@ hardly search path/to/capture.har --host portal.example.com --kind json
 hardly correlate path/to/capture.har --host portal.example.com
 hardly trace path/to/capture.har --name __VIEWSTATE --host portal.example.com
 hardly secrets path/to/capture.har
+hardly credentials path/to/capture.har --host api.example.com
 hardly wall path/to/capture.har --host portal.example.com
 hardly stub path/to/capture.har --host portal.example.com -o client.py
 hardly recipe-plan path/to/capture.har -o steps.json

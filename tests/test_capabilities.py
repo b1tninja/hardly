@@ -22,6 +22,8 @@ def test_capabilities_lists_current_tools():
     assert "hardly_modes" in caps["tools"]
     assert "hardly_mode" in caps["tools"]
     assert "hardly_discover" in caps["tools"]
+    assert "hardly_credentials" in caps["tools"]
+    assert "credentials" in caps["features"]
     assert "modes" in caps
     assert len(caps["modes"]) == 3
     assert "hardly_export_postman" in caps["tools"]

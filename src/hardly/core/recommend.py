@@ -61,8 +61,32 @@ _RULES: tuple[tuple[tuple[str, ...], list[str], str], ...] = (
     ),
     (
         ("login", "auth", "mfa", "2fa", "oauth", "password"),
-        ["hardly_auth", "hardly_flow", "hardly_secrets", "hardly_compare_entries"],
-        "Auth heuristics, then flow and pre/post login compare.",
+        [
+            "hardly_credentials",
+            "hardly_auth",
+            "hardly_flow",
+            "hardly_secrets",
+            "hardly_compare_entries",
+        ],
+        "Credential map (passwords/JWT/cookies), then flow and pre/post compare.",
+    ),
+    (
+        (
+            "jwt",
+            "bearer",
+            "base64",
+            "hex token",
+            "session cookie",
+            "credential",
+            "password field",
+        ),
+        [
+            "hardly_credentials",
+            "hardly_secrets",
+            "hardly_cookies",
+            "hardly_trace",
+        ],
+        "Map shapes (jwt/hex/base64) and session cookie names — values never returned.",
     ),
     (
         ("detail", "document", "xhr", "ajax", "click"),
@@ -172,9 +196,9 @@ _RULES: tuple[tuple[tuple[str, ...], list[str], str], ...] = (
         "curl first (redacted), probe only with confirm=true.",
     ),
     (
-        ("secret", "credential", "leak", "password field"),
-        ["hardly_secrets", "hardly_trace", "hardly_issues"],
-        "Locate sensitive names; never commit the HAR.",
+        ("secret", "leak"),
+        ["hardly_credentials", "hardly_secrets", "hardly_trace", "hardly_issues"],
+        "Credential map + sensitive names; never commit the HAR.",
     ),
     (
         ("redirect", "302", "301", "location"),

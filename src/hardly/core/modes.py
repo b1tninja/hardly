@@ -40,6 +40,7 @@ MODES: tuple[dict[str, Any], ...] = (
             "hardly_trace",
             "hardly_cookies",
             "hardly_secrets",
+            "hardly_credentials",
             "hardly_routes",
             "hardly_around",
             "hardly_tree",
