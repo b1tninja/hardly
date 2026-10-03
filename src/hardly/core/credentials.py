@@ -77,6 +77,12 @@ def map_credentials(
             and _PASSWORD_NAME_RE.search(str(h.get("name") or ""))
         )
     ]
+    # One input can surface as html_field and html_password: keep a single row.
+    _rank = {"html_password": 0}
+    _dedup: dict[tuple[Any, str, Any], dict[str, Any]] = {}
+    for h in sorted(password_fields, key=lambda h: _rank.get(str(h.get("kind")), 1)):
+        _dedup.setdefault((h.get("entry_id"), str(h.get("name") or "").lower(), h.get("side")), h)
+    password_fields = sorted(_dedup.values(), key=lambda h: (h.get("entry_id") or 0, str(h.get("name") or "")))
     # Also pull password-ish names from query params / forms not already listed.
     query_secrets = _query_secret_names(conn, host=host, limit=limit)
     for qs in query_secrets:

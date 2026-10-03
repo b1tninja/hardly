@@ -180,3 +180,9 @@ def test_openapi_and_stub_reflect_auth_scheme_and_parameters(tmp_path, monkeypat
     assert "Basic PLACEHOLDER_BASIC_CREDENTIALS" in text and "PLACEHOLDER_API_KEY" in text
     assert "dTpw" not in text and "special" not in text and token not in text
     compile(text, "s.py", "exec")
+
+
+def test_password_input_is_listed_once(tmp_path, monkeypatch):
+    out = _creds(tmp_path, monkeypatch, [_entry(1, "GET", "https://a.example/login", body=LOGIN_PAGE)])
+    names = [(f["entry_id"], f["name"].lower()) for f in out["password_fields"]]
+    assert len(names) == len(set(names)) and names, out["password_fields"]
