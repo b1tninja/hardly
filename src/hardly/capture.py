@@ -103,6 +103,9 @@ _SAME_TAB_JS = """
 class CaptureError(RuntimeError):
     """Browser capture failed or Playwright is not installed."""
 
+    #: Set (opt-in ``diagnose_redirects``) when the failure was a redirect loop.
+    redirect_diagnosis: dict[str, Any] | None = None
+
     @property
     def classification(self) -> dict[str, Any]:
         from hardly.core.capture_errors import classify_capture_error
@@ -111,7 +114,10 @@ class CaptureError(RuntimeError):
 
     def to_dict(self) -> dict[str, Any]:
         """Error dict with ``error_class`` / ``error_advice`` for tool results."""
-        return with_error_class({"status": "error", "error": str(self)})
+        out = with_error_class({"status": "error", "error": str(self)})
+        if self.redirect_diagnosis:
+            out["redirect_diagnosis"] = self.redirect_diagnosis
+        return out
 
 
 @dataclass
@@ -248,7 +254,13 @@ def playwright_status() -> dict[str, Any]:
         out["hint"] = (
             f"Ready via {out['browser_executable_source']} executable "
             f"{out['suggested_executable']}."
-            + (" Playwright build mismatch: " + out["pin_hint"] if out.get("mismatch") and out.get("pin_hint") else "")
+            + (
+                " The Playwright package expects a different Chromium build than the one "
+                "found; that is fine while captures launch. Only if launches fail, pin the "
+                "matching Playwright version: " + out["pin_hint"]
+                if out.get("mismatch") and out.get("pin_hint")
+                else ""
+            )
         )
     elif channel:
         out["hint"] = (
@@ -411,6 +423,42 @@ def apply_executable(
     return str(info["source"])
 
 
+def _precheck_output_path(har_path: str | Path | None) -> Path | None:
+    """Validate ``-o`` / ``har_path`` up front; raise CaptureError, never a traceback."""
+    if not har_path:
+        return None
+    raw = str(har_path)
+    if "\x00" in raw:
+        raise CaptureError(f"invalid output path {raw!r}: contains a NUL byte")
+    try:
+        target = resolve_path(har_path)
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise CaptureError(f"invalid output path {raw!r}: {exc}") from exc
+    if target.is_dir():
+        raise CaptureError(
+            f"output path {str(target)!r} is a directory; give a HAR file name, e.g. {target / 'out.har'}"
+        )
+    parent = target.parent
+    for anc in (parent, *parent.parents):
+        if anc.exists():
+            if not anc.is_dir():
+                raise CaptureError(
+                    f"output path {str(target)!r} is not writable: {str(anc)!r} is a file, not a directory"
+                )
+            break
+    try:
+        parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise CaptureError(
+            f"output path {str(target)!r} is not writable: cannot create {str(parent)!r} ({exc.strerror or exc})"
+        ) from exc
+    if not os.access(parent, os.W_OK | os.X_OK):
+        raise CaptureError(
+            f"output path {str(target)!r} is not writable: no write permission in {str(parent)!r}"
+        )
+    return target
+
+
 def start_capture(
     url: str = "",
     har_path: str | Path | None = None,
@@ -440,10 +488,11 @@ def start_capture(
     ``trace`` writes a Playwright ``.trace.zip`` beside the HAR (view with
     ``playwright show-trace``). Default: env ``HARDLY_CAPTURE_TRACE=1``.
     """
+    pre_target = _precheck_output_path(har_path)
     require_playwright(need_browser=True)
 
     label_key = (label or _host_label(url) or "capture").strip()
-    target = resolve_path(har_path) if har_path else default_har_path(label_key)
+    target = pre_target if pre_target else default_har_path(label_key)
     target.parent.mkdir(parents=True, exist_ok=True)
     try:
         slot_handle = acquire_slot(slot_timeout_s)
@@ -986,6 +1035,9 @@ def run_capture_recipe(
             )
         step_out: dict[str, Any] = {"index": i, "op": op}
         try:
+            bad = _unsupported_step_keys(op, raw, inprocess=False)
+            if bad:
+                raise CaptureError(bad)
             if op == "goto":
                 url = str(raw.get("url") or "").strip()
                 if not url:
@@ -1115,6 +1167,7 @@ def capture_interactive(
     user_data_dir: str | Path | None = None,
     same_tab: bool = True,
     trace: bool | None = None,
+    slot_timeout_s: float | None = None,
 ) -> dict[str, Any]:
     """Start, wait for Enter or window close, stop and open."""
     info = start_capture(
@@ -1128,6 +1181,7 @@ def capture_interactive(
         user_data_dir=user_data_dir,
         same_tab=same_tab,
         trace=trace,
+        slot_timeout_s=slot_timeout_s,
     )
     print(f"Recording to {info['har_path']}")
     print(f"capture_id={info['capture_id']}  status={info['status']}")
@@ -1169,6 +1223,8 @@ def capture_for(
     trace: bool | None = None,
     budget_seconds: float | None = None,
     block_noise: bool = False,
+    slot_timeout_s: float | None = None,
+    diagnose_redirects: bool = False,
 ) -> dict[str, Any]:
     # Headless one-shots prefer in-process capture (no subprocess stop race).
     if not headed and not (os.environ.get("HARDLY_CAPTURE_SUBPROCESS") or "").strip():
@@ -1185,6 +1241,8 @@ def capture_for(
             same_tab=same_tab,
             budget_seconds=budget_seconds,
             block_noise=block_noise,
+            slot_timeout_s=slot_timeout_s,
+            diagnose_redirects=diagnose_redirects,
         )
     info = start_capture(
         url,
@@ -1196,13 +1254,16 @@ def capture_for(
         label=label,
         same_tab=same_tab,
         trace=trace,
+        slot_timeout_s=slot_timeout_s,
     )
     try:
         time.sleep(max(0.0, float(wait_seconds)))
     except BaseException:
         stop_capture(info["capture_id"], open_session=False)
         raise
-    return stop_capture(info["capture_id"], open_session=open_session)
+    out = stop_capture(info["capture_id"], open_session=open_session)
+    _note_unsupported_options(out, block_noise=block_noise, budget_seconds=budget_seconds)
+    return out
 
 
 def capture_headless(
@@ -1221,6 +1282,7 @@ def capture_headless(
     budget_seconds: float | None = None,
     block_noise: bool = False,
     slot_timeout_s: float | None = None,
+    diagnose_redirects: bool = False,
 ) -> dict[str, Any]:
     """In-process headless HAR capture for soak / unit tests.
 
@@ -1229,18 +1291,22 @@ def capture_headless(
     budget measured from slot acquisition: once exceeded, remaining recipe
     steps and the settle wait are skipped but the HAR is still written.
     ``block_noise`` aborts analytics/ads/font/map-tile/heavy-media requests.
+    ``diagnose_redirects`` (opt-in) attaches a capped ``redirect_diagnosis``
+    (a few polite GETs, see ``core.redirect_diag``) when navigation fails with
+    a redirect loop; it is never run otherwise.
 
     Unlike ``start_capture`` (subprocess worker for interactive MCP use), this
     runs Playwright in the current process, flushes the HAR on context close,
     and returns immediately — no ``.stop`` sidecar race.
     """
+    pre_target = _precheck_output_path(har_path)
     require_playwright(need_browser=True)
     target_url = str(url or "").strip()
     if not target_url:
         raise CaptureError("capture_headless requires url")
 
     label_key = (label or _host_label(target_url) or "capture").strip()
-    target = resolve_path(har_path) if har_path else default_har_path(label_key)
+    target = pre_target if pre_target else default_har_path(label_key)
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists():
         target.unlink()
@@ -1260,7 +1326,7 @@ def capture_headless(
         slot_cm = capture_slot(slot_timeout_s)
         slot = slot_cm.__enter__()
     except SlotTimeoutError as exc:
-        raise CaptureError(str(exc)) from exc
+        raise _classified(CaptureError(str(exc))) from exc
     exe_source = ""
     t0 = time.monotonic()
     deadline = t0 + budget_limit if budget_limit else None
@@ -1316,6 +1382,7 @@ def capture_headless(
 
                 page = context.new_page()
                 goto_error: str | None = None
+                main_resp: Any = None
                 goto_http_status = False
                 goto_timeout = 60_000
                 if deadline is not None:
@@ -1324,7 +1391,7 @@ def capture_headless(
                     )
                 try:
                     if target_url and target_url != "about:blank":
-                        _goto_with_retry(page, target_url, timeout=goto_timeout)
+                        main_resp = _goto_with_retry(page, target_url, timeout=goto_timeout)
                     elif target_url == "about:blank":
                         page.goto("about:blank")
                 except Exception as exc:  # noqa: BLE001
@@ -1368,7 +1435,10 @@ def capture_headless(
             finally:
                 browser.close()
     except CaptureError as exc:
-        raise _classified(exc) from exc
+        wrapped = _classified(exc)
+        if diagnose_redirects and wrapped.classification["class"] == "redirect_loop":
+            wrapped.redirect_diagnosis = _redirect_diagnosis(target_url)
+        raise wrapped from exc
     finally:
         slot_cm.__exit__(None, None, None)
 
@@ -1417,16 +1487,41 @@ def capture_headless(
         "slot": {k: slot[k] for k in ("waited_s", "queue_depth", "slot")},
         "browser_executable_source": exe_source or None,
     }
+    warnings_out: list[str] = []
+    main_status = _response_status(main_resp)
+    if main_status is not None:
+        out["main_status"] = main_status
+    warn = _main_document_warning(main_status, _response_headers(main_resp), goto_error)
+    if warn:
+        out["main_document_ok"] = False
+        warnings_out.append(warn)
+    if diagnose_redirects and goto_error:
+        if with_error_class({"error": goto_error}).get("error_class") == "redirect_loop":
+            out["discover"]["redirect_diagnosis"] = _redirect_diagnosis(target_url)
+    skipped_total = int((recipe_result or {}).get("skipped_steps") or 0)
+    used = round(time.monotonic() - t0, 3)
     if budget_limit:
-        used = round(time.monotonic() - t0, 3)
         out["budget"] = {
             "limit_s": budget_limit,
             "used_s": used,
-            "exceeded": used >= budget_limit,
-            "skipped_steps": int((recipe_result or {}).get("skipped_steps") or 0),
+            "exceeded": used >= budget_limit or skipped_total > 0,
+            "skipped_steps": skipped_total,
         }
-    if blocker is not None:
-        out.update(blocker.summary())
+        if skipped_total:
+            warnings_out.append(
+                f"budget of {budget_limit:g}s reached: {skipped_total} recipe step(s) skipped "
+                "(the budget runs from slot acquisition and includes page load and settle time)"
+            )
+        elif used >= budget_limit:
+            warnings_out.append(
+                f"budget of {budget_limit:g}s reached during load/settle; "
+                "the settle wait was cut short and the HAR may be thin"
+            )
+    if block_noise:
+        # Same keys whether or not anything was blocked (blocker always exists here).
+        out.update(blocker.summary() if blocker is not None else {"block_noise": True})
+    if warnings_out:
+        out["warnings"] = warnings_out
     if out["status"] != "stopped":
         out["error"] = "capture finished but no HAR was written"
         out["har_exists"] = False
@@ -1450,6 +1545,66 @@ def capture_headless(
                     out["brief_error"] = str(exc)
     out["next"] = _next_steps(out)
     return out
+
+
+def _redirect_diagnosis(url: str) -> dict[str, Any]:
+    """Capped, polite redirect diagnosis (opt-in); never raises."""
+    try:
+        from hardly.core.redirect_diag import diagnose_redirects as _diag
+
+        return _diag(url, max_hops=6, timeout_s=8.0, delay_s=0.3)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"redirect diagnosis failed: {exc}"}
+
+
+def _response_status(resp: Any) -> int | None:
+    try:
+        return int(resp.status) if resp is not None else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _response_headers(resp: Any) -> dict[str, str]:
+    try:
+        return {str(k).lower(): str(v) for k, v in (resp.headers or {}).items()}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _main_document_warning(
+    status: int | None, headers: dict[str, str], goto_error: str | None
+) -> str | None:
+    """Warn when the main document is an error (a written HAR is not a successful visit)."""
+    if headers.get("x-deny-reason"):
+        return (
+            f"main document was refused by the network path (x-deny-reason: "
+            f"{headers['x-deny-reason'][:80]}); the HAR holds the proxy's answer, not the site"
+        )
+    if status is not None and status >= 500:
+        extra = (
+            " A 502 usually comes from an egress proxy that could not reach the origin "
+            "(e.g. invalid/untrusted TLS certificate or blocked host), not from the site itself."
+            if status in (502, 504)
+            else ""
+        )
+        return f"main document returned HTTP {status}; the capture succeeded but the page did not.{extra}"
+    if goto_error and any(t in goto_error for t in _HTTP_STATUS_NAV):
+        return "main document answered with an error status (see discover.goto_error_*); the HAR holds that response"
+    return None
+
+
+def _note_unsupported_options(
+    out: dict[str, Any], *, block_noise: bool, budget_seconds: float | None
+) -> None:
+    """Tell callers when headless-only options were ignored by a worker-based capture."""
+    notes: list[str] = []
+    if block_noise:
+        out["block_noise"] = False
+        notes.append("block_noise ignored: only in-process headless capture can block requests")
+    if budget_seconds or resolve_budget(budget_seconds):
+        notes.append("budget ignored: only in-process headless capture enforces a budget")
+    if notes:
+        out.setdefault("warnings", []).extend(notes)
 
 
 def resolve_budget(budget_seconds: float | None) -> float:
@@ -1708,6 +1863,46 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
     return {"reached": form is not None, "form": form, "hops": hops, "url": page.url}
 
 
+_COMMON_STEP_KEYS = frozenset({"op", "note", "comment", "label"})
+#: Allowed keys per op; ops absent here are not key-checked.
+_STEP_KEYS: dict[str, frozenset[str]] = {
+    "wait": frozenset({"ms", "seconds"}),
+    "goto": frozenset({"url", "ms", "seconds"}),
+    "click": frozenset({"css", "selector", "timeout_ms"}),
+    "fill": frozenset({"css", "selector", "value", "timeout_ms", "allow_login"}),
+    "press": frozenset({"key"}),
+    "find_click": frozenset({"keywords", "max_hops", "min_fields"}),
+    "evaluate": frozenset({"js", "expression", "allow_login"}),
+    "fetch": frozenset({"url", "method", "headers", "body"}),
+}
+#: Worker-backed runner accepts richer targets for click/fill/press.
+_STEP_KEYS_WORKER: dict[str, frozenset[str]] = {
+    "click": frozenset({"css", "selector", "ref", "xpath", "text", "role", "name", "timeout_ms"}),
+    "fill": frozenset({"css", "selector", "ref", "xpath", "value", "timeout_ms", "allow_login"}),
+    "press": frozenset({"key", "ref", "xpath", "css", "selector", "timeout_ms"}),
+}
+
+
+def _unsupported_step_keys(op: str, raw: dict[str, Any], *, inprocess: bool) -> str:
+    """Message naming keys a step's op does not support (empty when fine)."""
+    table = dict(_STEP_KEYS)
+    if not inprocess:
+        table.update(_STEP_KEYS_WORKER)
+    allowed = table.get(op)
+    if allowed is None:
+        return ""
+    extra = sorted(str(k) for k in raw if k not in allowed and k not in _COMMON_STEP_KEYS)
+    if not extra:
+        return ""
+    hint = ""
+    if inprocess and op == "click" and set(extra) & {"text", "role", "name", "ref", "xpath"}:
+        hint = " To click by visible text use op 'find_click' or a css selector."
+    return (
+        f"unsupported key(s) {extra} for recipe op {op!r}; "
+        f"supported: {sorted(allowed | _COMMON_STEP_KEYS)}.{hint}"
+    )
+
+
 def _run_inprocess_recipe(
     page: Any, steps: list[dict[str, Any]], *, deadline: float | None = None
 ) -> dict[str, Any]:
@@ -1727,6 +1922,10 @@ def _run_inprocess_recipe(
             continue
         op = str(raw.get("op") or "").strip().lower()
         step_out: dict[str, Any] = {"op": op, "ok": True}
+        if not op:
+            step_out.update(ok=False, error=f"step {idx} has no 'op' key")
+            results.append(step_out)
+            continue
         from hardly.core.recipe_policy import check_step
 
         allowed, reason = check_step(raw)
@@ -1735,6 +1934,9 @@ def _run_inprocess_recipe(
             results.append(step_out)
             continue
         try:
+            bad = _unsupported_step_keys(op, raw, inprocess=True)
+            if bad:
+                raise CaptureError(bad)
             if op == "wait":
                 ms = min(max(_wait_ms(raw, 1000), 0), 30_000)
                 page.wait_for_timeout(ms)
@@ -1850,6 +2052,8 @@ def discover_apis(
     trace: bool | None = None,
     budget_seconds: float | None = None,
     block_noise: bool = False,
+    slot_timeout_s: float | None = None,
+    diagnose_redirects: bool = False,
 ) -> dict[str, Any]:
     """Headless mode: load URL, optional recipe, stop, open session, brief.
 
@@ -1898,6 +2102,8 @@ def discover_apis(
             brief=brief,
             budget_seconds=budget_seconds,
             block_noise=block_noise,
+            slot_timeout_s=slot_timeout_s,
+            diagnose_redirects=diagnose_redirects,
         )
         session_id = out.get("session_id")
         if brief and session_id and open_session and "brief" in out:
@@ -1952,6 +2158,7 @@ def discover_apis(
         same_tab=same_tab,
         trace=trace,
         show_banner=False,
+        slot_timeout_s=slot_timeout_s,
     )
     cid = str(info["capture_id"])
     recipe_result: dict[str, Any] | None = None
@@ -1969,6 +2176,7 @@ def discover_apis(
         raise
 
     out = stop_capture(cid, open_session=open_session)
+    _note_unsupported_options(out, block_noise=block_noise, budget_seconds=budget_seconds)
     # Capture was headless; analysis continues in archive mode (set by stop).
     out["capture_mode"] = "headless"
     out["mode"] = out.get("mode") or "archive"

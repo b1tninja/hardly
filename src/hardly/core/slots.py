@@ -44,6 +44,15 @@ _warned_noop = False
 class SlotTimeoutError(RuntimeError):
     """No capture slot became free in time."""
 
+    #: Same vocabulary as ``capture_errors.classify_capture_error``.
+    error_class = "slot_timeout"
+    error_retryable = True
+
+    def to_dict(self) -> dict[str, Any]:
+        from hardly.core.capture_errors import with_error_class
+
+        return with_error_class({"status": "error", "error": str(self)})
+
 
 def slot_limit() -> int:
     """Configured slot count; ``0`` means unlimited."""
@@ -89,6 +98,19 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
+_MARKER_GRACE_S = 2.0
+
+
+def _write_marker(directory: Path) -> Path:
+    """Create a wait marker atomically (never visible half-written)."""
+    name = f"wait-{os.getpid()}-{uuid.uuid4().hex[:8]}.marker"
+    final = directory / name
+    tmp = directory / f".tmp-{name}"
+    tmp.write_text(f"{os.getpid()}\n", encoding="utf-8")
+    os.replace(tmp, final)
+    return final
+
+
 def _live_markers(directory: Path, *, prune: bool = True) -> list[Path]:
     live: list[Path] = []
     for marker in directory.glob("wait-*.marker"):
@@ -96,6 +118,17 @@ def _live_markers(directory: Path, *, prune: bool = True) -> list[Path]:
             pid = int(marker.read_text(encoding="utf-8").strip().split()[0])
         except (OSError, ValueError, IndexError):
             pid = 0
+            # A marker being created by another waiter may read empty for an
+            # instant; do not prune (or ignore) a very fresh one.
+            try:
+                if (
+                    marker.stat().st_size == 0
+                    and time.time() - marker.stat().st_mtime < _MARKER_GRACE_S
+                ):
+                    live.append(marker)
+                    continue
+            except OSError:
+                continue
         if _pid_alive(pid):
             live.append(marker)
         elif prune:
@@ -182,10 +215,15 @@ def acquire_slot(timeout_s: float | None = None) -> SlotHandle:
                     )
             waited = time.monotonic() - start
             if marker is None:
-                queue_depth = len(_live_markers(directory))
-                marker = directory / f"wait-{os.getpid()}-{uuid.uuid4().hex[:8]}.marker"
-                marker.write_text(f"{os.getpid()}\n", encoding="utf-8")
+                # Publish our marker *before* counting so two simultaneous
+                # waiters each see the other (counting first made both see 0).
+                marker = _write_marker(directory)
+                queue_depth = len([m for m in _live_markers(directory) if m != marker])
             if waited >= timeout:
+                queue_depth = max(
+                    queue_depth,
+                    len([m for m in _live_markers(directory) if m != marker]),
+                )
                 raise SlotTimeoutError(
                     f"waited {waited:.0f}s for a capture slot; "
                     f"{limit} running, {queue_depth} others waiting "

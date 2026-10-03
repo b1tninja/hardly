@@ -57,9 +57,14 @@ _ADVICE = {
         "try block_noise=true; if it keeps timing out switch to interactive mode."
     ),
     "refused": "Connection refused: nothing is listening at that host/port. Verify the URL.",
+    "output_path": "The HAR output path (-o) is not usable. Give a writable file path, not a directory.",
+    "slot_timeout": (
+        "No capture slot freed up in time (too many concurrent browser captures). Retry "
+        "later, pass a longer --slot-timeout / slot_timeout_s, or raise HARDLY_CAPTURE_SLOTS."
+    ),
     "unknown": "Unclassified failure; read the error text and run `hardly capture doctor`.",
 }
-_RETRYABLE = {"transient", "timeout", "redirect_loop"}
+_RETRYABLE = {"transient", "timeout", "redirect_loop", "slot_timeout"}
 
 
 def classify_capture_error(message: Any) -> dict[str, Any]:
@@ -67,7 +72,11 @@ def classify_capture_error(message: Any) -> dict[str, Any]:
     text = str(message or "")
     low = text.lower()
     cls = "unknown"
-    if any(m.lower() in low for m in _ENV_BLOCKED) or _PROXY_CONNECT_RE.search(text):
+    if "for a capture slot" in low:
+        cls = "slot_timeout"
+    elif low.startswith("output path") or low.startswith("invalid output path"):
+        cls = "output_path"
+    elif any(m.lower() in low for m in _ENV_BLOCKED) or _PROXY_CONNECT_RE.search(text):
         cls = "environment_blocked"
     elif "err_too_many_retries" in low or "err_too_many_redirects" in low:
         cls = "redirect_loop"
