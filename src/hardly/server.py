@@ -1262,6 +1262,7 @@ def hardly_replay_check(
     max_requests: int = 15,
     delay_s: float = 0.5,
     allow_unsafe: bool = False,
+    allow_gates: list[str] | None = None,
 ) -> str:
     """Live replay minimisation (needs confirm=true). Replays one entry (or an ordered flow of entry ids; earlier ids are prior steps, the last is the target) with a cookie jar, then removes one header / cookie / query param / body field / prior step at a time and reports which are REQUIRED vs OPTIONAL (names only, no bodies). Secrets only via overrides_json: {"headers":{},"cookies":{},"query":{},"body":{}}; missing ones are listed under needs_override. GET/HEAD only unless allow_unsafe=true. Hard stop on 429 / Retry-After / gate stop; captcha token fields are never sent. Budget-skipped items appear under not_tested."""
     if not confirm:
@@ -1291,6 +1292,7 @@ def hardly_replay_check(
             max_requests=max_requests,
             delay_s=delay_s,
             allow_unsafe=allow_unsafe,
+            allow_gates=allow_gates,
         )
     )
 

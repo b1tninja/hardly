@@ -1698,10 +1698,11 @@ def build_parser() -> argparse.ArgumentParser:
     rc_p.add_argument("har")
     rc_p.add_argument("entry_ids", type=int, nargs="+", help="One entry id, or an ordered flow (last = target)")
     rc_p.add_argument("--yes", action="store_true", help="Confirm live requests")
-    rc_p.add_argument("--overrides-json", default=None, help='{"headers":{},"cookies":{},"query":{},"body":{}}')
+    rc_p.add_argument("--overrides-json", default=None, help='Inline JSON text (not a file path): {"headers":{},"cookies":{},"query":{},"body":{}}')
     rc_p.add_argument("--max-requests", type=int, default=15)
     rc_p.add_argument("--delay", type=float, default=0.5)
     rc_p.add_argument("--allow-unsafe", action="store_true", help="Allow POST/PUT/PATCH/DELETE")
+    rc_p.add_argument("--allow-gate", action="append", default=None, help="Gate class to tolerate, e.g. login (repeatable)")
     rc_p.set_defaults(func=cmd_replay_check)
 
     stack_p = sub.add_parser(
