@@ -24,7 +24,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("APIs", ("graphql",)),
     ("Quality and traffic", ("issues", "wall", "duplicates", "slow", "diff")),
     ("Client SDK output", ("stub", "recipe_plan", "curl", "export_md", "export_openapi", "export_postman", "export_brief", "sql")),
-    ("Live probe", ("probe", "arcgis_explore")),
+    ("Live probe", ("probe", "arcgis_explore", "crawl", "replay_check")),
 )
 
 

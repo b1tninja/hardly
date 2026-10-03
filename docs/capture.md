@@ -49,6 +49,23 @@ still on a landing page.
 Selecting by durable worker (`HARDLY_CAPTURE_SUBPROCESS=1`) is only needed when
 you want a long-lived browser with aria RPC across calls.
 
+## Curl-first crawl
+
+Before launching a browser, try a polite plain-HTTP crawl:
+`hardly crawl https://site.example/ -k <domain noun> --yes`. It follows only
+links found in fetched HTML (never guessed hosts or paths), reads robots.txt
+once per host and does not fetch disallowed URLs (`robots_disallowed`), waits
+`--delay` seconds per host, strips session ids, and stops at gates: a bot
+wall/CAPTCHA is recorded and never retried or followed, `environment_blocked`
+(sandbox/egress) is reported apart from site walls, and a 429 or `Retry-After`
+halts that host. Other registrable domains are listed in `external_links` unless
+`--follow-external` (one hop). Output is small and redacted: ranked
+`candidates` (search-like forms first, with field names), grid/data hints,
+`needs_browser` pages (SPA shells, JS-only redirects) and `next` advice. Hand
+the `needs_browser` pages to `hardly capture discover <url>` with a `find_click`
+recipe step. The MCP tool and CLI require explicit confirmation (`confirm=true`
+/ `--yes`) because they perform live GETs.
+
 ## Interactive (a person drives)
 
 For bot walls, CAPTCHA, MFA, or UIs an agent cannot script:

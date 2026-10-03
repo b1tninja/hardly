@@ -506,6 +506,52 @@ def cmd_arcgis_explore(args: argparse.Namespace) -> int:
     return 1 if "error" in out else 0
 
 
+def cmd_crawl(args: argparse.Namespace) -> int:
+    from hardly.core.crawl import crawl
+
+    if not args.yes:
+        _print({"error": "crawl requires --yes (performs live GET requests)"})
+        return 1
+    result = crawl(
+        args.url,
+        tuple(args.keyword or ()),
+        max_pages=args.max_pages,
+        depth=args.depth,
+        delay_s=args.delay,
+        follow_external=args.follow_external,
+        respect_robots=not args.ignore_robots,
+        timeout_s=args.timeout,
+    )
+    _print(result)
+    return 1 if "error" in result else 0
+
+
+
+def cmd_replay_check(args: argparse.Namespace) -> int:
+    from hardly.core.replay_check import replay_check
+
+    if not args.yes:
+        _print({"error": "replay-check requires --yes (sends live requests)"})
+        return 1
+    result = sess.open_har(args.har)
+    if "error" in result:
+        _print(result)
+        return 1
+    conn = sess.require_conn(result["session_id"])
+    overrides = json.loads(args.overrides_json) if args.overrides_json else None
+    _print(
+        replay_check(
+            conn,
+            args.entry_ids,
+            overrides=overrides,
+            max_requests=args.max_requests,
+            delay_s=args.delay,
+            allow_unsafe=args.allow_unsafe,
+        )
+    )
+    return 0
+
+
 def cmd_recipe_plan(args: argparse.Namespace) -> int:
     from hardly.core.recipe_plan import recipe_from_story
 
@@ -1527,6 +1573,35 @@ def build_parser() -> argparse.ArgumentParser:
     arcgis_x.add_argument("url")
     arcgis_x.add_argument("--confirm", action="store_true")
     arcgis_x.set_defaults(func=cmd_arcgis_explore)
+
+    crawl_p = sub.add_parser(
+        "crawl",
+        help="Curl-first polite crawl for candidate pages (live GETs; requires --yes)",
+    )
+    crawl_p.add_argument("url")
+    crawl_p.add_argument("-k", "--keyword", action="append", help="Domain keyword (repeatable)")
+    crawl_p.add_argument("--max-pages", type=int, default=12)
+    crawl_p.add_argument("--depth", type=int, default=2)
+    crawl_p.add_argument("--delay", type=float, default=1.0, help="Seconds between requests per host")
+    crawl_p.add_argument("--follow-external", action="store_true")
+    crawl_p.add_argument("--ignore-robots", action="store_true", help="Only where you are permitted")
+    crawl_p.add_argument("--timeout", type=float, default=15.0)
+    crawl_p.add_argument("--yes", action="store_true", help="Confirm live requests")
+    crawl_p.set_defaults(func=cmd_crawl)
+
+
+    rc_p = sub.add_parser(
+    "replay-check",
+    help="Replay a request/flow and report which headers, cookies, params, fields and prior steps are required",
+    )
+    rc_p.add_argument("har")
+    rc_p.add_argument("entry_ids", type=int, nargs="+", help="One entry id, or an ordered flow (last = target)")
+    rc_p.add_argument("--yes", action="store_true", help="Confirm live requests")
+    rc_p.add_argument("--overrides-json", default=None, help='{"headers":{},"cookies":{},"query":{},"body":{}}')
+    rc_p.add_argument("--max-requests", type=int, default=15)
+    rc_p.add_argument("--delay", type=float, default=0.5)
+    rc_p.add_argument("--allow-unsafe", action="store_true", help="Allow POST/PUT/PATCH/DELETE")
+    rc_p.set_defaults(func=cmd_replay_check)
 
     grids_p = sub.add_parser(
         "grids",

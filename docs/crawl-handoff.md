@@ -258,6 +258,8 @@ numbers.**
 
 ## 7. Open items
 
+- **Done:** a plain-HTTP first pass now exists — `hardly crawl` (curl-first, robots-aware, per-host delay, session-id stripping, gate stop signs, 429 halt). Try it before a headless capture; use a browser only for its `needs_browser` pages.
+
 - Hover menus, iframes, shadow DOM: add handling once a real site shows the need.
 - Consent / cookie / disclaimer banner dismissal as an explicit recipe helper.
 - A per-step timeout override and `wait_until="load"` for heavy pages.

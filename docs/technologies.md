@@ -108,6 +108,22 @@ flagged, not hidden. A 498/499 response is a token-required gate: stop.
 Experience Builder / Web AppBuilder configs and page text and shows the item
 data URL pattern without fetching it.
 
+## Minimal replay
+
+Server frameworks often answer with a generic error (HTTP 500 or an error page)
+when an implicit precondition is missing: an Ajax marker header
+(`X-Requested-With`), a cookie set by an earlier page load, a paging parameter,
+or a per-form hidden token. Do not guess which matters. `hardly_replay_check`
+(CLI `hardly replay-check <har> <entry_id…> --yes`) replays the entry, or an
+ordered flow of entry ids, with a cookie jar, removes one header, cookie, query
+parameter, body field or prior step at a time, and compares a coarse outcome
+signature (status class, content kind, JSON top-level keys or an HTML size band
+and form presence). Pieces whose removal changes the signature are `required`;
+the rest are `optional`. Secrets are supplied only through overrides
+(`needs_override` lists the names). It defaults to GET/HEAD, never sends or
+tests captcha/challenge token fields, and halts on 429, `Retry-After` or a gate
+stop. Output is names and findings only.
+
 ## HTML data attributes
 
 `hardly_data_attrs` (CLI `hardly data-attrs`) applies the MDN

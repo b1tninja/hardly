@@ -83,6 +83,16 @@ The stub is a **sketch**: secrets are `PLACEHOLDER_*`, steps follow capture
 order, correlation notes show where tokens come from. Treat it as scaffolding
 and move the real logic into your SDK.
 
+## 6b. Trim the client with a replay check
+
+Once a request works, run `hardly replay-check <har> <entry_id…> --yes` with
+your own `--overrides-json` for secrets (cookies, auth headers, CSRF/hidden
+fields; the index never holds their values, and `needs_override` lists the
+names you must supply). Encode only the `required` headers, cookies, parameters,
+fields and prior steps in the SDK; treat `optional` as safe to omit. Default is
+GET/HEAD only; keep `--max-requests` small. Output contains names and findings,
+never bodies or values.
+
 ## 7. Verify and keep current
 
 - `hardly probe` replays an entry live. It needs explicit confirmation, and

@@ -1160,6 +1160,106 @@ def hardly_arcgis_explore(url: str, confirm: bool = False) -> str:
 
 
 @mcp.tool
+def hardly_crawl(
+    start_url: str,
+    keywords_json: str | None = None,
+    confirm: bool = False,
+    max_pages: int = 12,
+    depth: int = 2,
+    delay_s: float = 1.0,
+    follow_external: bool = False,
+    respect_robots: bool = True,
+    timeout_s: float = 15.0,
+) -> str:
+    """Curl-first, robots-aware, polite crawl that finds candidate pages. LIVE GETs: requires confirm=true.
+
+    Plain HTTP often works where headless Chromium is blocked and most facts are in
+    static HTML. Follows only links found in fetched HTML (never guesses hosts or
+    paths), ranks them with your domain `keywords_json` (JSON list of nouns), honours
+    robots.txt, waits delay_s between requests per host, strips session ids, and
+    stops at gates (bot wall / captcha / environment block) and on 429/Retry-After.
+    Caps: max_pages <= 40, depth <= 4. External registrable domains are only recorded
+    unless follow_external=true (one hop). Returns candidates (search forms first),
+    per-page form field NAMES, gate classes, needs_browser pages and `next` advice -
+    no bodies, URLs redacted. Pages flagged needs_browser: use hardly_capture_recipe /
+    `capture discover` with a find_click step.
+    """
+    if not confirm:
+        return _ok(
+            {
+                "error": "crawl requires confirm=true (performs live GET requests)",
+                "hint": "Pass confirm=true; keep max_pages/depth small and respect robots.",
+            }
+        )
+    keywords: list[str] = []
+    if keywords_json:
+        try:
+            keywords = [str(k) for k in json.loads(keywords_json)]
+        except (json.JSONDecodeError, TypeError) as exc:
+            return _err(exc)
+    from hardly.core.crawl import crawl
+
+    try:
+        return _ok(
+            crawl(
+                start_url,
+                tuple(keywords),
+                max_pages=max_pages,
+                depth=depth,
+                delay_s=delay_s,
+                follow_external=follow_external,
+                respect_robots=respect_robots,
+                timeout_s=timeout_s,
+            )
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _err(exc)
+
+
+
+@mcp.tool
+def hardly_replay_check(
+    session_id: str,
+    entry_ids: list[int],
+    confirm: bool = False,
+    overrides_json: str | None = None,
+    max_requests: int = 15,
+    delay_s: float = 0.5,
+    allow_unsafe: bool = False,
+) -> str:
+    """Live replay minimisation (needs confirm=true). Replays one entry (or an ordered flow of entry ids; earlier ids are prior steps, the last is the target) with a cookie jar, then removes one header / cookie / query param / body field / prior step at a time and reports which are REQUIRED vs OPTIONAL (names only, no bodies). Secrets only via overrides_json: {"headers":{},"cookies":{},"query":{},"body":{}}; missing ones are listed under needs_override. GET/HEAD only unless allow_unsafe=true. Hard stop on 429 / Retry-After / gate stop; captcha token fields are never sent. Budget-skipped items appear under not_tested."""
+    if not confirm:
+        return _ok(
+            {
+                "error": "replay_check requires confirm=true",
+                "hint": "Pass confirm=true; supply secrets via overrides_json, never from the HAR.",
+            }
+        )
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    overrides = None
+    if overrides_json:
+        try:
+            overrides = json.loads(overrides_json)
+        except json.JSONDecodeError as exc:
+            return _err(exc)
+    from hardly.core.replay_check import replay_check
+
+    return _ok(
+        replay_check(
+            conn,
+            entry_ids,
+            overrides=overrides,
+            max_requests=max_requests,
+            delay_s=delay_s,
+            allow_unsafe=allow_unsafe,
+        )
+    )
+
+
+@mcp.tool
 def hardly_grids(
     session_id: str,
     host: str | None = None,
