@@ -2,6 +2,7 @@
 
 import os
 import threading
+import time
 
 import pytest
 
@@ -32,7 +33,7 @@ def _fake_pw(monkeypatch, tmp_path, goto):
             return goto(url)
 
         def wait_for_timeout(self, ms):
-            pass
+            time.sleep(ms / 1000)
 
     class Ctx:
         def new_page(self):
@@ -272,8 +273,8 @@ def test_budget_exhausted_warns(tmp_path, monkeypatch):
     _fake_pw(monkeypatch, tmp_path, lambda url: _Resp(200))
     out = capture.capture_headless(
         "https://example.invalid/", har_path=tmp_path / "a.har", wait_seconds=0, open_session=False,
-        omit_content=True, budget_seconds=0.0001,
-        recipe=[{"op": "wait", "ms": 10}, {"op": "wait", "ms": 10}],
+        omit_content=True, budget_seconds=0.01,
+        recipe=[{"op": "wait", "ms": 10}, {"op": "wait", "ms": 10}, {"op": "wait", "ms": 10}],
     )
     assert out["budget"]["exceeded"] is True
     assert any("budget" in w for w in out["warnings"])
