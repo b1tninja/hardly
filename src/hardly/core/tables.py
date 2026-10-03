@@ -321,17 +321,18 @@ def _analyze(t: _Table, doc_pager: bool) -> dict[str, Any] | None:
             continue
         data.append(_expand(cells))
     width = max([len(headers), *[len(r) for r in data]] or [0])
-    if width < 2 or not data:
-        return None
+    if width < 2:
+        return None  # header-only tables (JS-filled grids) are still useful: headers are the schema
     headers += [""] * (width - len(headers))
     cols = [[(r[j] if j < len(r) else None) or "" for r in data] for j in range(width)]
-    first = [mask_value(v) for v in ((data[0] + [None] * width)[:width])]
+    first = [mask_value(v) for v in ((data[0] + [None] * width)[:width])] if data else []
     return {
         "kind": "data",
         "caption": caption,
         "headers": headers,
         "column_count": width,
         "row_count": len(data),
+        "header_only": not data,
         "first_row_masked": first,
         "column_kinds": [column_kind(c) for c in cols],
         "has_pager_hint": bool(pager_rows) or doc_pager

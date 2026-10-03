@@ -26,13 +26,15 @@ def unwrap_json_string(text: str | None, max_depth: int = 3) -> tuple[Any, int]:
         return None, 0
     cur: str = text
     layers = 0
-    while layers < max_depth:
+    while True:
         try:
             value = json.loads(cur)
         except (json.JSONDecodeError, TypeError, ValueError, RecursionError):
             break
         if not isinstance(value, str):
             return value, layers
+        if layers >= max_depth:
+            break  # cannot peel another wrapper
         layers += 1
         cur = value
     return cur, layers

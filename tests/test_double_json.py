@@ -16,6 +16,11 @@ def test_unwrap_json_string_layers():
     assert unwrap_json_string(json.dumps(INNER)) == (INNER, 0)
     assert unwrap_json_string(WIRE) == (INNER, 1)
     assert unwrap_json_string(json.dumps(WIRE)) == (INNER, 2)
+    # three wrappers (the documented max) fully unwrap
+    assert unwrap_json_string(json.dumps(json.dumps(WIRE))) == (INNER, 3)
+    # four wrappers exceed the default cap: the remaining string comes back
+    value, layers = unwrap_json_string(json.dumps(json.dumps(json.dumps(WIRE))))
+    assert layers == 3 and isinstance(value, str)
     # depth cap: stops peeling, returns the remaining string
     value, layers = unwrap_json_string(json.dumps(json.dumps(WIRE)), max_depth=1)
     assert layers == 1 and isinstance(value, str)

@@ -79,6 +79,7 @@ _JSON_ENVELOPES: tuple[tuple[str, frozenset[str], frozenset[str]], ...] = (
     ("arcgis-rest", frozenset({"features"}), frozenset({"fields", "objectIdFieldName", "exceededTransferLimit", "geometryType"})),
     ("geojson", frozenset({"type", "features"}), frozenset()),
     ("kendo-datasource", frozenset({"Data", "Total"}), frozenset()),
+    ("data-list", frozenset({"data"}), frozenset()),
     ("generic-paged-list", frozenset(), frozenset({"totalCount", "total_count", "totalRecords", "totalItems", "nextPageToken", "next_cursor", "hasMore", "has_more"})),
 )
 
@@ -149,9 +150,15 @@ def detect_grids(
                 data_attrs[m.group(1).lower()] += 1
         elif body and (json_like or "json" in ct):
             keys = _top_keys(body)
-            for name, name_req, any_of in _JSON_ENVELOPES:
-                if name_req <= keys and (not any_of or keys & any_of):
-                    json_hits.setdefault(name, []).append(eid)
+            matched = [
+                name
+                for name, name_req, any_of in _JSON_ENVELOPES
+                if name_req <= keys and (not any_of or keys & any_of)
+            ]
+            if len(matched) > 1 and "data-list" in matched:
+                matched.remove("data-list")  # the generic shape yields to a specific one
+            for name in matched:
+                json_hits.setdefault(name, []).append(eid)
         # request parameters (names only)
         names = [k for k, _ in parse_qsl(row["query_raw"] or "", keep_blank_values=True)]
         req = row["req"] or ""

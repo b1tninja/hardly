@@ -32,10 +32,29 @@ USER_AGENT = (
     "Chrome/124.0 Safari/537.36"
 )
 
-_PII_RE = re.compile(
-    r"(name|owner|phone|tel(?:ephone)?$|mobile|email|e_mail|address|addr|ssn|dob|birth)",
-    re.I,
+# Tokens (split on _ - and camelCase) that mark personal data. "name" alone is
+# ambiguous (CITY_NAME, STATE_NAME are geography), so it counts only beside a
+# person-ish token; owner counts unless it is "owner-occupied".
+_PII_TOKENS = frozenset(
+    {"owner", "phone", "telephone", "tel", "mobile", "email", "mail", "address", "addr", "ssn",
+     "dob", "birth", "birthdate", "user", "editor", "applicant", "resident", "tenant", "customer",
+     "contact", "person", "surname", "firstname", "lastname", "fullname"}
 )
+_PERSON_PREFIX = frozenset({"first", "last", "full", "middle", "owner", "person", "applicant",
+                            "contact", "resident", "tenant", "customer", "user", "editor", "creator", "client"})
+_NOT_PII_CONTEXT = frozenset({"occ", "occupied", "occupancy", "ownership", "tenure"})
+
+
+def _pii_like(name: str) -> bool:
+    spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", name or "")
+    toks = [t for t in re.split(r"[^A-Za-z0-9]+", spaced.lower()) if t]
+    if not toks:
+        return False
+    if "owner" in toks and (_NOT_PII_CONTEXT & set(toks)):
+        return False
+    if _PII_TOKENS & set(toks):
+        return True
+    return "name" in toks and bool(_PERSON_PREFIX & set(toks))
 _ID_RE = re.compile(r"(^|_)(id|key|oid|fid|guid|uuid|objectid|pin|apn|parcel)$|^(id|oid|fid)(_|$)", re.I)
 
 _SERVICE_URL_RE = re.compile(
@@ -71,7 +90,7 @@ def mask_value(value: Any) -> str:
 def flag_field(name: str, field_type: str | None = None) -> list[str]:
     flags: list[str] = []
     n = name or ""
-    if _PII_RE.search(n):
+    if _pii_like(n):
         flags.append("personal_data_like")
     if _ID_RE.search(n) or (field_type or "") in {"esriFieldTypeOID", "esriFieldTypeGlobalID", "esriFieldTypeGUID"}:
         flags.append("id_or_key")
@@ -120,7 +139,7 @@ def parse_service(data: Any) -> dict:
     sr = d.get("spatialReference") or {}
     return {
         "layers": [
-            {"id": x.get("id"), "name": x.get("name"), "parentLayerId": x.get("parentLayerId")}
+            {"id": x.get("id"), "name": x.get("name"), "parentLayerId": x.get("parentLayerId"), "subLayerIds": x.get("subLayerIds")}
             for x in d.get("layers", []) or []
             if isinstance(x, dict)
         ],
@@ -185,7 +204,11 @@ def parse_layer(data: Any) -> dict:
         "supportsPagination": bool(adv.get("supportsPagination")) if adv else None,
         "supportedQueryFormats": formats,
         "capabilities": caps,
-        "queryable": "Query" in caps,
+        # A group layer only organises sub-layers; it has no fields to query.
+        "group_layer": bool(d.get("subLayerIds")) or str(d.get("type") or "").lower() == "group layer",
+        "queryable": "Query" in caps and not (
+            bool(d.get("subLayerIds")) or str(d.get("type") or "").lower() == "group layer"
+        ),
         "personal_data_fields": [f["name"] for f in fields if "personal_data_like" in f.get("flags", [])],
     }
 
@@ -485,6 +508,11 @@ def explore(
         client = httpx.Client(timeout=timeout, headers={"User-Agent": USER_AGENT}, follow_redirects=False)
     requests_made: list[str] = []
     result: dict[str, Any] = {"url": url, "requests": requests_made, "layers": []}
+    result["caps"] = {
+        "service_docs": MAX_SERVICE_DOCS,
+        "layer_docs": MAX_LAYER_DOCS,
+        "sample_queries": MAX_SAMPLE_QUERIES,
+    }
 
     def get(u: str, params: dict[str, str]) -> tuple[dict | None, dict | None]:
         """Returns (json, stop_info). stop_info set on 429/HTTP/network/token problems."""
@@ -508,6 +536,11 @@ def explore(
             return None, gate
         err = error_info(data)
         if err:
+            if str(err.get("message", "")).strip().lower() in {"json", ""}:
+                err["message"] = (
+                    f"ArcGIS error {err.get('code')}: request not accepted (a wrong layer id or "
+                    "unsupported operation is the usual cause)"
+                )
             return None, {"stopped": "service_error", **err}
         return data, None
 
@@ -521,11 +554,20 @@ def explore(
                 return result
             service_info = parse_service(data)
             result["service"] = service_info
-            layer_ids = [x["id"] for x in service_info["layers"] if isinstance(x.get("id"), int)]
+            # Leaf layers first: group layers only organise others and would waste the cap.
+            leaves = [x for x in service_info["layers"] if isinstance(x.get("id"), int) and not x.get("subLayerIds")]
+            groups = [x for x in service_info["layers"] if isinstance(x.get("id"), int) and x.get("subLayerIds")]
+            layer_ids = [x["id"] for x in leaves]
             layer_ids += [x["id"] for x in service_info["tables"] if isinstance(x.get("id"), int)]
+            total_docs = len(layer_ids)
             layer_ids = layer_ids[:MAX_LAYER_DOCS]
-            if len(service_info["layers"]) + len(service_info["tables"]) > MAX_LAYER_DOCS:
-                result["note"] = f"Only first {MAX_LAYER_DOCS} layer docs fetched (cap)."
+            notes = []
+            if groups:
+                notes.append(f"{len(groups)} group layer(s) skipped (they only organise sub-layers).")
+            if total_docs > MAX_LAYER_DOCS:
+                notes.append(f"Only first {MAX_LAYER_DOCS} layer docs fetched (cap).")
+            if notes:
+                result["note"] = " ".join(notes)
             base = url
         else:
             layer_ids = [sp[1]]
@@ -557,13 +599,12 @@ def explore(
             if stop:
                 result["sample_stop"] = stop
             else:
-                result["sample"] = {"layer_url": lurl, **summarise_query_response(data)}
-        result["caps"] = {
-            "service_docs": MAX_SERVICE_DOCS,
-            "layer_docs": MAX_LAYER_DOCS,
-            "sample_queries": MAX_SAMPLE_QUERIES,
-            "requests_made": len(requests_made),
-        }
+                sample = summarise_query_response(data)
+                # A deliberate 1-row sample always "exceeds" the limit: that note is noise here.
+                sample.pop("paging_note", None)
+                sample.pop("exceededTransferLimit", None)
+                result["sample"] = {"layer_url": lurl, **sample}
+        result["caps"]["requests_made"] = len(requests_made)
         return result
     finally:
         if own:

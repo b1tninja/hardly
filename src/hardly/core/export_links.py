@@ -47,7 +47,7 @@ def _inspect(url: str) -> tuple[str, list[str]] | None:
     # "report" alone is too generic unless a format also shows up.
     if not formats:
         last = path.lower()
-        if not re.search(r"export|download|csv|xlsx", last):
+        if not re.search(r"export|csv|xlsx", last):
             return None
     return path, sorted(set(formats))
 

@@ -42,6 +42,25 @@ _INTERESTING = re.compile(
 )
 
 
+_STRING_LIT = re.compile(r"'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"")
+
+
+def _safe_sample(js: str, m: "re.Match[str]", raw: str) -> str:
+    """The call head up to and including the route literal: no payload values.
+
+    Starts after the last statement boundary and blanks every string literal
+    except the route itself, so ``note:'secret'`` earlier on the line is never
+    echoed. Nothing after the route is included (that is where payloads live).
+    """
+    start = max(0, m.start() - 60)
+    head = js[start : m.end() + 1]
+    cut = max(head.rfind(c, 0, m.start() - start) for c in (";", "{", "}", "\n", ","))
+    if cut >= 0:
+        head = head[cut + 1 :]
+    head = _STRING_LIT.sub(lambda s: s.group(0) if raw in s.group(0) else s.group(0)[0] * 2, head)
+    return re.sub(r"\s+", " ", head).strip()[:120]
+
+
 def extract_js_routes(js: str, *, base_url: str = "") -> list[dict[str, Any]]:
     """Return unique path candidates with scores and sample contexts."""
     if not (js or "").strip():
@@ -53,9 +72,7 @@ def extract_js_routes(js: str, *, base_url: str = "") -> list[dict[str, Any]]:
             path = _normalize_path(raw, base_url=base_url)
             if not path or not _keep(path):
                 continue
-            start = max(0, m.start() - 40)
-            end = min(len(js), m.end() + 60)
-            ctx = re.sub(r"\s+", " ", js[start:end]).strip()
+            ctx = _safe_sample(js, m, raw)
             row = found.setdefault(
                 path,
                 {
