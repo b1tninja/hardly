@@ -5,6 +5,13 @@ with small, redacted, paginated tools — so agents need hardly any of the raw
 file.
 
 Human setup (venv, Docker, Cursor MCP): **[README.md](README.md)**.
+Deeper docs: **[docs/](docs/README.md)** (concepts, SDK workflow, capture,
+technologies, integrating). After changing an MCP tool run
+`python scripts/gen_tool_docs.py`.
+
+hardly is a generic, content-neutral helper: technology detectors and resource
+kinds only — no site-specific logic. Downstream SDK projects use hardly and
+keep their own recipes, fixtures and vocabularies.
 
 ## Commands
 

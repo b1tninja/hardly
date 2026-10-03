@@ -67,7 +67,8 @@ def client_stub(
         return {"error": "no stubbable entries", "entry_ids": ids}
 
     base = next(iter(used_hosts)) if len(used_hosts) == 1 else "https://example.com"
-    json_import = "import json\n" if needs_json else ""
+    # Continuation lines must carry the template indent or dedent() finds none.
+    json_import = "import json\n        " if needs_json else ""
     body = textwrap.dedent(
         f'''\
         """Auto-generated sketch from hardly_stub — review before use.

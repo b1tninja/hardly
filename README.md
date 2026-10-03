@@ -1,9 +1,26 @@
 # hardly
 
-HAR analysis MCP server and CLI — index, query, document, and probe APIs
-**without** loading giant HAR files into the model context.
+A generic helper and MCP server for **reading and capturing HAR files** and
+turning them into what you need to write a client SDK: endpoints, forms and
+labels, data and media kinds, and how credentials and authentication work.
+Index a capture into SQLite once, then query it with small, redacted,
+paginated tools — you *hardly* need the whole file.
 
-You *hardly* need the whole file.
+hardly is content-neutral: it knows technologies (HTML forms, ASP.NET
+WebForms, GraphQL, OAuth, cookies/CSRF, bot walls) and resource kinds (JSON,
+CSV, HTML tables, PDF, images…), not any particular site or subject. SDKs and
+adapters built on top of it keep their own recipes and vocabularies.
+
+## Documentation
+
+| Doc | Contents |
+|-----|----------|
+| [docs/concepts.md](docs/concepts.md) | Sessions, the index, redaction, the three modes |
+| [docs/sdk-workflow.md](docs/sdk-workflow.md) | Capture → analyse → client sketch / OpenAPI, step by step |
+| [docs/capture.md](docs/capture.md) | Headless and interactive capture, recipes, env vars, containers |
+| [docs/technologies.md](docs/technologies.md) | What hardly detects, per technology |
+| [docs/integrating.md](docs/integrating.md) | Using hardly from another project; fixtures; soak; contributing |
+| [docs/tools.md](docs/tools.md) | Generated reference for every MCP tool |
 
 ## Why
 
@@ -162,12 +179,14 @@ samples in separate projects.
 | Discovery | `summary`, `stats`, `hosts` (`preferred_host`), `endpoints`, `content`, `search`, `entry`, `compare_entries` |
 | Portal / HTML | `brief`, `story`, `forms` / `ui` (incl. common label/value layouts), `outline`, `pages`, `wall` |
 | Tokens / credentials | `credentials` (login map + jwt/hex/base64 shapes), `correlate`, `trace`, `cookies`, `secrets`, `redirects` |
-| Structure | `routes`, `around`, `tree`, `params`, `graphql`, `duplicates`, `slow` |
+| Structure | `routes`, `around`, `tree`, `params`, `graphql`, `find_search`, `duplicates`, `slow` |
 | Quality | `coverage`, `issues`, `diff`, `recommend` |
 | Auth / schema | `auth`, `flow`, `schema` |
 | Export | `export_md`, `export_openapi`, `export_postman`, `export_brief`, `stub`, `recipe_plan`, `curl`, `sql` |
 | Live probe | `probe` (`confirm=true`; secrets only via overrides) |
 | Capture | `discover`, `capture_doctor`, `capture_start` / `stop` / `list` / `status`, `capture_aria`, `capture_screenshot`, `capture_elements`, `capture_click` / `fill` / `press`, `capture_goto` / `url`, `capture_recipe`, `capture_once` |
+
+Signatures and descriptions for every tool: [docs/tools.md](docs/tools.md).
 
 **Token rules:** bodies truncated, secrets redacted, lists paginated. Never
 returns the full HAR.
