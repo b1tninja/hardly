@@ -50,6 +50,7 @@ def portal_brief(
         "shapes_by_kind": cred.get("shapes_by_kind") or {},
         "cookie_flags_by": cred.get("cookie_flags_by") or {},
         "oauth_likely": bool((cred.get("oauth") or {}).get("likely")),
+        "oauth_flow": (cred.get("oauth") or {}).get("flow") or {},
         "login_flow": {
             "confidence": (cred.get("login_flow") or {}).get("confidence"),
             "step_count": (cred.get("login_flow") or {}).get("step_count"),

@@ -518,9 +518,13 @@ def _identity_fields(
 
     for h in secrets_hits:
         name = str(h.get("name") or "")
-        if not name or not _USER_NAME_RE.search(name):
-            continue
-        if _PASSWORD_NAME_RE.search(name):
+        kind = str(h.get("kind") or "")
+        is_identity = kind == "html_identity" or (
+            name
+            and _USER_NAME_RE.search(name)
+            and not _PASSWORD_NAME_RE.search(name)
+        )
+        if not is_identity:
             continue
         key = (h["entry_id"], name.lower())
         if key in seen:
@@ -533,6 +537,47 @@ def _identity_fields(
                 "paired_with_password": h["entry_id"] in pwd_ids,
             }
         )
+
+    # Scan HTML bodies for autocomplete=username/email near passwords.
+    from hardly.core.secrets import html_autocomplete_fields
+
+    clauses = ["e.is_noise = 0", "b.preview_text LIKE '%autocomplete%'"]
+    params: list[Any] = []
+    if host:
+        clauses.append("e.host = ?")
+        params.append(host.lower())
+    for body in conn.execute(
+        f"""
+        SELECT e.entry_id, e.method, e.path, b.side, b.preview_text
+        FROM entries e
+        JOIN bodies b ON b.entry_id = e.entry_id
+        WHERE {" AND ".join(clauses)}
+        ORDER BY e.entry_id ASC
+        LIMIT 80
+        """,
+        params,
+    ):
+        for name, kind, ac in html_autocomplete_fields(body["preview_text"] or ""):
+            if kind != "html_identity":
+                continue
+            key = (body["entry_id"], name.lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(
+                {
+                    "entry_id": body["entry_id"],
+                    "method": body["method"],
+                    "path": body["path"],
+                    "side": body["side"],
+                    "kind": "html_autocomplete",
+                    "name": name,
+                    "autocomplete": ac,
+                    "paired_with_password": body["entry_id"] in pwd_ids,
+                }
+            )
+            if len(out) >= limit:
+                return out[:limit]
 
     # Form / JSON field names on the same entries as passwords.
     for eid in sorted(pwd_ids)[:40]:
@@ -673,11 +718,65 @@ def _oauth_signals(
             if len(hits) >= limit:
                 break
 
+    flow = _oauth_flow_steps(paths, hits)
     return {
         "param_hits": hits[:limit],
         "paths": paths[:20],
         "param_names": sorted({h["name"] for h in hits}, key=str.lower),
+        "flow": flow,
         "likely": bool(hits or paths),
+    }
+
+
+def _oauth_flow_steps(
+    paths: list[dict[str, Any]],
+    param_hits: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Stitch authorize → callback(code) → token when entry order allows."""
+    params_by_entry: dict[int, set[str]] = {}
+    for h in param_hits:
+        eid = int(h["entry_id"])
+        params_by_entry.setdefault(eid, set()).add(str(h["name"]).lower())
+
+    steps: list[dict[str, Any]] = []
+    for p in paths:
+        path_l = (p.get("path") or "").lower()
+        names = params_by_entry.get(int(p["entry_id"]), set())
+        role = "oauth_other"
+        if "authorize" in path_l or path_l.endswith("/auth") or "/oauth2/auth" in path_l:
+            role = "authorize"
+        elif "token" in path_l and "authorize" not in path_l:
+            role = "token"
+        elif "callback" in path_l or "redirect" in path_l:
+            role = "callback"
+        elif "code" in names and "state" in names:
+            role = "callback"
+        elif "code_challenge" in names or "code_verifier" in names:
+            role = "pkce"
+        elif "grant_type" in names or "refresh_token" in names:
+            role = "token"
+        steps.append(
+            {
+                "role": role,
+                "entry_id": p["entry_id"],
+                "method": p.get("method"),
+                "path": p.get("path"),
+                "status": p.get("status"),
+                "params": sorted(names),
+            }
+        )
+
+    roles = {s["role"] for s in steps}
+    has_pkce = any("code_challenge" in s.get("params", []) or "code_verifier" in s.get("params", []) for s in steps) or "pkce" in roles
+    return {
+        "step_count": len(steps),
+        "steps": steps[:20],
+        "has_authorize": "authorize" in roles,
+        "has_callback": "callback" in roles,
+        "has_token": "token" in roles,
+        "has_pkce": has_pkce,
+        "stitched": ("authorize" in roles and ("callback" in roles or "token" in roles))
+        or ("callback" in roles and "token" in roles),
     }
 
 

@@ -167,7 +167,7 @@ def _body_sensitive_names(
         for key, _ in parse_qsl(text, keep_blank_values=True):
             if key and is_sensitive_key(key):
                 out.append((key, "form_field"))
-    # HTML password inputs
+    # HTML password inputs + autocomplete hints
     if "<" in text[:200] or "html" in ct:
         import re
 
@@ -187,6 +187,52 @@ def _body_sensitive_names(
             name = m.group(1) or m.group(2)
             if name:
                 out.append((name, "html_password"))
+        for name, kind, _ac in html_autocomplete_fields(text):
+            out.append((name, kind))
+    return out
+
+
+_AUTOCOMPLETE_IDENTITY = frozenset(
+    {
+        "username",
+        "email",
+        "email-address",
+        "tel",
+        "tel-national",
+        "nickname",
+        "name",
+        "organization",
+    }
+)
+_AUTOCOMPLETE_PASSWORD = frozenset(
+    {"current-password", "new-password", "one-time-code"}
+)
+
+
+def html_autocomplete_fields(text: str) -> list[tuple[str, str, str]]:
+    """Return (name, kind, autocomplete) from HTML input autocomplete attrs."""
+    import re
+
+    out: list[tuple[str, str, str]] = []
+    for m in re.finditer(r"<(?:input|textarea)\b([^>]*)>", text, re.I):
+        attrs = m.group(1)
+        ac_m = re.search(r"""autocomplete\s*=\s*['"]([^'"]+)['"]""", attrs, re.I)
+        if not ac_m:
+            continue
+        ac = ac_m.group(1).strip().lower()
+        # autocomplete can be a space-separated token list; take the last hint.
+        token = ac.split()[-1] if ac else ""
+        name_m = re.search(r"""\bname\s*=\s*['"]([^'"]+)['"]""", attrs, re.I)
+        id_m = re.search(r"""\bid\s*=\s*['"]([^'"]+)['"]""", attrs, re.I)
+        name = (name_m.group(1) if name_m else "") or (id_m.group(1) if id_m else "")
+        if not name:
+            continue
+        if token in _AUTOCOMPLETE_PASSWORD:
+            out.append((name, "html_password", token))
+        elif token in _AUTOCOMPLETE_IDENTITY or token.startswith("section-"):
+            # section-* prefixes are common; treat username-like section as identity
+            if token in _AUTOCOMPLETE_IDENTITY:
+                out.append((name, "html_identity", token))
     return out
 
 

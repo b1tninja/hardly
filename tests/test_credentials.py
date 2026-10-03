@@ -9,6 +9,19 @@ from hardly.core.redact import classify_value_shape
 FIX = Path(__file__).parent / "fixtures" / "sample.har"
 
 
+def test_html_autocomplete_fields():
+    from hardly.core.secrets import html_autocomplete_fields
+
+    html = (
+        '<input name="usr" autocomplete="username" />'
+        '<input id="pw" name="pwd" type="password" autocomplete="current-password" />'
+    )
+    fields = html_autocomplete_fields(html)
+    kinds = {(n, k, ac) for n, k, ac in fields}
+    assert ("usr", "html_identity", "username") in kinds
+    assert ("pwd", "html_password", "current-password") in kinds
+
+
 def test_classify_value_shapes():
     assert classify_value_shape(
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
@@ -113,3 +126,18 @@ def test_diff_includes_credentials(tmp_path, monkeypatch):
     assert "credentials" in out
     assert out["credentials"]["changed"] is False
     assert "shared" in out["credentials"]["session_cookies"]
+
+
+def test_entry_includes_shapes(tmp_path, monkeypatch):
+    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    from hardly.index import query as q
+
+    info = sess.open_har(str(FIX), force=True)
+    conn = sess.require_conn(info["session_id"])
+    # Login response carries a JWT in the body.
+    entry = q.get_entry(conn, 2)
+    assert "shapes" in entry
+    assert isinstance(entry["shapes"], list)
+    # Password must not appear in query dump.
+    blob = str(entry)
+    assert "s3cret" not in blob

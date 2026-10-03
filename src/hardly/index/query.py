@@ -9,7 +9,12 @@ from typing import Any
 
 from hardly.core.html_forms import extract_html_structure
 from hardly.core.js_routes import extract_js_routes
-from hardly.core.redact import redact_body_text
+from hardly.core.redact import (
+    REDACTED,
+    classify_value_shape,
+    is_sensitive_key,
+    redact_body_text,
+)
 from hardly.core.schema_infer import infer_schema
 
 _SELECT_ONLY = re.compile(r"^\s*SELECT\b", re.I)
@@ -826,6 +831,29 @@ def get_entry(
         size=resp_size,
     )
 
+    shapes: list[dict[str, Any]] = []
+    try:
+        for s in conn.execute(
+            """
+            SELECT side, where_kind, name, shape
+            FROM value_shapes
+            WHERE entry_id = ?
+            ORDER BY id ASC
+            LIMIT 40
+            """,
+            (entry_id,),
+        ):
+            shapes.append(
+                {
+                    "side": s["side"],
+                    "where": s["where_kind"],
+                    "name": s["name"],
+                    "shape": s["shape"],
+                }
+            )
+    except sqlite3.Error:
+        shapes = []
+
     return {
         "entry_id": row["entry_id"],
         "method": row["method"],
@@ -834,10 +862,11 @@ def get_entry(
         "host": row["host"],
         "path": row["path"],
         "path_template": row["path_template"],
-        "query": json.loads(row["query_json"]) if row["query_json"] else {},
+        "query": _redact_query(row["query_json"]),
         "status": row["status"],
         "mime": row["mime"],
         "content": content,
+        "shapes": shapes,
         "started_datetime": row["started_datetime"],
         "time_ms": row["time_ms"],
         "is_noise": bool(row["is_noise"]),
@@ -851,6 +880,35 @@ def get_entry(
         "headers": headers,
         "bodies": bodies,
     }
+
+
+def _redact_query(query_json: str | None) -> dict[str, Any]:
+    """Return query params with sensitive / shaped values redacted."""
+    if not query_json:
+        return {}
+    try:
+        query = json.loads(query_json)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    if not isinstance(query, dict):
+        return {}
+    out: dict[str, Any] = {}
+    for key, value in query.items():
+        if is_sensitive_key(str(key)):
+            out[key] = REDACTED
+            continue
+        if isinstance(value, list):
+            out[key] = [
+                REDACTED
+                if isinstance(v, str) and classify_value_shape(v)
+                else v
+                for v in value
+            ]
+        elif isinstance(value, str) and classify_value_shape(value):
+            out[key] = REDACTED
+        else:
+            out[key] = value
+    return out
 
 
 def compare_entries(conn: sqlite3.Connection, a_id: int, b_id: int) -> dict:
