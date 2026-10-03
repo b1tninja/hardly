@@ -11,6 +11,7 @@ from hardly.core.cookies import cookie_timeline
 from hardly.core.correlate import correlate_tokens
 from hardly.core.issues import find_issues
 from hardly.core.story import portal_story
+from hardly.core.gates import summarize_gates
 from hardly.core.wall import detect_walls
 from hardly.index import query as q
 
@@ -113,6 +114,11 @@ def portal_brief(
             "Credentials/login signals present — drill with hardly_credentials "
             "(names/shapes only).",
         )
+    if (walls.get("environment_blocked") or {}).get("detected"):
+        next_bits.insert(
+            0,
+            "Environment block (unknown, not a site wall) - re-run from another network.",
+        )
     if (walls.get("hit_count") or 0) > 0:
         next_bits.insert(
             0,
@@ -147,6 +153,7 @@ def portal_brief(
             "by_kind": walls.get("by_kind"),
             "sample": (walls.get("hits") or [])[:5],
         },
+        "gates": summarize_gates(walls),
         "coverage": {
             "entries": coverage.get("entries"),
             "with_preview": coverage.get("with_preview"),

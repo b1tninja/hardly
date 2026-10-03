@@ -1200,6 +1200,20 @@ def _settled_content(page: Any) -> str:
     return html
 
 
+_STOP_GATES = {"bot_wall", "captcha", "login", "paywall", "rate_limit"}
+
+
+def _page_gate_classes(page: Any, html: str) -> list[str]:
+    """Stop-sign gate classes the settled page classifies as (never click through)."""
+    from hardly.core.gates import classify_response
+
+    try:
+        gates = classify_response(200, {}, html or "", getattr(page, "url", "") or "")
+    except Exception:  # noqa: BLE001
+        return []
+    return sorted({g["class"] for g in gates if g["class"] in _STOP_GATES})
+
+
 def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
     """Follow ranked links/buttons hop by hop until a search form appears.
 
@@ -1219,6 +1233,15 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
     form = None
     for _ in range(max_hops + 1):
         html = _settled_content(page)
+        blocked = _page_gate_classes(page, html)
+        if blocked:
+            return {
+                "reached": False,
+                "form": None,
+                "hops": hops,
+                "url": page.url,
+                "blocked": blocked,
+            }
         cands, structure = page_candidates(html, base_url=page.url, keywords=keywords)
         form = search_form_reached(structure, min_fields=min_fields, keywords=keywords)
         if form:
@@ -1284,6 +1307,13 @@ def _run_inprocess_recipe(page: Any, steps: list[dict[str, Any]]) -> dict[str, A
             continue
         op = str(raw.get("op") or "").strip().lower()
         step_out: dict[str, Any] = {"op": op, "ok": True}
+        from hardly.core.recipe_policy import check_step
+
+        allowed, reason = check_step(raw)
+        if not allowed:
+            step_out.update(ok=False, error=reason)
+            results.append(step_out)
+            continue
         try:
             if op == "wait":
                 ms = min(max(_wait_ms(raw, 1000), 0), 30_000)
