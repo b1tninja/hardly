@@ -113,3 +113,20 @@ def test_generic_keywords_cannot_vouch_for_site_search():
     assert reached(box, keywords=["search", "parcel"]) is None       # name does not mention parcel
     spec = extract_html_structure('<form action="/x"><input type="text" name="parcel_search"><input type="submit"></form>')
     assert reached(spec, keywords=["parcel"]) is not None
+
+
+def test_feedback_links_are_never_candidates():
+    from hardly.core.search_nav import score_link
+
+    for text in ("Did you find what you needed?", "Was this page helpful?", "Take our survey", "Give us feedback"):
+        assert score_link(text, "/x", ("permit",))[0] == 0, text
+    assert score_link("Find a permit", "/x", ("permit",))[0] > 0
+
+
+def test_keyword_vouches_by_field_name_not_action_url():
+    from hardly.core.search_nav import search_form_reached as reached
+
+    form = '<form action="/lookup/permits"><input type="text" name="keys"><input type="submit"></form>'
+    assert reached(extract_html_structure(form), keywords=["permit"]) is None      # action only
+    named = '<form action="/lookup"><input type="text" name="permit_number"><input type="submit"></form>'
+    assert reached(extract_html_structure(named), keywords=["permit"]) is not None

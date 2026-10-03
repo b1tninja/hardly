@@ -67,6 +67,13 @@ _PORTAL_TRAPS = """<!doctype html><html><body>
 <a href="/portal/lookup" target="_blank">Records lookup (opens in new tab)</a>
 </body></html>"""
 
+# First candidate points at a closed port (browser error page); second works.
+_PORTAL_BROKEN = """<!doctype html><html><body>
+<a href="http://127.0.0.1:1/records">Records search</a>
+<a href="/portal/lookup">Entity lookup</a>
+<a href="/portal/feedback">Did you find what you needed?</a>
+</body></html>"""
+
 _INDEX = """<!doctype html><html><head><title>Local demo</title></head><body>
 <a href="/directory.aspx">Widget directory search</a> <a href="/login">Sign in</a>
 <a href="/api/items">items</a></body></html>"""
@@ -103,6 +110,8 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(_LOGIN, cookie="JSESSIONID=localdemo0002; path=/; HttpOnly; SameSite=Lax")
         elif path == "/portal":
             self._send(_PORTAL)
+        elif path == "/portal/broken":
+            self._send(_PORTAL_BROKEN)
         elif path == "/portal/traps":
             self._send(_PORTAL_TRAPS)
         elif path == "/portal/services":

@@ -33,6 +33,12 @@ _GATEWAY = re.compile(
 )
 _GATEWAY_WEIGHT = 2
 _HIDDENISH = re.compile(r"mobile|offcanvas|off-canvas|sr-only|skip|hamburger|navbar-toggle", re.I)
+# Feedback/survey/utility wording: never a route to a lookup.
+_UTILITY_TEXT = re.compile(
+    r"did you find|was this (page )?helpful|feedback|survey|rate (this|us)|take our|your opinion|"
+    r"report a problem|give us|share your|how are we doing|cookie|accept all|manage preferences",
+    re.I,
+)
 _KEYWORD_WEIGHT = 10
 _GENERIC_WEIGHT = 3
 
@@ -41,7 +47,7 @@ def score_link(
     text: str, href: str, keywords: tuple[str, ...] = ()
 ) -> tuple[int, list[str]]:
     """Return ``(score, matched_keywords)``; score <= 0 means not a candidate."""
-    if _NEGATIVE.search(text or "") or _NEGATIVE.search(href or ""):
+    if _NEGATIVE.search(text or "") or _NEGATIVE.search(href or "") or _UTILITY_TEXT.search(text or ""):
         return 0, []
     hay = f"{text} {urlparse(href).path.replace('-', ' ').replace('_', ' ')}"
     score = 0
@@ -164,7 +170,9 @@ def search_form_reached(
         if not entry or all((f.get("kind") == "select" or f.get("type") == "select") for f in entry):
             continue
         names = [str(f.get("name") or f.get("id") or "") for f in entry]
-        blob = " ".join(names + [form.get("action") or "", form.get("id") or ""]).lower()
+        # A keyword vouches for a form only through its field names (or id),
+        # never through the action URL: /search/permits is still a site search.
+        blob = " ".join(names + [form.get("id") or ""]).lower()
         kw_hit = any(k in blob for k in kw)
         if len(entry) >= max(min_fields, 2):
             return _form_hit(form, entry)

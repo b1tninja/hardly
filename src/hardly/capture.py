@@ -1225,7 +1225,12 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
             break
         if len(hops) >= max_hops:
             break
-        pick = next((c for c in cands if c["click"]["css"] not in visited), None)
+        # After the first hop, only follow links with real evidence (a caller
+        # keyword or a strong search/lookup phrase), not generic gateway words.
+        floor = 1 if not hops else 5
+        pick = next(
+            (c for c in cands if c["click"]["css"] not in visited and c["score"] >= floor), None
+        )
         if pick is None:
             break
         visited.add(pick["click"]["css"])
@@ -1256,6 +1261,14 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
         except Exception:  # noqa: BLE001
             pass
         page.wait_for_timeout(400)
+        if page.url.startswith("chrome-error://"):
+            # The destination failed to load: step back and try the next candidate.
+            hops.append({"from": before, "clicked": pick["text"], "error": "navigation failed (browser error page)"})
+            try:
+                _goto_with_retry(page, before, timeout=30_000, attempts=2)
+            except Exception:  # noqa: BLE001
+                break
+            continue
         hops.append(
             {"from": before, "clicked": pick["text"], "css": pick["click"]["css"], "to": page.url, "via": via}
         )
