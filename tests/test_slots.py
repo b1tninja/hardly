@@ -24,7 +24,7 @@ with capture_slot(timeout_s=30) as info:
 
 def _env(tmp_path, n):
     env = dict(os.environ)
-    env["HARDLY_CACHE_DIR"] = str(tmp_path)
+    env["HARDLY_RUNTIME_DIR"] = str(tmp_path)
     env["HARDLY_CAPTURE_SLOTS"] = str(n)
     env["PYTHONPATH"] = SRC
     return env
@@ -42,7 +42,7 @@ def _spawn(tmp_path, n, secs):
 
 
 def test_unlimited(monkeypatch, tmp_path):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     monkeypatch.setenv("HARDLY_CAPTURE_SLOTS", "0")
     with slots.capture_slot() as a, slots.capture_slot() as b:
         assert a["slot"] == b["slot"] == -1
@@ -50,7 +50,7 @@ def test_unlimited(monkeypatch, tmp_path):
 
 
 def test_limit_across_processes_and_timeout_message(monkeypatch, tmp_path):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     monkeypatch.setenv("HARDLY_CAPTURE_SLOTS", "2")
     h1, h2 = _spawn(tmp_path, 2, 20), _spawn(tmp_path, 2, 20)
     try:
@@ -71,7 +71,7 @@ def test_limit_across_processes_and_timeout_message(monkeypatch, tmp_path):
 
 
 def test_queue_depth_observable(monkeypatch, tmp_path):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     monkeypatch.setenv("HARDLY_CAPTURE_SLOTS", "1")
     holder = _spawn(tmp_path, 1, 20)
     waiters = [
@@ -98,7 +98,7 @@ def test_queue_depth_observable(monkeypatch, tmp_path):
 
 
 def test_stale_marker_ignored(monkeypatch, tmp_path):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     monkeypatch.setenv("HARDLY_CAPTURE_SLOTS", "1")
     dead = subprocess.Popen([sys.executable, "-c", "pass"])
     dead.wait()

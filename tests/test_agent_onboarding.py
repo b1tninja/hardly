@@ -180,7 +180,7 @@ def test_unknown_session_error_is_actionable():
     out = json.loads(server.hardly_summary("nope-does-not-exist"))
     assert "error" in out
     text = json.dumps(out)
-    assert "hardly_list_sessions" in text and "hardly_reopen" in text
+    assert "hardly_open" in text and out["code"] == "unknown_session"
 
 
 def test_missing_file_error_is_actionable():

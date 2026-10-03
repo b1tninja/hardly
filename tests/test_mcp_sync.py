@@ -39,7 +39,7 @@ def test_cli_has_core_analysis_commands():
 
 
 def test_cli_smoke_brief(tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     from pathlib import Path
 
     fix = Path(__file__).parent / "fixtures" / "sample.har"

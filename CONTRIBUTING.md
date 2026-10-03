@@ -22,4 +22,14 @@ commands, conventions, safety rules). The short version:
 - No captcha, bot-wall or access-control evasion.
 - Tests use neutral, synthetic data; `tests/test_neutrality.py` passes.
 
+Maintainers cutting a release: [docs/releasing.md](docs/releasing.md). Add a `browser` marker to tests
+that launch a real browser (they run nightly, not in the PR matrix).
+
 Security issues: see [SECURITY.md](SECURITY.md). Release notes: [CHANGELOG.md](CHANGELOG.md).
+
+## License and sign-off
+
+hardly is licensed under MPL-2.0 (see `LICENSE` and `NOTICE.md`). By contributing you agree your
+contribution is under the same license. Sign off every commit with `git commit -s`, which adds
+`Signed-off-by: Your Name <you@example.com>` and certifies the
+[Developer Certificate of Origin](https://developercertificate.org/). No CLA is required.

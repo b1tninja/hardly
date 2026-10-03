@@ -12,7 +12,7 @@ FIX = Path(__file__).parent / "fixtures" / "sample.har"
 
 
 def test_duplicates_login(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = find_duplicates(conn, host="api.example.com", min_count=2)
@@ -21,7 +21,7 @@ def test_duplicates_login(tmp_path, monkeypatch):
 
 
 def test_slowest(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = slowest_entries(conn, limit=5)
@@ -30,7 +30,7 @@ def test_slowest(tmp_path, monkeypatch):
 
 
 def test_wall_akamai(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = detect_walls(conn, host="portal.example.com")
@@ -40,7 +40,7 @@ def test_wall_akamai(tmp_path, monkeypatch):
 
 
 def test_pages_portal(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = list_pages(conn)

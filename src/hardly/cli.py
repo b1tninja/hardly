@@ -20,15 +20,22 @@ def _print(data: object) -> None:
 
 
 def cmd_open(args: argparse.Namespace) -> int:
-    result = sess.open_har(args.har, force=args.force)
+    result = sess.open_har(
+        args.har, force=args.force, output_path=args.output, overwrite=args.overwrite
+    )
     _print(result)
     return 0 if "error" not in result else 1
 
 
-def cmd_reopen(args: argparse.Namespace) -> int:
-    result = sess.reopen_session(args.session_id, force=args.force)
-    _print(result)
-    return 0 if "error" not in result else 1
+def cmd_export_har(args: argparse.Namespace) -> int:
+    """Copy the source HAR of a HAR path to a new file (atomic, never in place)."""
+    result = sess.open_har(args.har)
+    if "error" in result:
+        _print(result)
+        return 1
+    out = sess.export_har(result["session_id"], args.output, overwrite=args.overwrite)
+    _print(out)
+    return 0 if "error" not in out else 1
 
 
 def cmd_stats(args: argparse.Namespace) -> int:
@@ -53,7 +60,12 @@ def cmd_summary(args: argparse.Namespace) -> int:
         _print(result)
         return 1
     conn = sess.require_conn(result["session_id"])
-    _print(q.summary(conn))
+    _print(
+        {
+            **q.summary(conn),
+            "saved_to": sess.get_saved_to(result["session_id"]),
+        }
+    )
     return 0
 
 
@@ -1326,6 +1338,7 @@ def cmd_capture(args: argparse.Namespace) -> int:
                 stop_capture(
                     args.capture_id or None,
                     open_session=not args.no_open,
+                    export_path=getattr(args, "export_path", None),
                 )
             )
             return 0
@@ -1445,6 +1458,16 @@ def cmd_capture(args: argparse.Namespace) -> int:
         same_tab = not getattr(args, "allow_popups", False)
         use_trace = True if getattr(args, "trace", False) else None
         if action == "start":
+            if not args.output:
+                _print(
+                    {
+                        "error": "capture start needs -o/--output from the CLI: the HAR is "
+                        "ephemeral without it and this process exits right after starting.",
+                        "hint": "hardly capture start URL -o capture.har, or use "
+                        "`hardly capture run` / the MCP tools for an in-memory capture.",
+                    }
+                )
+                return 1
             _print(
                 start_capture(
                     args.url or "",
@@ -1538,7 +1561,7 @@ def _add_capture_flags(
     p.add_argument(
         "-o",
         "--output",
-        help="HAR output path (default: ~/.cache/hardly/captures/...)",
+        help="HAR output path. Without it the capture is ephemeral: indexed in memory, HAR deleted",
     )
     p.add_argument(
         "--wait",
@@ -1685,18 +1708,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     help_p.set_defaults(func=cmd_help)
 
-    open_p = sub.add_parser("open", help="Index a HAR file")
-    open_p.add_argument("har")
+    open_p = sub.add_parser(
+        "open", help="Index a HAR (or open a saved index); -o saves the index there"
+    )
+    open_p.add_argument("har", help="HAR file or a previously saved index file")
     open_p.add_argument("--force", action="store_true")
+    open_p.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        help="Save the index to this file (atomic). Without it nothing is written",
+    )
+    open_p.add_argument("--overwrite", action="store_true")
     open_p.set_defaults(func=cmd_open)
 
-    reopen_p = sub.add_parser(
-        "reopen",
-        help="Reattach a cached session by session_id",
+    export_p = sub.add_parser(
+        "export-har", help="Save a copy of a HAR to a new path (atomic, never in place)"
     )
-    reopen_p.add_argument("session_id")
-    reopen_p.add_argument("--force", action="store_true")
-    reopen_p.set_defaults(func=cmd_reopen)
+    export_p.add_argument("har")
+    export_p.add_argument("-o", "--output", required=True, help="Where to write the HAR copy")
+    export_p.add_argument("--overwrite", action="store_true")
+    export_p.set_defaults(func=cmd_export_har)
 
     stats_p = sub.add_parser(
         "stats",
@@ -1711,7 +1743,7 @@ def build_parser() -> argparse.ArgumentParser:
     sum_p.add_argument("har")
     sum_p.set_defaults(func=cmd_summary)
 
-    sessions_p = sub.add_parser("sessions", help="List cached / open sessions")
+    sessions_p = sub.add_parser("sessions", help="List open sessions")
     sessions_p.set_defaults(func=cmd_sessions)
 
     hosts_p = sub.add_parser("hosts", help="List hosts in a HAR")
@@ -2434,6 +2466,7 @@ def build_parser() -> argparse.ArgumentParser:
     stop_p = cap_sub.add_parser("stop", help="Stop a capture (latest if id omitted)")
     stop_p.add_argument("capture_id", nargs="?", default="")
     stop_p.add_argument("--no-open", action="store_true")
+    stop_p.add_argument("--export-path", default=None, help="Keep an ephemeral capture's HAR here")
     stop_p.set_defaults(func=cmd_capture, capture_action="stop")
 
     list_p = cap_sub.add_parser("list", help="List captures")

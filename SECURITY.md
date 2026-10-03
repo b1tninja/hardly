@@ -21,6 +21,14 @@ in request and response bodies.
 - hardly redacts values in its output and reports names and shapes only, but redaction is
   best-effort. Review anything before sharing it. `hardly har scrub` can strip sensitive values
   from a HAR copy.
+- Give an output path to save; otherwise nothing is written. By default the index lives in process
+  memory and nothing derived from the HAR (redacted previews, headers, shapes) reaches disk; there is
+  no cache directory. A file exists only where you passed `output_path` (an index, written
+  atomically) or used `hardly_export_har` (a copy of the HAR); protect and delete those yourself.
+- A capture started without an output path is ephemeral: it is recorded to a private (0700 dir,
+  0600 file) temp file in the OS temp location, ingested into memory and deleted immediately (also on
+  error, at exit and by a startup sweep of orphans older than an hour). Pass an output path to keep a
+  HAR.
 - Rotate any credential that appeared in a capture that was shared or stored insecurely.
 - Test fixtures must be synthetic.
 

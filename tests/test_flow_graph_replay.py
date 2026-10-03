@@ -44,7 +44,7 @@ def _entry(base, method, path, req_headers, status, hdrs, body, query=None):
 
 @pytest.fixture()
 def flow(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     with local_site.serve() as base:
         s, h, login_body = _get(base, "/login")
         cookie = h["Set-Cookie"]
@@ -111,8 +111,19 @@ def test_replay_env_var(flow, monkeypatch):
     assert res["all_match"]
 
 
+def _writable_copy(conn):
+    """Session connections are read-only; tamper with a private in-memory copy instead."""
+    import sqlite3
+
+    copy = sqlite3.connect(":memory:")
+    copy.row_factory = sqlite3.Row
+    conn.backup(copy)
+    return copy
+
+
 def test_replay_divergence(flow):
     conn, *_ = flow
+    conn = _writable_copy(conn)
     conn.execute("UPDATE entries SET status = 201 WHERE entry_id = 0")
     res = replay_flow(conn, target=1, env={"Authorization": SECRET}, confirm=True, delay_s=0, allow_gates=["login"])
     assert res["first_divergence"]["entry_id"] == 0
@@ -129,6 +140,7 @@ def test_replay_stops_on_429(flow):
 
 def test_unsafe_refused_and_budget(flow):
     conn, *_ = flow
+    conn = _writable_copy(conn)
     conn.execute("UPDATE entries SET method = 'POST' WHERE entry_id = 0")
     r = replay_flow(conn, target=1, env={"Authorization": SECRET}, confirm=True)
     assert "allow_unsafe" in r["error"]

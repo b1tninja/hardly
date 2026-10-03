@@ -61,7 +61,7 @@ def test_outline_xml():
 
 
 def test_outline_entry_from_sample(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     row = conn.execute(
@@ -74,7 +74,7 @@ def test_outline_entry_from_sample(tmp_path, monkeypatch):
 
 
 def test_get_entry_still_works_with_html_table(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     row = conn.execute(

@@ -175,7 +175,7 @@ def _build_har(path):
 
 
 def test_generated_client_carries_tokens_forward(tmp_path, monkeypatch, server):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     har = tmp_path / "flow.har"
     ids = _build_har(har)
     info = sess.open_har(str(har), force=True)

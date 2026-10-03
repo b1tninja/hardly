@@ -54,8 +54,8 @@ person what will be sent first.
 limit) are stop signs: do not evade or retry; use interactive capture with a \
 person. An environment_blocked verdict means unknown, re-run elsewhere.
 - Secret values are never returned. Supply secrets only via overrides/env.
-- After an MCP restart tools auto-reattach cached session_ids; \
-hardly_list_sessions / hardly_reopen if not. Tool missing: hardly_capabilities \
+- Give an output path to save; otherwise nothing is written. Session ids do not survive an MCP \
+restart: call hardly_open again with the same path. Tool missing: hardly_capabilities \
 (restart the server). Browser problems: hardly_capture_doctor.
 """
 
@@ -72,8 +72,7 @@ def _hint_for(exc: Exception) -> str | None:
     low = msg.lower()
     if "unknown session_id" in low:
         return (
-            "hardly_list_sessions shows known ids; hardly_reopen(session_id) "
-            "reattaches a cached one; otherwise hardly_open(har_path) or "
+            "hardly_list_sessions shows known ids; otherwise hardly_open(har_path) or "
             "hardly_discover(url) creates a session."
         )
     if isinstance(exc, FileNotFoundError) or "no such file" in low:
@@ -89,6 +88,10 @@ def _hint_for(exc: Exception) -> str | None:
 
 
 def _err(exc: Exception) -> str:
+    from hardly.session import SessionError
+
+    if isinstance(exc, SessionError):
+        return _ok(exc.to_dict())
     msg = str(exc.args[0]) if isinstance(exc, KeyError) and exc.args else str(exc)
     out: dict[str, Any] = {"error": msg}
     hint = _hint_for(exc)
@@ -108,7 +111,15 @@ def _tool(fn):
         except (FileNotFoundError, NotADirectoryError) as exc:
             return _err(exc)
         except KeyError as exc:
-            if "unknown session_id" in str(exc).lower():
+            from hardly.session import SessionError
+
+            if isinstance(exc, SessionError) or "unknown session_id" in str(exc).lower():
+                return _err(exc)
+            raise
+        except Exception as exc:
+            from hardly.session import SessionError
+
+            if isinstance(exc, SessionError):
                 return _err(exc)
             raise
 
@@ -181,10 +192,16 @@ def hardly_start(goal: str = "", har_path: str = "", url: str = "") -> str:
 
 
 @_tool
-def hardly_open(har_path: str, force: bool = False) -> str:
-    """Index a HAR file into a queryable session and return session_id plus summary counts. Start here for any existing HAR; never Read the raw HAR file. Reuses the cache when the file is unchanged. Example: hardly_open(har_path='/data/capture.har'), then hardly_brief(session_id).
+def hardly_open(
+    har_path: str, force: bool = False, output_path: str = "", overwrite: bool = False
+) -> str:
+    """Index a HAR file (or open a saved index) into a queryable session and return session_id plus summary counts. Start here for any HAR; never Read the raw HAR. Give output_path to save the index there; otherwise nothing is written. Opening the same path again returns the same session. Example: hardly_open(har_path='/data/capture.har'), then hardly_brief(session_id).
     """
-    return _ok(sess.open_har(har_path, force=force))
+    return _ok(
+        sess.open_har(
+            har_path, force=force, output_path=output_path or None, overwrite=overwrite
+        )
+    )
 
 
 @_tool
@@ -202,7 +219,7 @@ def hardly_capture_start(
 ) -> str:
     """Launch a browser capture that records a HAR (needs the capture extra). headed=true (default) is interactive: ASK THE PERSON to use the window, then call hardly_capture_stop; headed=false is headless and you drive it with hardly_capture_aria / click / recipe. For a one-shot headless load prefer hardly_discover. Example: hardly_capture_start(url='https://example.com', headed=true, channel='chrome').
 
-    Requires ``pip install -e ".[capture]"`` + ``playwright install chromium`` (see hardly_capture_doctor). Prefer channel='chrome' for bot walls. url_filter is a Playwright glob. profile keeps cookies. same_tab (default true) forces target=_blank into the current tab. trace=true writes a ``.trace.zip`` beside the HAR. Waits for a capture slot (HARDLY_CAPTURE_SLOTS); the result carries ``slot``.
+    Requires ``pip install -e ".[capture]"`` + ``playwright install chromium`` (see hardly_capture_doctor). Prefer channel='chrome' for bot walls. url_filter is a Playwright glob. profile keeps cookies. Without har_path the HAR is ephemeral (memory only; pass har_path to keep it). same_tab (default true) forces target=_blank into the current tab. trace=true writes a ``.trace.zip`` beside the HAR. Waits for a capture slot (HARDLY_CAPTURE_SLOTS); the result carries ``slot``.
     """
     try:
         from hardly.capture import CaptureError, start_capture
@@ -232,8 +249,9 @@ def hardly_capture_stop(
     capture_id: str = "",
     open_session: bool = True,
     force: bool = False,
+    export_path: str = "",
 ) -> str:
-    """Stop a running capture, flush the HAR and optionally open it as a session. Call when the person says they are done (interactive) or your recipe is complete; then continue with hardly_brief(session_id). Omit capture_id to stop the latest running capture. Example: hardly_capture_stop(open_session=true).
+    """Stop a running capture, flush the HAR and optionally open it as a session. Call when the person says they are done (interactive) or your recipe is complete; then continue with hardly_brief(session_id). A capture started without har_path is ephemeral (memory only); export_path keeps its HAR. Example: hardly_capture_stop(open_session=true).
     """
     try:
         from hardly.capture import CaptureError, stop_capture
@@ -245,6 +263,7 @@ def hardly_capture_stop(
                 capture_id or None,
                 open_session=open_session,
                 force=force,
+                export_path=export_path or None,
             )
         )
     except CaptureError as exc:
@@ -636,23 +655,23 @@ def hardly_discover(
 
 @_tool
 def hardly_list_sessions() -> str:
-    """List cached and open HAR sessions (session_id, har_path, open flag). Use after an MCP restart or when you lost a session_id; then hardly_reopen if open=false. No arguments.
+    """List open HAR sessions (session_id, har_path, saved_to). Use when you lost a session_id. No arguments.
     """
     return _ok({"sessions": sess.list_sessions()})
 
 
 @_tool
 def hardly_close(session_id: str) -> str:
-    """Close an open session to free memory (the cache file stays on disk, so hardly_reopen can restore it). Example: hardly_close(session_id='S').
+    """Close an open session to free memory (the session is discarded; a file saved with output_path stays). Example: hardly_close(session_id='S').
     """
     return _ok(sess.close_session(session_id))
 
 
 @_tool
-def hardly_reopen(session_id: str, force: bool = False) -> str:
-    """Reattach a cached session after an MCP restart without needing the HAR path. Use when hardly_list_sessions shows open=false for your session_id; other tools also auto-reattach. Example: hardly_reopen(session_id='S').
+def hardly_export_har(session_id: str, output_path: str, overwrite: bool = False) -> str:
+    """Save a copy of the session's source HAR to output_path (atomic, never in place; refuses to overwrite unless overwrite=true). Use to keep a HAR you opened; an ephemeral capture's HAR is already deleted. Example: hardly_export_har(session_id='S', output_path='/data/keep.har').
     """
-    return _ok(sess.reopen_session(session_id, force=force))
+    return _ok(sess.export_har(session_id, output_path, overwrite=overwrite))
 
 
 @_tool
@@ -663,7 +682,11 @@ def hardly_summary(session_id: str) -> str:
         conn = sess.require_conn(session_id)
     except KeyError as exc:
         return _err(exc)
-    return _ok(q.summary(conn))
+    return _ok({
+            **q.summary(conn),
+            "saved_to": sess.get_saved_to(session_id),
+        }
+    )
 
 
 @_tool
@@ -2414,7 +2437,7 @@ def build_client_sdk(session_id: str) -> str:
     """Workflow: turn an open session into a small client SDK."""
     return (
         f"Build a client SDK from session `{session_id}` (if it is unknown, "
-        "hardly_list_sessions / hardly_reopen):\n"
+        "hardly_list_sessions / hardly_open again):\n"
         "1. hardly_hosts -> preferred_host; hardly_story(host=...) for the steps\n"
         "2. hardly_credentials + hardly_auth_patterns -> how login works\n"
         "3. hardly_correlate + hardly_flow_graph(entry_id=<key request>) -> values "
@@ -2506,6 +2529,9 @@ def cheatsheet() -> str:
 
 
 def main() -> None:
+    from hardly.ephemeral import sweep_ephemeral
+
+    sweep_ephemeral()  # crash leftovers from earlier runs
     mcp.run()
 
 

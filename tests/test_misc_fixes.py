@@ -30,7 +30,7 @@ def test_preferred_host_skips_beacon_cdns(tmp_path, monkeypatch):
     entries += [_entry(i + 8, f"https://298279967.log.optimizely.com/event?{i}", "{}", "application/json") for i in range(4)]
     path = tmp_path / "p.har"
     path.write_text(json.dumps({"log": {"version": "1.2", "creator": {"name": "t", "version": "1"}, "entries": entries}}))
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     info = sess.open_har(str(path), force=True)
     from hardly.index import query as q
 
@@ -64,7 +64,7 @@ def test_captcha_response_fields_are_submitted_names_only(tmp_path, monkeypatch)
     path = tmp_path / "c.har"
     path.write_text(json.dumps({"log": {"version": "1.2", "creator": {"name": "t", "version": "1"},
                                         "entries": [_entry(1, "https://a.example.com/", html)]}}))
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     info = sess.open_har(str(path), force=True)
     out = detect_challenges(sess.require_conn(info["session_id"]))
     assert out["captcha_widgets"][0]["response_fields"] == ["g-recaptcha-response"]

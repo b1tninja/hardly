@@ -74,7 +74,7 @@ def test_scan_session_over_har(tmp_path, monkeypatch):
     }
     path = tmp_path / "d.har"
     path.write_text(json.dumps({"log": {"version": "1.2", "creator": {"name": "t", "version": "1"}, "entries": [entry]}}))
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     info = sess.open_har(str(path), force=True)
     out = scan_session(sess.require_conn(info["session_id"]))
     assert out["pages_with_data_attributes"] == 1

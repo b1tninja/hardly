@@ -15,7 +15,7 @@ FIX = Path(__file__).parent / "fixtures" / "sample.har"
 
 
 def test_correlate_finds_csrf_and_session(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = correlate_tokens(
@@ -43,7 +43,7 @@ def test_correlate_finds_csrf_and_session(tmp_path, monkeypatch):
 
 
 def test_cookie_timeline_names(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = cookie_timeline(
@@ -56,7 +56,7 @@ def test_cookie_timeline_names(tmp_path, monkeypatch):
 
 
 def test_diff_sessions_self(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = diff_sessions(conn, conn, host="portal.example.com")
@@ -66,7 +66,7 @@ def test_diff_sessions_self(tmp_path, monkeypatch):
 
 
 def test_recipe_plan_writes_json(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     out = tmp_path / "recipe.json"
@@ -79,7 +79,7 @@ def test_recipe_plan_writes_json(tmp_path, monkeypatch):
 
 
 def test_redirect_chains(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = redirect_chains(conn, host="portal.example.com")
@@ -91,7 +91,7 @@ def test_redirect_chains(tmp_path, monkeypatch):
 
 
 def test_issues_runs(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = find_issues(conn)
@@ -100,7 +100,7 @@ def test_issues_runs(tmp_path, monkeypatch):
 
 
 def test_portal_brief(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = portal_brief(
@@ -116,7 +116,7 @@ def test_portal_brief(tmp_path, monkeypatch):
 
 
 def test_portal_brief_auto_host(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = portal_brief(conn, har_path=sess.get_har_path(info["session_id"]))
@@ -157,7 +157,7 @@ def test_correlate_server_issued_key_replayed_in_custom_headers(tmp_path, monkey
     ]}}
     path = tmp_path / "hs.har"
     path.write_text(json.dumps(har))
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     info = sess.open_har(str(path), force=True)
     conn = sess.require_conn(info["session_id"])
     out = correlate_tokens(conn, har_path=sess.get_har_path(info["session_id"]))

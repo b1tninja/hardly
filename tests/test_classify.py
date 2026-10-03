@@ -58,7 +58,7 @@ def test_classify_media_docs():
 
 
 def test_sample_har_content_summary(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     summary = summarize_content(conn, exclude_noise=False, limit=200)
@@ -79,7 +79,7 @@ def test_sample_har_content_summary(tmp_path, monkeypatch):
 
 
 def test_search_by_content_kind(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     csv_hits = q.search_entries(conn, content_kind="csv", exclude_noise=False)
@@ -103,7 +103,7 @@ def test_pdf_magic_bytes():
 def test_stats_includes_content_kinds(tmp_path, monkeypatch):
     from hardly.core.stats import traffic_stats
 
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     stats = traffic_stats(conn, exclude_noise=False)

@@ -52,7 +52,7 @@ and whether a browser is available. Then follow the workflow below.
 ## When stuck
 
 `hardly_help(topic)`, `hardly_recommend(goal)`, `hardly_list_sessions`,
-`hardly_reopen(session_id)` after a server restart, `hardly_capabilities` when a
+`hardly_open` again after a server restart, `hardly_capabilities` when a
 tool seems missing, `hardly_capture_doctor` when the browser will not start.
 
 ## References (read only when needed)

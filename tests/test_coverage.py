@@ -9,7 +9,7 @@ FIX = Path(__file__).parent / "fixtures" / "sample.har"
 
 
 def test_body_coverage_on_sample(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     cov = q.body_coverage(conn, exclude_noise=False)

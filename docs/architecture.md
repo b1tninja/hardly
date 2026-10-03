@@ -27,9 +27,9 @@ flowchart LR
    filtered for noise, its URL templated (`/users/42` to `/users/{id}`), secret query values redacted,
    text bodies decoded, and per-body signals (`body_signals`: content kind, value shapes, framework
    hints, double-encoded JSON, ...) computed once.
-2. **Index**: one SQLite database per HAR in the cache dir (`HARDLY_CACHE_DIR`, default
-   `~/.cache/hardly`), plus a small metadata JSON. `session.py` maps `session_id` to the connection
-   and reattaches from the cache after an MCP restart.
+2. **Index**: one SQLite database per HAR, held in memory unless you pass an output path (below).
+   `session.py` maps `session_id` to the connection; sessions are in-memory unless the
+   caller names a file.
 3. **Query**: `index/query.py` and `core/*` modules read the index and return small dictionaries.
    Detectors return evidence (names, shapes, counts, entry ids); prose advice appears only with
    `explain=true`. Output is paginated and bodies are truncated.
@@ -65,10 +65,65 @@ robots.txt and per-host delays. Secrets for probes come only from explicit overr
   responses rather than embedding literals.
 - The raw HAR is never returned by any tool.
 
+## Saving: one rule
+
+**Give an output path to save; otherwise nothing is written.** There are no storage modes, no
+environment variables and no cache directory.
+
+- `open(har)`: the HAR is ingested into `:memory:` and sealed (`PRAGMA query_only`). Nothing reaches
+  disk, so no derived data (redacted previews, headers, shapes) is left behind.
+- `open(har, output_path=P, overwrite=False)`: additionally writes the index to `P`: `VACUUM INTO` a temp
+  file in `P`'s directory, then `os.replace`. Never in place; an existing `P` is refused unless
+  `overwrite`. The proof of what the index was built from lives inside it (`meta` table: `har_path`,
+  `har_size`, `har_mtime`, `index_version`); there are no sidecar files.
+- `open(P)`: `P` may be a HAR or a saved index (detected by the SQLite header and the embedded
+  meta). A saved index opens read-only (`mode=ro`) without re-ingesting. If its `index_version` is not
+  this build's, `index_outdated` tells you to re-open the original HAR with `output_path`.
+
+```python
+from hardly import open_session
+
+with open_session("capture.har") as s:                       # memory only
+    s.conn  # read-only sqlite3 connection; s.session_id, s.info
+with open_session("capture.har", output_path="idx.db"):      # also saved
+    ...
+with open_session("idx.db") as s:                            # no re-ingest
+    ...
+```
+
+**Idempotence.**
+1. The session id is a pure function of the resolved input path (HAR or index file).
+2. Opening it again returns the same live session without re-ingesting. Handles are reference counted:
+   a nested `with` does not close the outer one, the session closes when the last handle closes,
+   `close()` is idempotent per handle and saves nothing. The MCP/CLI layer holds one reference until
+   `hardly_close`.
+3. Opening a live session again *with* `output_path` just saves it there.
+4. Ingest output is a pure function of the HAR bytes and `INDEX_VERSION` (tested: two ingests have equal
+   table dumps), and reopening after close gives an identical summary.
+
+**Why no cache or path registry.** An implicit cache directory leaves files nobody asked for and nobody cleans up, and a registry of opened paths is
+hidden state too. So an unknown session id (after a restart, or any unsaved session) returns the
+deterministic `unknown_session` error telling the caller to call `hardly_open` again with the same
+path.
+
+**Source HAR.** `hardly_export_har(session_id, output_path, overwrite=False)` (`hardly export-har HAR -o
+OUT`) copies the source HAR atomically (never in place).
+
+**Ephemeral captures.** A capture without an output path records to a private temp file
+(`<tempdir>/hardly-<uid>/ephemeral/`, dir 0700, file 0600), is ingested into a memory session and the
+file is deleted straight away (also on error, at exit, and by a sweep of files older than an hour at
+startup). The result says `har_path: null, ephemeral: true`; pass `har_path` / `-o` to keep the HAR,
+or `export_path` to `hardly_capture_stop` for an interactive capture. With an output path the file is
+kept.
+
+**Read-only.** Query code never writes; temp tables stay allowed and use `temp_store=MEMORY`. A memory
+database is private to its single connection, which hardly keeps (`check_same_thread=False`); never
+open a second connection to one.
+
 ## INDEX_VERSION rule
 
-`INDEX_VERSION` (in `index/ingest.py`) is stored in each session's metadata. On open, a cached index
-with a different version is rebuilt from the HAR. Bump it whenever ingest changes what it stores or
+`INDEX_VERSION` (in `index/ingest.py`) is stored inside each index (`meta` table). On open, an index
+file with a different version is stale (`index_file_stale`) and rebuilt only with `overwrite=True`. Bump it whenever ingest changes what it stores or
 what a stored value means (new `body_signals`, changed redaction, changed templating). Pure query-side
 changes do not need a bump.
 

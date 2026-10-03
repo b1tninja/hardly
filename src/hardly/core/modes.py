@@ -26,7 +26,6 @@ MODES: tuple[dict[str, Any], ...] = (
         ],
         "tools": [
             "hardly_open",
-            "hardly_reopen",
             "hardly_hosts",
             "hardly_summary",
             "hardly_endpoints",

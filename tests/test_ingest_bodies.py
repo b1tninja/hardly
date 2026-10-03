@@ -26,7 +26,7 @@ def _entry(i, url, body, ct, *, encoding=None):
 def _open(tmp_path, monkeypatch, entries):
     path = tmp_path / "b.har"
     path.write_text(json.dumps({"log": {"version": "1.2", "creator": {"name": "t", "version": "1"}, "entries": entries}}))
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     info = sess.open_har(str(path), force=True)
     return sess.require_conn(info["session_id"])
 

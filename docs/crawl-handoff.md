@@ -117,7 +117,7 @@ Practical guidance:
 | `page.content()` during navigation raises "page is navigating and changing the content" | crash on data.gov, Sunbiz, EPO | **Fixed** (settled, retried read) |
 | Heavy pages hit the 60 s goto timeout | Telerik / Kendo demo pages | **Open**: raise the timeout per step or capture with `wait_until="load"` selectively |
 | Prebuilt Chromium does not match the Playwright version | `doctor` says the binary is missing | Set `HARDLY_BROWSER_EXECUTABLE` |
-| Parallel captures share one cache dir | confusing sessions | Give each worker its own `HARDLY_CACHE_DIR` |
+| Parallel captures share one scratch dir | confusing sessions | Give each worker its own `HARDLY_RUNTIME_DIR` |
 
 ### 4.4 Bot protection and throttling
 
@@ -162,7 +162,7 @@ secrets hide when you add a feature:
 | Whole-document "looks like base64/hex" | every page tagged as a token | **Fixed** (shapes come from token-like JSON keys and bare-token bodies) |
 | Padded base64 (`…=`) never matched | real tokens missed | **Fixed** |
 | Entries with status `-1`/`0` | aborted XHRs, capture stopped early, duplicates of finished requests | **Mitigated**: counted in `aborted_entries`; always `wait` before stopping a capture |
-| Stale cache from an older hardly | old, less-redacted data keeps appearing | **Fixed** (`INDEX_VERSION` forces a rebuild) |
+| Stale saved index from an older hardly | old, less-redacted data keeps appearing | **Fixed** (`INDEX_VERSION` forces a rebuild) |
 | `preferred_host` is a beacon / CDN | `brief` reports no credentials | **Fixed** for common beacon hosts; **still check** `hardly hosts` yourself |
 | Entry ids are 0-based | off-by-one when pairing output with a viewer | Know it |
 
@@ -225,7 +225,7 @@ budget for them up front:
 ## 5. Per-site checklist
 
 Before: environment ready (`hardly capture doctor`), keywords chosen, budget set
-(hops, pages), a per-run `HARDLY_CACHE_DIR`, and a place **outside the repo**
+(hops, pages), a per-run `HARDLY_RUNTIME_DIR`, and a place **outside the repo**
 for the HAR.
 
 During: `brief` → `wall` → navigate → `forms` / `grids` / `data-attrs` →

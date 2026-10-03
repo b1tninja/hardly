@@ -38,7 +38,8 @@ particular website or subject matter; that belongs in the SDK you build with it.
 | [test-targets.md](test-targets.md) | Research notes for growing the soak catalog |
 
 Setup (venv, Docker, MCP config) is in the top-level [README](../README.md); contributor and agent
-rules are in [AGENTS.md](../AGENTS.md) and [CONTRIBUTING.md](../CONTRIBUTING.md).
+rules are in [AGENTS.md](../AGENTS.md) and [CONTRIBUTING.md](../CONTRIBUTING.md). Maintainers: see
+[releasing.md](releasing.md) for publishing, verification and the distribution matrix.
 
 ## Scope rule
 

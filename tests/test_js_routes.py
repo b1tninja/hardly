@@ -31,7 +31,7 @@ def test_extract_js_routes_ranks_portal_paths():
 
 
 def test_list_js_routes_and_around(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
 
@@ -102,7 +102,7 @@ def test_body_keys_never_include_values_and_are_capped():
 
 
 def test_list_js_routes_includes_body_keys(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     routes = q.list_js_routes(conn, host="portal.example.com")["routes"]

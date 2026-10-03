@@ -28,7 +28,7 @@ def _entry(i, method, url, *, status=200, req_headers=None, resp_headers=None, r
 def _creds(tmp_path, monkeypatch, entries):
     path = tmp_path / "c.har"
     path.write_text(json.dumps({"log": {"version": "1.2", "creator": {"name": "t", "version": "1"}, "entries": entries}}))
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     info = sess.open_har(str(path), force=True)
     return map_credentials(sess.require_conn(info["session_id"]), har_path=sess.get_har_path(info["session_id"]))
 
@@ -159,7 +159,7 @@ def test_openapi_and_stub_reflect_auth_scheme_and_parameters(tmp_path, monkeypat
     ]
     path = tmp_path / "o.har"
     path.write_text(json.dumps({"log": {"version": "1.2", "creator": {"name": "t", "version": "1"}, "entries": entries}}))
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     info = sess.open_har(str(path), force=True)
     conn = sess.require_conn(info["session_id"])
     out = tmp_path / "o.json"

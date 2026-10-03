@@ -2,7 +2,7 @@
 
 Browser captures are heavy; dozens of agents launching Chromium at once starve
 each other and time out. This module caps concurrent browser captures with
-``fcntl`` file locks under ``<cache_dir>/slots/`` so separate processes (MCP
+``fcntl`` file locks under ``<runtime_dir>/slots/`` so separate processes (MCP
 server, CLI, capture workers) share one limit.
 
 - ``HARDLY_CAPTURE_SLOTS`` - max concurrent captures (default 4; ``0`` or
@@ -77,9 +77,9 @@ def default_timeout_s() -> float:
 
 
 def slots_dir() -> Path:
-    from hardly.session import cache_dir
+    from hardly.ephemeral import runtime_dir
 
-    path = cache_dir() / "slots"
+    path = runtime_dir() / "slots"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -218,12 +218,14 @@ def acquire_slot(timeout_s: float | None = None) -> SlotHandle:
                 # Publish our marker *before* counting so two simultaneous
                 # waiters each see the other (counting first made both see 0).
                 marker = _write_marker(directory)
-                queue_depth = len([m for m in _live_markers(directory) if m != marker])
+            # Keep the highest depth seen while polling: a peer that times out
+            # first removes its marker, so a single count at our own timeout
+            # can read 0 even though it was waiting alongside us.
+            queue_depth = max(
+                queue_depth,
+                len([m for m in _live_markers(directory) if m != marker]),
+            )
             if waited >= timeout:
-                queue_depth = max(
-                    queue_depth,
-                    len([m for m in _live_markers(directory) if m != marker]),
-                )
                 raise SlotTimeoutError(
                     f"waited {waited:.0f}s for a capture slot; "
                     f"{limit} running, {queue_depth} others waiting "

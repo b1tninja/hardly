@@ -7,12 +7,41 @@ All notable changes are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- One persistence rule: **give an output path to save; otherwise nothing is written.**
+  `hardly_open(har_path, output_path=None, overwrite=False)` / `hardly open HAR -o OUT` /
+  Python `open_session(har_or_index, output_path=None, overwrite=False)`. The index is written
+  atomically (`VACUUM INTO` a temp file in the same directory, then `os.replace`; never in place) and
+  an existing file is refused unless `overwrite`. Results report `saved_to`.
+- `open` accepts a HAR or a previously saved index (SQLite header + embedded `meta`: source HAR
+  path/size/mtime, index version; no sidecar files), skipping re-ingest. An index from another build
+  returns `index_outdated` with the exact re-open call.
+- Python API: `open_session(...)` returns a `Session` (context manager; `.session_id`, `.conn`
+  read-only, `.info`, idempotent `.close()`), exported from `hardly`.
+- Idempotent: the session id is a pure function of the resolved input path; opening it again returns the
+  same live session without re-ingesting (reference counted); open again with `output_path` just saves
+  it. Unknown ids give a deterministic `unknown_session` error whose hint is the `hardly_open` call to
+  repeat. Ingest output is deterministic.
+- `hardly_export_har` / `hardly export-har HAR -o OUT`: atomic copy of a live session's source HAR.
+- Captures without an output path are ephemeral: private temp file in the OS temp dir, ingested into a
+  memory session and deleted at once (`har_path: null, ephemeral: true`); pass `har_path` / `-o`, or
+  `export_path` to `hardly_capture_stop`, to keep the HAR.
+- Release engineering: tag-driven `release.yml` (build once, PyPI trusted publishing with attestations,
+  GitHub Release with checksums and CycloneDX SBOM, multi-arch GHCR image, MCP Registry via
+  `server.json`), nightly real-browser workflow, CodeQL, Dependabot, pip-audit and workflow lint,
+  `docs/releasing.md`, `browser`/`live` pytest markers, `tests/test_packaging.py`.
 - Repository documentation and tooling: `CONTRIBUTING.md`, `SECURITY.md`, this changelog,
   `docs/architecture.md`, `docs/troubleshooting.md`, a docs link-check test, ruff configuration,
   pre-commit config, GitHub Actions CI and PR/issue templates.
 - Package metadata: keywords, classifiers and project URLs.
 
 ### Changed
+- No cache: the per-HAR cache directory (`~/.cache/hardly`, `HARDLY_CACHE_DIR`, `<sid>.db` + `<sid>.json`),
+  `hardly_reopen`, storage modes (`HARDLY_INDEX`, `auto`) were removed before any release. Files left
+  by earlier development versions under `~/.cache/hardly` can simply be deleted.
+- `HARDLY_RUNTIME_DIR` (optional) overrides the private scratch dir for capture state, slot locks and
+  ephemeral HARs; it defaults to `<tempdir>/hardly-<uid>`, never the home directory.
+- Contract checks ingest into memory instead of a temp file (fixes Windows file locks).
+- Dockerfile copies `docs/` and `skills/` (required by the wheel build).
 - `AGENTS.md` and `README.md` rewritten to be concise; every doc now opens with a purpose line.
 - Lint auto-fixes (import order, unused imports, deprecated typing forms); no behaviour change.
 

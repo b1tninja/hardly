@@ -120,7 +120,7 @@ def test_bare_data_envelope_detected_but_yields_to_specific_ones(tmp_path, monke
     ]}}
     path = tmp_path / "e.har"
     path.write_text(json.dumps(har))
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     info = sess.open_har(str(path), force=True)
     envs = {e["name"]: e["entry_ids"] for e in detect_grids(sess.require_conn(info["session_id"]))["json_envelopes"]}
     assert envs.get("data-list") == [0]            # only the bare shape

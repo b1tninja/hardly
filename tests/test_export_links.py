@@ -46,7 +46,7 @@ def test_export_links_session_and_grids(tmp_path, monkeypatch):
     ]
     p = tmp_path / "e.har"
     p.write_text(json.dumps({"log": {"version": "1.2", "creator": {"name": "t", "version": "1"}, "entries": entries}}))
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     info = sess.open_har(str(p), force=True)
     conn = sess.require_conn(info["session_id"])
 
@@ -87,7 +87,7 @@ def test_form_hidden_format_fields_and_sources_and_truncation(tmp_path, monkeypa
     entries = [_entry(1, "GET", "https://app.example.com/p", page, "text/html")]
     p = tmp_path / "f.har"
     p.write_text(json.dumps({"log": {"version": "1.2", "creator": {"name": "t", "version": "1"}, "entries": entries}}))
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     info = sess.open_har(str(p), force=True)
     conn = sess.require_conn(info["session_id"])
     from hardly.core.export_links import export_links_report

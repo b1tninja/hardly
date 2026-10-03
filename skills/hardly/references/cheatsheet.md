@@ -41,6 +41,15 @@ After any capture you are in archive mode on the new `session_id`.
 - Secret values are never returned. Supply secrets via overrides / env only.
 - Paged tools take `limit` / `offset`; keep `limit` small.
 
+## Saving
+Give an output path to save; otherwise nothing is written.
+- `hardly_open(path)` keeps the index in memory only; the session is gone after `hardly_close` or a
+  restart (repeat `hardly_open`). Same path again = same session id, no re-ingest.
+- `hardly_open(path, output_path='idx.db')` also saves the index (atomic; refuses an existing file
+  unless `overwrite=true`). `hardly_open('idx.db')` later reopens it without re-ingesting.
+- `hardly_export_har(session_id, output_path)` saves a copy of the source HAR.
+- Captures without `har_path` are ephemeral (HAR deleted after ingest); pass `har_path` to keep it.
+
 ## Lost?
 `hardly_help(topic)`, `hardly_recommend(goal)`, `hardly_list_sessions`,
-`hardly_reopen(session_id)` after an MCP restart, `hardly_capabilities` if a tool is missing.
+`hardly_open` again after an MCP restart, `hardly_capabilities` if a tool is missing.

@@ -122,7 +122,7 @@ def test_extract_labeled_fields_mptsweb_and_kofile():
 
 
 def test_forms_query_on_sample_har(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     listed = q.list_forms(conn, host="portal.example.com")

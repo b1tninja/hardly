@@ -71,7 +71,7 @@ def _entry(url, mime, text=None, b64=None, req=None, ws=None, method="POST"):
 
 @pytest.fixture
 def har(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     big = {
         "user": {"name": "n", "password": SECRET, "token": "a" * 40},
         "rows": [{"id": i, "label": f"row-{i}", "api_key": SECRET} for i in range(100)],

@@ -101,7 +101,7 @@ bodies. `hardly coverage` shows what is still empty or truncated.
 
 | Variable | Meaning |
 |----------|---------|
-| `HARDLY_CACHE_DIR` | Where indexes and default captures are stored |
+| `HARDLY_RUNTIME_DIR` | Scratch dir for capture state, slot locks and ephemeral HARs (default `<tempdir>/hardly-<uid>`) |
 | `HARDLY_BROWSER_CHANNEL` | Default `channel` (`chrome`, `msedge`) |
 | `HARDLY_BROWSER_EXECUTABLE` | Path to a Chromium binary to launch instead of Playwright's own download |
 | `HARDLY_CAPTURE_SLOTS` | Max concurrent browser captures across processes (default 4; `0` = unlimited); extra captures queue and report `slot.queue_depth` |

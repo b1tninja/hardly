@@ -98,11 +98,15 @@ def test_live_runner_knows_new_ops():
 
 # --- real browser ------------------------------------------------------------
 
-needs_browser = pytest.mark.skipif(not playwright_available(), reason="playwright not installed")
+_skip_no_browser = pytest.mark.skipif(not playwright_available(), reason="playwright not installed")
+
+
+def needs_browser(fn):
+    return pytest.mark.browser(_skip_no_browser(fn))
 
 
 def _run(tmp_path, monkeypatch, path, recipe):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     if not playwright_status().get("ready"):
         pytest.skip("Playwright browser not ready")
     from hardly.capture import capture_headless
@@ -195,7 +199,7 @@ def test_dismiss_consent_never_touches_gates(tmp_path, monkeypatch, path, reason
 @needs_browser
 def test_goto_wait_until_and_timeout(tmp_path, monkeypatch):
     t0 = time.monotonic()
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     if not playwright_status().get("ready"):
         pytest.skip("Playwright browser not ready")
     from hardly.capture import capture_headless
@@ -229,7 +233,7 @@ def test_click_wait_until(tmp_path, monkeypatch):
 @needs_browser
 def test_find_click_and_consent_in_live_session(tmp_path, monkeypatch):
     """The live-session runner (worker process) supports find_click / dismiss_consent / goto waits."""
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     if not playwright_status().get("ready"):
         pytest.skip("Playwright browser not ready")
     from hardly import capture as cap
