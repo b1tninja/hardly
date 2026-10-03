@@ -144,6 +144,7 @@ def map_credentials(
         "cookie_flags": (cookies.get("flags") or [])[:limit],
         "cookie_flags_by": cookies.get("by_flag") or {},
         "csrf_names": csrf_names,
+        "anti_forgery_forms": _anti_forgery_forms(conn, host=host, limit=limit),
         "oauth": oauth,
         "query_secrets": query_secrets[:limit],
         "shapes": shapes[:limit],
@@ -903,3 +904,54 @@ def _har_path(conn: sqlite3.Connection) -> Path | None:
         return None
     path = Path(row["value"] if isinstance(row, sqlite3.Row) else row[0])
     return path if path.is_file() else None
+
+
+def _anti_forgery_forms(
+    conn: sqlite3.Connection, *, host: str | None, limit: int
+) -> list[dict[str, Any]]:
+    """Forms whose hidden fields use the token-name indirection pattern.
+
+    Names and form actions only; token values are never read out.
+    """
+    from hardly.core.html_forms import extract_html_structure
+
+    where = "e.is_noise = 0 AND sb.preview_text LIKE '%<form%'"
+    params: list[Any] = []
+    if host:
+        where += " AND e.host = ?"
+        params.append(host.lower())
+    rows = conn.execute(
+        f"""
+        SELECT e.entry_id, e.scheme, e.host, e.path, sb.preview_text AS body
+        FROM entries e
+        JOIN bodies sb ON sb.entry_id = e.entry_id AND sb.side = 'response'
+        WHERE {where}
+        ORDER BY e.entry_id LIMIT 200
+        """,
+        params,
+    ).fetchall()
+    out: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for row in rows:
+        structure = extract_html_structure(
+            row["body"], base_url=f"{row['scheme']}://{row['host']}{row['path']}"
+        )
+        for form in structure.get("forms") or []:
+            pair = form.get("anti_forgery")
+            if not pair:
+                continue
+            key = (form.get("action") or "", pair["name_field"], pair["token_field"])
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(
+                {
+                    "entry_id": row["entry_id"],
+                    "action": form.get("action") or "",
+                    "method": form.get("method") or "",
+                    **pair,
+                }
+            )
+            if len(out) >= limit:
+                return out
+    return out

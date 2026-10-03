@@ -706,11 +706,41 @@ def _finalize_form(form: dict[str, Any]) -> dict[str, Any]:
         "field_names": names[:_MAX_FIELDS],
         "fields": fields,
     }
+    token_pair = _named_token_pair(form.get("fields") or [])
+    if token_pair:
+        out["anti_forgery"] = token_pair
     onsubmit = form.get("onsubmit") or ""
     if onsubmit:
         out["onsubmit"] = _shape_handler(onsubmit)
         out["onsubmit_functions"] = _handler_functions(onsubmit)
     return out
+
+
+def _named_token_pair(fields: list[dict[str, Any]]) -> dict[str, str] | None:
+    """Detect the "token name indirection" anti-forgery pattern.
+
+    One hidden field's *value* is the *name* of another hidden field that holds
+    the token (e.g. ``token.name`` = ``token``). A client must read the first
+    field to learn which parameter to send the token under. Technology-level:
+    seen in several server frameworks, so no framework is named here.
+    """
+    hidden = {
+        f.get("name"): f
+        for f in fields
+        if f.get("name") and (f.get("type") or "").lower() == "hidden"
+    }
+    for name, field in hidden.items():
+        target = field.get("value")
+        if not isinstance(target, str) or target == name or target not in hidden:
+            continue
+        if "token" not in f"{name} {target}".lower():
+            continue
+        return {
+            "scheme": "named_token",
+            "name_field": str(name),
+            "token_field": target,
+        }
+    return None
 
 
 def _finalize_field(field: dict[str, Any]) -> dict[str, Any]:

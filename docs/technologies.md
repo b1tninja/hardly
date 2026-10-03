@@ -34,6 +34,24 @@ Field/header names containing `csrf`, `xsrf` or `requestverification`
 (including `__RequestVerificationToken`), plus value-based reuse are found by `credentials` and `correlate`; `trace`
 follows any named field or exact value across requests without printing it.
 
+### Token-name indirection
+
+Some frameworks send two hidden fields: one whose *value* is the *name* of the
+second, which holds the token (for example `x.token.name = token` plus
+`token = …`). A client must read the first to learn which parameter carries the
+token. `hardly_forms` marks such forms with `anti_forgery`
+(`scheme: named_token`, `name_field`, `token_field`) and `hardly_credentials`
+lists them under `anti_forgery_forms` (action, method, field names — never
+token values).
+
+### Server-issued keys replayed in headers
+
+When a response hands out a key/ticket/secret (JSON field or hidden input) and
+a later request sends it back in a custom header, query or body, `hardly_correlate`
+reports the hop (`from_where` → `to_where`, header name, value kind and length;
+never the value). Plumbing headers (`Accept`, `User-Agent`, `Content-*`, `Sec-*`,
+`Referer`…) are ignored.
+
 ## Sessions and cookies
 
 `hardly_cookies` gives a timeline of cookie names set and sent, with values
