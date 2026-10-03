@@ -74,6 +74,25 @@ identifies likely session cookies by name.
 
 Values are never returned; probes take secrets only through overrides.
 
+## HTTP auth challenges, throttling and captchas
+
+`hardly_challenges` (CLI `hardly challenges`) reports:
+
+- **Challenges:** `WWW-Authenticate` / `Proxy-Authenticate` schemes (Basic,
+  Bearer, Digest, Negotiate, NTLM, Hawk…), parameter names, and safe values
+  (`realm`, `error`, `scope`, `qop`, `algorithm`). Nonces and opaque values are
+  never returned. For each challenge it notes whether the same request was
+  retried with an `Authorization` header and the resulting status. SDK
+  consequence: you need a challenge/response loop, not a pre-set header.
+- **Throttling:** 429/423 responses, `Retry-After`, `X-RateLimit-*` /
+  `RateLimit-*` headers (including quotas advertised on successful responses),
+  and lockout wording ("too many attempts", "account locked"…). SDK
+  consequence: back off and honour `Retry-After`.
+- **Captcha widgets:** reCAPTCHA, hCaptcha, Cloudflare Turnstile, Arkose,
+  GeeTest, Friendly Captcha and image captchas, with the response field names
+  a form would submit. hardly never solves captchas; switch to interactive
+  mode with a person.
+
 ## GraphQL
 
 `hardly_graphql` lists the operations seen in the capture — entry, endpoint,

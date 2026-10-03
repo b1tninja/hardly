@@ -1081,6 +1081,29 @@ def hardly_recipe_plan(
 
 
 @mcp.tool
+def hardly_challenges(
+    session_id: str,
+    host: str | None = None,
+    limit: int = 20,
+) -> str:
+    """Detect HTTP auth challenges, throttling/lockout signals, captcha widgets.
+
+    WWW-Authenticate / Proxy-Authenticate schemes (Basic, Bearer, Digest,
+    Negotiate…) with safe parameters and whether the request was retried with
+    credentials; 429/423/Retry-After/X-RateLimit-* and lockout wording; and
+    captcha widget markup (reCAPTCHA, hCaptcha, Turnstile, Arkose…). Challenge
+    nonces are never returned.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.challenges import detect_challenges
+
+    return _ok(detect_challenges(conn, host=host, limit=min(limit, 50)))
+
+
+@mcp.tool
 def hardly_grids(
     session_id: str,
     host: str | None = None,

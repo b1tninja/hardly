@@ -33,6 +33,12 @@ _LOGIN = """<!doctype html><html><head><title>Sign in</title></head><body>
 <label>Pass <input type="password" name="password" autocomplete="current-password"></label>
 <button type="submit">Sign in</button></form></body></html>"""
 
+_CAPTCHA = """<!doctype html><html><body><form method="post" action="/login.action">
+<div class="cf-turnstile" data-sitekey="1x00000000000000000000AA"></div>
+<div class="h-captcha" data-sitekey="10000000-ffff-ffff-ffff-000000000001"></div>
+<textarea name="cf-turnstile-response"></textarea><textarea name="h-captcha-response"></textarea>
+</form><script src="https://challenges.cloudflare.com/turnstile/v0/api.js"></script></body></html>"""
+
 _INDEX = """<!doctype html><html><head><title>Local demo</title></head><body>
 <a href="/directory.aspx">Widget directory search</a> <a href="/login">Sign in</a>
 <a href="/api/items">items</a></body></html>"""
@@ -42,9 +48,18 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, *args: object) -> None:  # silence
         pass
 
-    def _send(self, body: str, ctype: str = "text/html; charset=utf-8", cookie: str = "") -> None:
+    def _send(
+        self,
+        body: str,
+        ctype: str = "text/html; charset=utf-8",
+        cookie: str = "",
+        status: int = 200,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         data = body.encode()
-        self.send_response(200)
+        self.send_response(status)
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
         if cookie:
@@ -58,6 +73,23 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(_WEBFORMS, cookie="ASP.NET_SessionId=localdemo0001; path=/; HttpOnly")
         elif path == "/login":
             self._send(_LOGIN, cookie="JSESSIONID=localdemo0002; path=/; HttpOnly; SameSite=Lax")
+        elif path == "/private":
+            if self.headers.get("Authorization"):
+                self._send("ok")
+            else:
+                self._send(
+                    "authentication required",
+                    status=401,
+                    headers={"WWW-Authenticate": 'Basic realm="local-demo", charset="UTF-8"'},
+                )
+        elif path == "/limited":
+            self._send(
+                "Too many attempts, try again later",
+                status=429,
+                headers={"Retry-After": "30", "X-RateLimit-Remaining": "0"},
+            )
+        elif path == "/captcha":
+            self._send(_CAPTCHA)
         elif path == "/api/items":
             self._send(json.dumps({"items": [{"id": 1, "name": "alpha"}]}), "application/json")
         else:

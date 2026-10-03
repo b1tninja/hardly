@@ -120,3 +120,32 @@ def test_local_synthetic_soak(tmp_path, monkeypatch):
     assert by_id["local-webforms"]["aspnet_pages"] >= 1
     assert by_id["local-token-login"]["ok"], by_id["local-token-login"]
     assert by_id["local-token-login"]["password_fields"] >= 1
+
+
+@pytest.mark.skipif(not playwright_available(), reason="playwright not installed")
+def test_local_challenges_captured(tmp_path, monkeypatch):
+    """Capture the synthetic challenge pages in a real browser, then detect."""
+    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    if not playwright_status().get("ready"):
+        pytest.skip("Playwright browser not ready")
+
+    from hardly import session as sess
+    from hardly.capture import capture_headless
+    from hardly.core.challenges import detect_challenges
+    from hardly.local_site import serve
+
+    with serve() as base:
+        recipe = [
+            {"op": "goto", "url": f"{base}/private"},
+            {"op": "goto", "url": f"{base}/limited"},
+            {"op": "goto", "url": f"{base}/captcha"},
+        ]
+        cap = capture_headless(
+            f"{base}/", wait_seconds=0.5, recipe=recipe, open_session=True, brief=False
+        )
+    out = detect_challenges(sess.require_conn(cap["session_id"]))
+    assert any(
+        s["scheme"] == "Basic" for c in out["auth_challenges"] for s in c["schemes"]
+    )
+    assert any(t["status"] == 429 for t in out["throttling"])
+    assert {"turnstile", "hcaptcha"} <= {c["name"] for c in out["captcha_widgets"]}

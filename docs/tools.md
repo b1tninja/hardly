@@ -150,6 +150,10 @@ Map login/credential evidence: passwords, session cookies, CSRF, JWT/hex/base64 
 
 Detect auth-related paths, token responses, and auth headers for a host.
 
+### `hardly_challenges(session_id, host=None, limit=20)`
+
+Detect HTTP auth challenges, throttling/lockout signals, captcha widgets.
+
 ### `hardly_correlate(session_id, host=None, limit=40)`
 
 Find dynamic values reused from earlier responses into later requests.

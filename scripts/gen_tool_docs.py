@@ -20,7 +20,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Sessions", ("open", "reopen", "list_sessions", "close", "summary", "stats", "coverage")),
     ("Endpoints and content", ("hosts", "endpoints", "content", "search", "entry", "compare_entries", "flow", "schema", "pages", "grids")),
     ("HTML, forms and labels", ("brief", "story", "forms", "ui", "outline", "routes", "around", "tree", "params", "find_search")),
-    ("Credentials and auth", ("credentials", "auth", "correlate", "trace", "cookies", "secrets", "redirects")),
+    ("Credentials and auth", ("credentials", "auth", "challenges", "correlate", "trace", "cookies", "secrets", "redirects")),
     ("APIs", ("graphql",)),
     ("Quality and traffic", ("issues", "wall", "duplicates", "slow", "diff")),
     ("Client SDK output", ("stub", "recipe_plan", "curl", "export_md", "export_openapi", "export_postman", "export_brief", "sql")),
