@@ -61,7 +61,8 @@ def test_export_links_session_and_grids(tmp_path, monkeypatch):
 
     out = detect_grids(conn)
     assert out["export_links"]
-    assert "paging" in out["export_note"]
+    assert "export_note" not in out
+    assert "paging" in detect_grids(conn, explain=True)["export_note"]
 
 
 def test_inspect_gaps_and_false_hits():

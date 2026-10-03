@@ -54,6 +54,7 @@ _CATEGORIES: tuple[dict[str, Any], ...] = (
         "title": "HTML guest portals",
         "when": "Server-rendered HTML portals: ASP.NET WebForms, search grids, detail pages",
         "tools": [
+            "hardly_report",
             "hardly_brief",
             "hardly_story",
             "hardly_forms",

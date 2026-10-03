@@ -98,7 +98,8 @@ def test_akamai_access_denied_and_generic_fallback(tmp_path, monkeypatch):
 def test_clean_capture_has_no_vendors(tmp_path, monkeypatch):
     conn, har = _open(tmp_path, monkeypatch, [_entry(1, "https://plain.example.com/", body="<html>hello</html>")])
     out = detect_bot_protection(conn, har_path=har)
-    assert out["vendors"] == [] and "No known" in out["recommendation"]
+    assert out["vendors"] == [] and "recommendation" not in out  # evidence only by default
+    assert "No known" in detect_bot_protection(conn, har_path=har, explain=True)["recommendation"]
 
 
 def test_generic_suppressed_when_product_explains_it(tmp_path, monkeypatch):
@@ -117,7 +118,8 @@ def test_wall_ignores_cdn_header_on_ok_page_but_reports_real_blocks(tmp_path, mo
         _entry(1, "https://ok.example.com/", resp_headers={"Server": "cloudflare", "CF-RAY": "x-LAX"}),
         _entry(2, "https://ok.example.com/api/me", status=403, body='{"error":"forbidden"}', ct="application/json"),
     ])
-    out = detect_walls(conn)
+    out = detect_walls(conn, explain=True)
+    assert "next" not in detect_walls(conn)
     assert out["hit_count"] == 0 and out["hits"] == []          # CDN header + plain 403 are not a wall
     assert [p["id"] for p in out["protection"]] == ["cloudflare"]
     assert out["protection"][0]["state"] == "present"

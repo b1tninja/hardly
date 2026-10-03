@@ -18,6 +18,8 @@ import re
 from collections import Counter, defaultdict
 from html.parser import HTMLParser
 from typing import Any
+
+from hardly.core.explain import finish
 from urllib.parse import urljoin, urlparse
 
 from hardly.core.previews import is_truncated, preview_warnings
@@ -212,7 +214,7 @@ def _strip_query_values(url: str) -> str:
     return p._replace(query="&".join(f"{n}=" for n in names)).geturl()
 
 
-def scan_session(conn: Any, *, host: str | None = None, entry_id: int | None = None, limit: int = 20) -> dict[str, Any]:
+def _scan_session(conn: Any, *, host: str | None = None, entry_id: int | None = None, limit: int = 20) -> dict[str, Any]:
     """Aggregate ``data-*`` usage across HTML responses in a session."""
     where = "(b.content_type LIKE '%html%' OR b.preview_text LIKE '<%') AND b.preview_text LIKE '%data-%'"
     params: list[Any] = []
@@ -284,3 +286,11 @@ def scan_session(conn: Any, *, host: str | None = None, entry_id: int | None = N
             "use hardly_entry / hardly_outline on entry_id for context."
         ),
     }
+
+
+def scan_session(conn: Any, *, host: str | None = None, entry_id: int | None = None, limit: int = 20,
+    explain: bool = False,
+) -> dict[str, Any]:
+    """``scan_session``; canned prose (next) only with ``explain=True``."""
+    return finish(_scan_session(conn, host=host, entry_id=entry_id, limit=limit), explain, 'next')
+

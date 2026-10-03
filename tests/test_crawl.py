@@ -44,6 +44,7 @@ LOOKUP = page(
 def run(routes, **kw):
     seen: list[str] = []
     kw.setdefault("delay_s", 0)
+    kw.setdefault("explain", True)
     out = C.crawl("https://a.test/", kw.pop("keywords", ("gadget",)), client=site(routes, seen), **kw)
     return out, seen
 
@@ -305,3 +306,11 @@ def test_looks_like_search_consistent_page_and_form():
 def test_stack_drops_low_confidence():
     got = C._stack(200, {}, '<div id="root"></div>', "https://a.test/")
     assert "React" not in got
+
+
+def test_next_advice_only_with_explain():
+    routes = {"/": LANDING}
+    out, _ = run(routes, explain=False)
+    assert "next" not in out
+    out, _ = run(routes, explain=True)
+    assert isinstance(out["next"], list)

@@ -16,7 +16,7 @@ OUT = ROOT / "docs" / "tools.md"
 
 # Display order and grouping; tools not listed land in "Other".
 GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Orientation", ("modes", "mode", "capabilities", "help", "recommend")),
+    ("Orientation", ("modes", "mode", "capabilities", "help", "recommend", "report")),
     ("Sessions", ("open", "reopen", "list_sessions", "close", "summary", "stats", "coverage")),
     ("Endpoints and content", ("hosts", "endpoints", "content", "search", "entry", "compare_entries", "flow", "schema", "pages", "grids", "data_attrs", "arcgis")),
     ("HTML, forms and labels", ("brief", "story", "forms", "ui", "outline", "routes", "around", "tree", "params", "find_search", "stack", "tables", "auth_patterns", "pagination")),

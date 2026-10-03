@@ -16,6 +16,8 @@ import re
 import sqlite3
 from typing import Any
 
+from hardly.core.explain import finish
+
 _SAFE_PARAMS = frozenset({"realm", "error", "error_description", "scope", "qop", "algorithm", "charset", "stale"})
 _SCHEME = re.compile(r"(?:^|,\s*)([A-Za-z][A-Za-z0-9\-_.~+/]*)(?=\s+[A-Za-z_]+=|\s*$|\s*,)", re.I)
 _PARAM = re.compile(r"([A-Za-z_][A-Za-z0-9_\-]*)\s*=\s*(\"[^\"]*\"|[^,\s]+)")
@@ -74,7 +76,7 @@ def parse_challenges(value: str) -> list[dict[str, Any]]:
     return out
 
 
-def detect_challenges(
+def _detect_challenges(
     conn: sqlite3.Connection, *, host: str | None = None, limit: int = 20
 ) -> dict[str, Any]:
     where = "e.is_noise = 0"
@@ -220,6 +222,15 @@ def detect_challenges(
             "Captcha: needs a person (interactive mode) — hardly will not solve it."
         ),
     }
+
+
+def detect_challenges(
+    conn: sqlite3.Connection, *, host: str | None = None, limit: int = 20,
+    explain: bool = False,
+) -> dict[str, Any]:
+    """``detect_challenges``; canned prose (next) only with ``explain=True``."""
+    return finish(_detect_challenges(conn, host=host, limit=limit), explain, 'next')
+
 
 
 def _token_endpoints(

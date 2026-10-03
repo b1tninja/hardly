@@ -46,7 +46,7 @@ def run(tmp_path, monkeypatch):
                                            "entries": entries}}))
         info = sess.open_har(str(har), force=True)
         conn = sess.require_conn(info["session_id"])
-        return fingerprint(conn, host=host)
+        return fingerprint(conn, host=host, explain=True)
 
     return _run
 

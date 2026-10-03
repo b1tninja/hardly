@@ -25,6 +25,8 @@ import re
 import sqlite3
 from typing import Any
 
+from hardly.core.explain import finish
+
 GATE_CLASSES: tuple[str, ...] = (
     "environment_blocked",
     "bot_wall",
@@ -79,6 +81,11 @@ def action_for(gate_class: str, *, forbids_automation: bool = False) -> str:
     if gate_class == "click_through_terms" and not forbids_automation:
         return "accept_click_through"
     return "stop"
+
+
+def severity_for_action(action: str) -> str:
+    """Shared info|notice|blocker vocabulary: stop signs block, the rest need attention."""
+    return "blocker" if action == "stop" else "notice"
 
 
 # --------------------------------------------------------------------------
@@ -166,6 +173,7 @@ def _gate(cls: str, evidence: list[str], *, vendor: str | None = None, action: s
     g["evidence"] = list(dict.fromkeys(evidence))[:8]
     g["entry_ids"] = []
     g["action"] = action or action_for(cls)
+    g["severity"] = severity_for_action(g["action"])
     return g
 
 
@@ -211,6 +219,7 @@ def _merge(gates: dict[tuple[str, str | None], dict[str, Any]], g: dict[str, Any
     cur["evidence"] = list(dict.fromkeys(cur["evidence"] + g["evidence"]))[:8]
     if g["action"] == "stop":
         cur["action"] = "stop"
+        cur["severity"] = "blocker"
 
 
 def classify_response(
@@ -354,7 +363,9 @@ def classify_response(
 # --------------------------------------------------------------------------
 
 
-def classify_gates(conn: sqlite3.Connection, host: str | None = None) -> dict[str, Any]:
+def classify_gates(
+    conn: sqlite3.Connection, host: str | None = None, explain: bool = False
+) -> dict[str, Any]:
     """Aggregate gate classes over a whole session.
 
     Combines per-response classification (every indexed response) with the
@@ -410,6 +421,7 @@ def classify_gates(conn: sqlite3.Connection, host: str | None = None) -> dict[st
                 cur["evidence"] = list(dict.fromkeys(cur["evidence"] + g["evidence"]))[:8]
                 if g["action"] == "stop":
                     cur["action"] = "stop"
+                    cur["severity"] = "blocker"
             if eid not in cur["entry_ids"] and len(cur["entry_ids"]) < 12:
                 cur["entry_ids"].append(eid)
 
@@ -453,7 +465,7 @@ def classify_gates(conn: sqlite3.Connection, host: str | None = None) -> dict[st
         by_class[g["class"]] = by_class.get(g["class"], 0) + 1
         by_action[g["action"]] = by_action.get(g["action"], 0) + 1
     env_gate = next((g for g in gates if g["class"] == "environment_blocked"), None)
-    return {
+    out = {
         "host": host,
         "gate_count": len(gates),
         "gates": gates,
@@ -468,6 +480,7 @@ def classify_gates(conn: sqlite3.Connection, host: str | None = None) -> dict[st
         "policy": POLICY["rules"],
         "next": _next_text(by_class, by_action),
     }
+    return finish(out, explain, "policy", "next")
 
 
 def _next_text(by_class: dict[str, int], by_action: dict[str, int]) -> str:

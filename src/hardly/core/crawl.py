@@ -14,6 +14,8 @@ import re
 import time
 import urllib.robotparser
 from typing import Any
+
+from hardly.core.explain import finish
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 import httpx
@@ -272,6 +274,7 @@ def crawl(
     client: httpx.Client | None = None,
     respect_robots: bool = True,
     user_agent: str | None = None,
+    explain: bool = False,
 ) -> dict[str, Any]:
     """Polite breadth-first crawl from ``start_url`` following only fetched links.
 
@@ -561,12 +564,13 @@ def crawl(
     for row in external.values():
         row["fetched"] = dedupe_key(row.pop("_target")) in fetched_keys
 
-    return _summarise(
+    out = _summarise(
         start, kw, pages, robots_disallowed, errors, external, hosts,
         max_pages=max_pages, depth=depth, delay_s=delay_s,
         follow_external=follow_external, respect_robots=respect_robots,
         user_agent=ua,
     )
+    return finish(out, explain, "next")
 
 
 def _summarise(

@@ -19,6 +19,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from hardly.core.cookies import cookie_timeline
+from hardly.core.explain import finish
 
 _MAX_ENTRIES = 6000
 _MAX_BODY_CHARS = 200_000
@@ -539,8 +540,9 @@ def fingerprint(
     conn: sqlite3.Connection,
     host: str | None = None,
     limit: int = 30,
+    explain: bool = False,
 ) -> dict[str, Any]:
-    """Session-level technology fingerprint with SDK implications."""
+    """Session-level technology fingerprint; SDK implications only with ``explain``."""
     where = "1=1"
     params: list[Any] = []
     if host:
@@ -628,7 +630,10 @@ def fingerprint(
         by_category.setdefault(t["category"], []).append(t["id"])
         if t["implications"] not in notes:
             notes.append(t["implications"])
-    return {
+    if not explain:
+        for t in techs:
+            t.pop("implications", None)
+    out = {
         "host": host,
         "technology_count": len(techs),
         "technologies": techs,
@@ -639,3 +644,4 @@ def fingerprint(
             "for JS-bundle APIs, hardly_forms for hidden fields, hardly_credentials for auth."
         ),
     }
+    return finish(out, explain, "sdk_notes", "next")
