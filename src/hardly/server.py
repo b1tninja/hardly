@@ -130,6 +130,8 @@ def hardly_capture_start(
     Prefer channel=\"chrome\" for Akamai/bot walls. url_filter is a Playwright
     glob. profile keeps cookies. same_tab (default true) forces target=_blank
     into the current tab. trace=true writes a ``.trace.zip`` beside the HAR.
+    Waits for a capture slot (HARDLY_CAPTURE_SLOTS); the worker holds it until
+    the capture stops. The result carries ``slot``.
     """
     try:
         from hardly.capture import CaptureError, start_capture
@@ -505,6 +507,8 @@ def hardly_discover(
     recipe_json: str = "",
     open_session: bool = True,
     brief: bool = True,
+    budget_seconds: float = 0,
+    block_noise: bool = False,
 ) -> str:
     """Headless mode: load URL, optional recipe, stop, open session, brief.
 
@@ -516,6 +520,16 @@ def hardly_discover(
     ranked links/buttons until a real search form appears. If the brief shows a wall, switch to
     interactive: hardly_capture_start(headed=true, channel=chrome) and ask
     the person.
+
+    budget_seconds (or env HARDLY_CAPTURE_BUDGET) is a hard per-call budget:
+    once exceeded, remaining recipe steps are skipped, the HAR is still
+    written, and the result has budget={limit_s, used_s, exceeded,
+    skipped_steps}. block_noise=true aborts analytics/ad/font/map-tile/heavy
+    media requests (result: blocked_requests, blocked_hosts); default off
+    because blocking can break sites. Concurrent captures queue on a
+    cross-process slot limiter (HARDLY_CAPTURE_SLOTS, default 4); results carry
+    slot={waited_s, queue_depth, slot}, and errors carry error_class /
+    error_advice.
     """
     try:
         from hardly.capture import CaptureError, discover_apis
@@ -541,6 +555,8 @@ def hardly_discover(
                 url_filter=url_filter,
                 open_session=open_session,
                 brief=brief,
+                budget_seconds=(budget_seconds or None),
+                block_noise=block_noise,
             )
         )
     except CaptureError as exc:
@@ -1307,6 +1323,28 @@ def hardly_tables(
     from hardly.core.tables import scan_session
 
     return _ok(scan_session(conn, host=host, entry_id=entry_id))
+
+
+@mcp.tool
+def hardly_gates(session_id: str, host: str | None = None) -> str:
+    """Classify the gates in a capture and the policy action for each.
+
+    Classes: environment_blocked (our sandbox/proxy refused - "unknown, re-run
+    from another network", never a site wall), bot_wall, captcha,
+    proof_of_work, waiting_room, click_through_terms, login, paywall,
+    rate_limit. Each gate has evidence names (never values), entry_ids and an
+    action: stop | accept_click_through | unknown_rerun. Policy: click-through
+    terms may be accepted by an ordinary form post only if they do not forbid
+    automation; everything else is a stop sign; never test enforcement or
+    retry a challenged URL in a loop.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.gates import classify_gates
+
+    return _ok(classify_gates(conn, host=host))
 
 
 @mcp.tool

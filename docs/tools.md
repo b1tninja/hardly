@@ -218,6 +218,10 @@ List the slowest requests by HAR time_ms.
 
 Compare endpoint templates (and credential maps) between two sessions.
 
+### `hardly_gates(session_id, host=None)`
+
+Classify the gates in a capture and the policy action for each.
+
 ## Client SDK output
 
 ### `hardly_stub(session_id, entry_ids=None, host=None, output_path='', class_name='PortalClient')`
@@ -332,6 +336,6 @@ Stop a capture, flush the HAR, optionally hardly_open it.
 
 Return the live capture tab's current URL and title.
 
-### `hardly_discover(url, wait_seconds=5, har_path='', channel='', url_filter='', recipe_json='', open_session=True, brief=True)`
+### `hardly_discover(url, wait_seconds=5, har_path='', channel='', url_filter='', recipe_json='', open_session=True, brief=True, budget_seconds=0, block_noise=False)`
 
 Headless mode: load URL, optional recipe, stop, open session, brief.

@@ -22,7 +22,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("HTML, forms and labels", ("brief", "story", "forms", "ui", "outline", "routes", "around", "tree", "params", "find_search", "stack", "tables")),
     ("Credentials and auth", ("credentials", "auth", "challenges", "correlate", "trace", "cookies", "secrets", "redirects")),
     ("APIs", ("graphql",)),
-    ("Quality and traffic", ("issues", "wall", "duplicates", "slow", "diff")),
+    ("Quality and traffic", ("issues", "wall", "duplicates", "slow", "diff", "gates")),
     ("Client SDK output", ("stub", "recipe_plan", "curl", "export_md", "export_openapi", "export_postman", "export_brief", "sql")),
     ("Live probe", ("probe", "arcgis_explore", "crawl", "replay_check")),
 )

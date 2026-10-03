@@ -190,6 +190,24 @@ SDK consequence: attribute-carried URLs and JSON are often the real API
 configuration (base URLs, page sizes, feature flags) that never shows up in a
 form or a network request until a script uses it.
 
+### Gate taxonomy and policy
+
+`hardly_gates` (and the `gates` list in `hardly_wall`, a summary in
+`hardly_brief`) classifies each gate: `environment_blocked`, `bot_wall`,
+`captcha`, `proof_of_work`, `waiting_room`, `click_through_terms`, `login`,
+`paywall`, `rate_limit`, with an action `stop`, `accept_click_through` or
+`unknown_rerun`. An `x-deny-reason` header (or a proxy-style 403/502 with no
+site-WAF fingerprint) means *our* sandbox refused the request: it is reported as
+"unknown — re-run from another network", never as a site wall. The catalog also
+covers Azure Front Door (`x-azure-ref` alone is informational; the 403 "request
+is blocked" page is a block), F5 (TSPD, `volt-adc`, "Request Rejected"), AWS WAF
+challenges returned as HTTP 202, Imperva blocks returned as 503, and an
+application-level `app-rate-limit` entry. `hardly_challenges` captcha widgets add
+public `sitekeys` (max 3, truncated) and `token_endpoints` (requests whose field
+names include a captcha token field; values never shown). Written policy:
+[gate-policy.md](gate-policy.md). Headless recipes are guarded by
+`hardly.core.recipe_policy.check_step`, and `find_click` stops on a gated page.
+
 ## HTTP auth challenges, throttling and captchas
 
 `hardly_challenges` (CLI `hardly challenges`) reports:

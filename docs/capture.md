@@ -99,10 +99,30 @@ bodies. `hardly coverage` shows what is still empty or truncated.
 | `HARDLY_CACHE_DIR` | Where indexes and default captures are stored |
 | `HARDLY_BROWSER_CHANNEL` | Default `channel` (`chrome`, `msedge`) |
 | `HARDLY_BROWSER_EXECUTABLE` | Path to a Chromium binary to launch instead of Playwright's own download |
+| `HARDLY_CAPTURE_SLOTS` | Max concurrent browser captures across processes (default 4; `0` = unlimited); extra captures queue and report `slot.queue_depth` |
+| `HARDLY_CAPTURE_SLOT_TIMEOUT` | Seconds to wait for a slot (default 300) before failing with "waited Ns for a capture slot" |
+| `HARDLY_CAPTURE_BUDGET` | Default hard per-call budget in seconds for headless capture/discover (`--budget`) |
 | `HARDLY_CAPTURE_SUBPROCESS` | `1` = durable capture worker (aria RPC) for headless |
 | `HARDLY_CAPTURE_TRACE` | `1` = always write a trace |
 | `HARDLY_LIVE_CAPTURE` | `1` = enable live Playwright tests and live soak in pytest |
 | `HARDLY_PATH_MAP`, `HARDLY_WORKSPACE` | Docker: map host HAR paths into the container |
+
+## Robustness options
+
+- `--budget SECONDS` / `budget_seconds`: remaining recipe steps are skipped once
+  exceeded; the HAR is still written; the result has
+  `budget: {limit_s, used_s, exceeded, skipped_steps}`.
+- `--block-noise` / `block_noise`: abort analytics, ad, font, map-tile and heavy
+  media requests (reports `blocked_requests`, `blocked_hosts`). Off by default;
+  blocking can break sites.
+- Capture errors carry `error_class` (`environment_blocked|transient|cert|dns|
+  timeout|refused|unknown`), `error_retryable` and `error_advice`. A capture that
+  finishes without a HAR is an error (`har_exists: false`), never a success.
+- `hardly capture doctor` reports installed browser builds, the build Playwright
+  expects, `mismatch`, `suggested_executable` and `browser_executable_source`;
+  when Playwright's own browser is missing, an installed Chromium under
+  `PLAYWRIGHT_BROWSERS_PATH`, `/opt/pw-browsers` or `~/.cache/ms-playwright` is
+  used automatically.
 
 ## Containers and managed environments
 

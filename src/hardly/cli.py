@@ -576,6 +576,18 @@ def cmd_tables(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_gates(args: argparse.Namespace) -> int:
+    from hardly.core.gates import classify_gates
+
+    result = sess.open_har(args.har)
+    if "error" in result:
+        _print(result)
+        return 1
+    conn = sess.require_conn(result["session_id"])
+    _print(classify_gates(conn, host=args.host))
+    return 0
+
+
 def cmd_recipe_plan(args: argparse.Namespace) -> int:
     from hardly.core.recipe_plan import recipe_from_story
 
@@ -1125,6 +1137,8 @@ def cmd_capture(args: argparse.Namespace) -> int:
                     brief=not getattr(args, "no_brief", False),
                     same_tab=not getattr(args, "allow_popups", False),
                     trace=True if getattr(args, "trace", False) else None,
+                    budget_seconds=getattr(args, "budget", None),
+                    block_noise=bool(getattr(args, "block_noise", False)),
                 )
             )
             return 0
@@ -1143,6 +1157,7 @@ def cmd_capture(args: argparse.Namespace) -> int:
                     user_data_dir=args.profile or None,
                     same_tab=same_tab,
                     trace=use_trace,
+                    slot_timeout_s=getattr(args, "slot_timeout", None),
                 )
             )
             return 0
@@ -1160,6 +1175,8 @@ def cmd_capture(args: argparse.Namespace) -> int:
                 open_session=not args.no_open,
                 same_tab=same_tab,
                 trace=use_trace,
+                budget_seconds=getattr(args, "budget", None),
+                block_noise=bool(getattr(args, "block_noise", False)),
             )
         else:
             result = capture_interactive(
@@ -1189,6 +1206,26 @@ def _add_capture_flags(
     # parser passes SUPPRESS so its default never clobbers a subcommand's url.
     if url:
         p.add_argument("url", nargs="?", default=url_default, help="Start URL (optional)")
+    p.add_argument(
+        "--budget",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help="Hard per-call budget (headless): skip remaining recipe steps once "
+        "exceeded (env HARDLY_CAPTURE_BUDGET)",
+    )
+    p.add_argument(
+        "--block-noise",
+        action="store_true",
+        help="Headless: abort analytics/ads/fonts/map tiles/heavy media",
+    )
+    p.add_argument(
+        "--slot-timeout",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help="Max wait for a capture slot (env HARDLY_CAPTURE_SLOT_TIMEOUT, default 300)",
+    )
     p.add_argument(
         "-o",
         "--output",
@@ -1645,6 +1682,11 @@ def build_parser() -> argparse.ArgumentParser:
     tables_p.add_argument("--host")
     tables_p.add_argument("--entry-id", type=int, dest="entry_id")
     tables_p.set_defaults(func=cmd_tables)
+
+    gates_p = sub.add_parser("gates", help="Classify gates (bot wall, captcha, login, paywall, ...) and policy actions")
+    gates_p.add_argument("har")
+    gates_p.add_argument("--host")
+    gates_p.set_defaults(func=cmd_gates)
 
     grids_p = sub.add_parser(
         "grids",
