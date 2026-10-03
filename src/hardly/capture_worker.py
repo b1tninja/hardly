@@ -1,5 +1,7 @@
 """Long-lived Playwright process that owns one HAR capture.
 
+Internal: not part of the public API (see docs/api-stability.md).
+
 Started by ``hardly.capture.start_capture`` as a subprocess so the browser
 survives after the CLI / MCP call returns. Controlled via sidecar files in
 ``<tempdir>/hardly-<uid>/captures/active/``:

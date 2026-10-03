@@ -85,7 +85,7 @@ MODES: tuple[dict[str, Any], ...] = (
         ],
         "steps": [
             "hardly_server_status if capture_available is false",
-            "One-shot: hardly_browser_capture_discover(url, recipe=optional steps) "
+            "One-shot: hardly_browser_capture_discover(url, analyze=true, steps=optional steps, confirm=true) "
             "-> session_id + brief",
             "Or loop: hardly_browser_start(url, headed=false) -> "
             "hardly_browser_inspect -> click/fill with ref -> "

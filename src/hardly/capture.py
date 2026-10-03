@@ -1,5 +1,8 @@
 """Spawn a browser and record a HAR 1.2 session.
 
+Internal: not part of the public API (see docs/api-stability.md); use the ``hardly_browser_*``
+tools or ``hardly browser`` commands.
+
 Uses Playwright's built-in ``record_har_path``. The browser runs in a
 **subprocess** (``python -m hardly.capture_worker``) so recording survives
 after the CLI / MCP call returns. Optional dependency:
