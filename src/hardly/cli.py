@@ -1149,6 +1149,8 @@ def cmd_capture(args: argparse.Namespace) -> int:
                     trace=True if getattr(args, "trace", False) else None,
                     budget_seconds=getattr(args, "budget", None),
                     block_noise=bool(getattr(args, "block_noise", False)),
+                    slot_timeout_s=getattr(args, "slot_timeout", None),
+                    diagnose_redirects=bool(getattr(args, "diagnose_redirects", False)),
                 )
             )
             return 0
@@ -1187,6 +1189,8 @@ def cmd_capture(args: argparse.Namespace) -> int:
                 trace=use_trace,
                 budget_seconds=getattr(args, "budget", None),
                 block_noise=bool(getattr(args, "block_noise", False)),
+                slot_timeout_s=getattr(args, "slot_timeout", None),
+                diagnose_redirects=bool(getattr(args, "diagnose_redirects", False)),
             )
         else:
             result = capture_interactive(
@@ -1200,9 +1204,10 @@ def cmd_capture(args: argparse.Namespace) -> int:
                 user_data_dir=args.profile or None,
                 same_tab=same_tab,
                 trace=use_trace,
+                slot_timeout_s=getattr(args, "slot_timeout", None),
             )
     except CaptureError as exc:
-        _print({"error": str(exc)})
+        _print(exc.to_dict())
         return 1
     _print(result)
     return 0 if result.get("status") in ("stopped", "running", "starting") else 1
@@ -1235,6 +1240,12 @@ def _add_capture_flags(
         default=None,
         metavar="SECONDS",
         help="Max wait for a capture slot (env HARDLY_CAPTURE_SLOT_TIMEOUT, default 300)",
+    )
+    p.add_argument(
+        "--diagnose-redirects",
+        action="store_true",
+        help="Headless: on a redirect-loop failure, attach a capped redirect_diagnosis "
+        "(a few polite live GETs; off by default)",
     )
     p.add_argument(
         "-o",

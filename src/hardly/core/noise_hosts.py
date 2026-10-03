@@ -12,6 +12,7 @@ break sites (e.g. consent walls that depend on a tag manager).
 from __future__ import annotations
 
 import re
+import threading
 from typing import Any
 from urllib.parse import urlparse
 
@@ -95,7 +96,9 @@ class NoiseBlocker:
     def __init__(self, *, max_hosts: int = 8) -> None:
         self.count = 0
         self.hosts: dict[str, int] = {}
+        self.reasons: dict[str, int] = {}
         self._max_hosts = max_hosts
+        self._lock = threading.Lock()
 
     def handle(self, route: Any) -> None:
         request = route.request
@@ -103,17 +106,22 @@ class NoiseBlocker:
         if reason is None:
             route.continue_()
             return
-        self.count += 1
         host = (urlparse(request.url).hostname or "?").lower()
-        self.hosts[host] = self.hosts.get(host, 0) + 1
+        with self._lock:
+            self.count += 1
+            self.hosts[host] = self.hosts.get(host, 0) + 1
+            self.reasons[reason] = self.reasons.get(reason, 0) + 1
         route.abort()
 
     def install(self, context: Any) -> None:
         context.route("**/*", self.handle)
 
     def summary(self) -> dict[str, Any]:
-        top = sorted(self.hosts.items(), key=lambda kv: -kv[1])[: self._max_hosts]
-        return {
-            "blocked_requests": self.count,
-            "blocked_hosts": [h for h, _ in top],
-        }
+        with self._lock:
+            top = sorted(self.hosts.items(), key=lambda kv: -kv[1])[: self._max_hosts]
+            return {
+                "block_noise": True,
+                "blocked_requests": self.count,
+                "blocked_hosts": [h for h, _ in top],
+                "blocked_reasons": dict(self.reasons),
+            }
