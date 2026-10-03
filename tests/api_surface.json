@@ -1,0 +1,2480 @@
+{
+ "hardly_auth_report": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "sections",
+    "type": "list[str] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "pattern_kinds",
+    "type": "list[str] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "explain",
+    "type": "bool",
+    "default": false,
+    "required": false
+   }
+  ]
+ },
+ "hardly_browser_capture_discover": {
+  "effect": "browser",
+  "params": [
+   {
+    "name": "url",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "wait_seconds",
+    "type": "float | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "analyze",
+    "type": "bool",
+    "default": false,
+    "required": false
+   },
+   {
+    "name": "confirm",
+    "type": "bool",
+    "default": false,
+    "required": false
+   },
+   {
+    "name": "har_output_path",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "headed",
+    "type": "bool",
+    "default": false,
+    "required": false
+   },
+   {
+    "name": "channel",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "url_filter",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "steps",
+    "type": "list[dict[str, Any]] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "budget_seconds",
+    "type": "float | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "exclude_noise",
+    "type": "bool",
+    "default": false,
+    "required": false
+   },
+   {
+    "name": "open_session",
+    "type": "bool",
+    "default": true,
+    "required": false
+   }
+  ]
+ },
+ "hardly_browser_inspect": {
+  "effect": "browser",
+  "params": [
+   {
+    "name": "capture_id",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "sections",
+    "type": "list[str] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "query",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "selector",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "mode",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_browser_interact": {
+  "effect": "browser",
+  "params": [
+   {
+    "name": "action",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "capture_id",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "url",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "ref",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "css",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "xpath",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "text",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "role",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "name",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "value",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "key",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "timeout_seconds",
+    "type": "float",
+    "default": 10.0,
+    "required": false
+   }
+  ]
+ },
+ "hardly_browser_run_steps": {
+  "effect": "browser",
+  "params": [
+   {
+    "name": "steps",
+    "type": "list[dict[str, Any]]",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "capture_id",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "stop_on_error",
+    "type": "bool",
+    "default": true,
+    "required": false
+   }
+  ]
+ },
+ "hardly_browser_start": {
+  "effect": "browser",
+  "params": [
+   {
+    "name": "url",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "har_output_path",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "headed",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "channel",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "url_filter",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "omit_content",
+    "type": "bool",
+    "default": false,
+    "required": false
+   },
+   {
+    "name": "label",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "profile",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "same_tab",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "trace",
+    "type": "bool",
+    "default": false,
+    "required": false
+   }
+  ]
+ },
+ "hardly_browser_stop": {
+  "effect": "browser",
+  "params": [
+   {
+    "name": "capture_id",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "open_session",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "force",
+    "type": "bool",
+    "default": false,
+    "required": false
+   }
+  ]
+ },
+ "hardly_capture_list": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "capture_id",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_catalog_list": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "catalog_path",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "tag",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "group",
+    "type": "dict[str, Any] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "role",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "status",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "target_id",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "detail",
+    "type": "str",
+    "default": "full",
+    "required": false
+   }
+  ]
+ },
+ "hardly_client_build": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "entry_ids",
+    "type": "list[int] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "class_name",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_endpoint_arcgis": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_endpoint_graphql": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_endpoint_list": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "exclude_noise",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "offset",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_endpoint_pagination": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_endpoint_schema": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "method",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "path_template",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "sections",
+    "type": "list[str] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_endpoint_streams": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "kind",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "exclude_noise",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_entry_around": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "entry_id",
+    "type": "int",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "before",
+    "type": "int",
+    "default": 5,
+    "required": false
+   },
+   {
+    "name": "after",
+    "type": "int",
+    "default": 15,
+    "required": false
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "exclude_noise",
+    "type": "bool",
+    "default": true,
+    "required": false
+   }
+  ]
+ },
+ "hardly_entry_body_query": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "entry_id",
+    "type": "int",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "side",
+    "type": "str",
+    "default": "response",
+    "required": false
+   },
+   {
+    "name": "jsonpath",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "regex",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "offset",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "max_chars",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "context",
+    "type": "int",
+    "default": 40,
+    "required": false
+   },
+   {
+    "name": "ignore_case",
+    "type": "bool",
+    "default": false,
+    "required": false
+   }
+  ]
+ },
+ "hardly_entry_build_curl": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "entry_id",
+    "type": "int",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "redact",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "use_env_placeholders",
+    "type": "bool",
+    "default": true,
+    "required": false
+   }
+  ]
+ },
+ "hardly_entry_compare": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "entry_id",
+    "type": "int",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "other_entry_id",
+    "type": "int",
+    "default": null,
+    "required": true
+   }
+  ]
+ },
+ "hardly_entry_dependencies": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "entry_id",
+    "type": "int",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "max_depth",
+    "type": "int",
+    "default": 8,
+    "required": false
+   }
+  ]
+ },
+ "hardly_entry_get": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "entry_id",
+    "type": "int",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "max_body_chars",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_entry_initiators": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "entry_id",
+    "type": "int",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "exclude_noise",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "child_limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_entry_outline": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "entry_id",
+    "type": "int",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "format",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "max_depth",
+    "type": "int",
+    "default": 8,
+    "required": false
+   },
+   {
+    "name": "side",
+    "type": "str",
+    "default": "response",
+    "required": false
+   }
+  ]
+ },
+ "hardly_entry_search": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "path_contains",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "method",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "status",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "body_contains",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "header_name",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "header_contains",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "mime_contains",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "content_kind",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "exclude_noise",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "offset",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_gate_bot_protection": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "sections",
+    "type": "list[str] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "explain",
+    "type": "bool",
+    "default": false,
+    "required": false
+   }
+  ]
+ },
+ "hardly_guide_help": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "topic",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_guide_mode": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "mode",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "goal",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "har_path",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "url",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_guide_task_plan": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "goal",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "har_path",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "url",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_har_file_check": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "har_path",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "config",
+    "type": "dict[str, Any] | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_page_embedded_routes": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "entry_id",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "sections",
+    "type": "list[str] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "explain",
+    "type": "bool",
+    "default": false,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "offset",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_page_forms": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "entry_id",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "side",
+    "type": "str",
+    "default": "response",
+    "required": false
+   },
+   {
+    "name": "exclude_noise",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "offset",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_page_list": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "exclude_noise",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_page_tables": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "entry_id",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_page_ui": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "entry_id",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "side",
+    "type": "str",
+    "default": "response",
+    "required": false
+   },
+   {
+    "name": "sections",
+    "type": "list[str] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "keywords",
+    "type": "list[str] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "exclude_noise",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "offset",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_send_arcgis_explore": {
+  "effect": "send",
+  "params": [
+   {
+    "name": "url",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "confirm",
+    "type": "bool",
+    "default": false,
+    "required": false
+   }
+  ]
+ },
+ "hardly_send_catalog_verify": {
+  "effect": "send",
+  "params": [
+   {
+    "name": "catalog_path",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "confirm",
+    "type": "bool",
+    "default": false,
+    "required": false
+   },
+   {
+    "name": "write_back",
+    "type": "bool",
+    "default": false,
+    "required": false
+   },
+   {
+    "name": "tag",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "group",
+    "type": "dict[str, Any] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "role",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "status",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "target_id",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "delay_seconds",
+    "type": "float",
+    "default": 1.0,
+    "required": false
+   },
+   {
+    "name": "max_requests",
+    "type": "int",
+    "default": 50,
+    "required": false
+   },
+   {
+    "name": "max_endpoints",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "recheck_after_seconds",
+    "type": "float | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "force",
+    "type": "bool",
+    "default": false,
+    "required": false
+   }
+  ]
+ },
+ "hardly_send_entry": {
+  "effect": "send",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "entry_id",
+    "type": "int",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "confirm",
+    "type": "bool",
+    "default": false,
+    "required": false
+   },
+   {
+    "name": "header_overrides",
+    "type": "dict[str, str] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "body_override",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "timeout_seconds",
+    "type": "float",
+    "default": 30.0,
+    "required": false
+   }
+  ]
+ },
+ "hardly_send_entry_ablation": {
+  "effect": "send",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "entry_ids",
+    "type": "list[int]",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "confirm",
+    "type": "bool",
+    "default": false,
+    "required": false
+   },
+   {
+    "name": "overrides",
+    "type": "dict[str, Any] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "max_requests",
+    "type": "int",
+    "default": 15,
+    "required": false
+   },
+   {
+    "name": "delay_seconds",
+    "type": "float",
+    "default": 0.5,
+    "required": false
+   },
+   {
+    "name": "allow_unsafe",
+    "type": "bool",
+    "default": false,
+    "required": false
+   },
+   {
+    "name": "allow_gates",
+    "type": "list[str] | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_send_entry_series": {
+  "effect": "send",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "entry_ids",
+    "type": "list[int] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "entry_id",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "confirm",
+    "type": "bool",
+    "default": false,
+    "required": false
+   },
+   {
+    "name": "env",
+    "type": "dict[str, str] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "delay_seconds",
+    "type": "float",
+    "default": 0.5,
+    "required": false
+   },
+   {
+    "name": "max_requests",
+    "type": "int",
+    "default": 20,
+    "required": false
+   },
+   {
+    "name": "allow_unsafe",
+    "type": "bool",
+    "default": false,
+    "required": false
+   },
+   {
+    "name": "allow_gates",
+    "type": "list[str] | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_send_redirect_walk": {
+  "effect": "send",
+  "params": [
+   {
+    "name": "url",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "confirm",
+    "type": "bool",
+    "default": false,
+    "required": false
+   },
+   {
+    "name": "max_hops",
+    "type": "int",
+    "default": 12,
+    "required": false
+   }
+  ]
+ },
+ "hardly_send_site_crawl": {
+  "effect": "send",
+  "params": [
+   {
+    "name": "url",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "keywords",
+    "type": "list[str] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "confirm",
+    "type": "bool",
+    "default": false,
+    "required": false
+   },
+   {
+    "name": "max_pages",
+    "type": "int",
+    "default": 12,
+    "required": false
+   },
+   {
+    "name": "depth",
+    "type": "int",
+    "default": 2,
+    "required": false
+   },
+   {
+    "name": "delay_seconds",
+    "type": "float",
+    "default": 1.0,
+    "required": false
+   },
+   {
+    "name": "follow_external",
+    "type": "bool",
+    "default": false,
+    "required": false
+   },
+   {
+    "name": "respect_robots",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "timeout_seconds",
+    "type": "float",
+    "default": 15.0,
+    "required": false
+   },
+   {
+    "name": "user_agent",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "explain",
+    "type": "bool",
+    "default": false,
+    "required": false
+   }
+  ]
+ },
+ "hardly_server_status": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "sections",
+    "type": "list[str] | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_session_body_coverage": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "exclude_noise",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_session_close": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   }
+  ]
+ },
+ "hardly_session_compare": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "other_session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "exclude_noise",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "include_credentials",
+    "type": "bool",
+    "default": true,
+    "required": false
+   }
+  ]
+ },
+ "hardly_session_duplicates": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "exclude_noise",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "min_count",
+    "type": "int",
+    "default": 2,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_session_issues": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_session_list": {
+  "effect": "read",
+  "params": []
+ },
+ "hardly_session_open": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "har_path",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "force",
+    "type": "bool",
+    "default": false,
+    "required": false
+   }
+  ]
+ },
+ "hardly_session_overview": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "exclude_noise",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_session_plan_steps": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_session_redirect_history": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "explain",
+    "type": "bool",
+    "default": false,
+    "required": false
+   }
+  ]
+ },
+ "hardly_session_report": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "categories",
+    "type": "list[str] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "detail",
+    "type": "str",
+    "default": "summary",
+    "required": false
+   },
+   {
+    "name": "explain",
+    "type": "bool",
+    "default": false,
+    "required": false
+   }
+  ]
+ },
+ "hardly_session_site_brief": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_session_slow_requests": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "exclude_noise",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "min_elapsed_seconds",
+    "type": "float | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_session_sql": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "sql",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_session_story": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "exclude_noise",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "include_related",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_session_timeline": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "path_prefix",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "exclude_noise",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "offset",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_session_trace_value": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "name",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "value",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_session_traffic_stats": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "exclude_noise",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "kind",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_spec_contract_check": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "spec_path",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   }
+  ]
+ },
+ "hardly_tech_stack": {
+  "effect": "read",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "explain",
+    "type": "bool",
+    "default": false,
+    "required": false
+   }
+  ]
+ },
+ "hardly_write_catalog_record": {
+  "effect": "write",
+  "params": [
+   {
+    "name": "catalog_path",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "target",
+    "type": "dict[str, Any]",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "merge",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "create",
+    "type": "bool",
+    "default": false,
+    "required": false
+   }
+  ]
+ },
+ "hardly_write_export": {
+  "effect": "write",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "format",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "output_path",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "host",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "exclude_noise",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "title",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "max_endpoints",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "detail",
+    "type": "str",
+    "default": "standard",
+    "required": false
+   },
+   {
+    "name": "categories",
+    "type": "list[str] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "entry_ids",
+    "type": "list[int] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "class_name",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "limit",
+    "type": "int | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "overwrite",
+    "type": "bool",
+    "default": false,
+    "required": false
+   }
+  ]
+ },
+ "hardly_write_har_merged": {
+  "effect": "write",
+  "params": [
+   {
+    "name": "har_paths",
+    "type": "list[str]",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "output_path",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "dedupe",
+    "type": "bool",
+    "default": true,
+    "required": false
+   },
+   {
+    "name": "overwrite",
+    "type": "bool",
+    "default": false,
+    "required": false
+   }
+  ]
+ },
+ "hardly_write_har_pruned": {
+  "effect": "write",
+  "params": [
+   {
+    "name": "har_path",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "output_path",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "drop_hosts",
+    "type": "list[str] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "drop_mime_types",
+    "type": "list[str] | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "drop_noise",
+    "type": "bool",
+    "default": false,
+    "required": false
+   },
+   {
+    "name": "overwrite",
+    "type": "bool",
+    "default": false,
+    "required": false
+   }
+  ]
+ },
+ "hardly_write_har_scrubbed": {
+  "effect": "write",
+  "params": [
+   {
+    "name": "har_path",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "output_path",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "overwrite",
+    "type": "bool",
+    "default": false,
+    "required": false
+   }
+  ]
+ },
+ "hardly_write_har_split": {
+  "effect": "write",
+  "params": [
+   {
+    "name": "har_path",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "output_dir",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "by",
+    "type": "str",
+    "default": "host",
+    "required": false
+   },
+   {
+    "name": "overwrite",
+    "type": "bool",
+    "default": false,
+    "required": false
+   }
+  ]
+ },
+ "hardly_write_screenshot": {
+  "effect": "write",
+  "params": [
+   {
+    "name": "output_path",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "capture_id",
+    "type": "str | None",
+    "default": null,
+    "required": false
+   },
+   {
+    "name": "full_page",
+    "type": "bool",
+    "default": false,
+    "required": false
+   },
+   {
+    "name": "overwrite",
+    "type": "bool",
+    "default": false,
+    "required": false
+   }
+  ]
+ },
+ "hardly_write_session_copy": {
+  "effect": "write",
+  "params": [
+   {
+    "name": "session_id",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "output_path",
+    "type": "str",
+    "default": null,
+    "required": true
+   },
+   {
+    "name": "format",
+    "type": "str",
+    "default": "har",
+    "required": false
+   },
+   {
+    "name": "overwrite",
+    "type": "bool",
+    "default": false,
+    "required": false
+   }
+  ]
+ }
+}

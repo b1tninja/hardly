@@ -1,4 +1,4 @@
-"""Agent ergonomics: docstring lint, prompts, resources, skill, hardly_start, errors."""
+"""Agent ergonomics: docstring lint, prompts, resources, skill, hardly_guide_task_plan, errors."""
 
 from __future__ import annotations
 
