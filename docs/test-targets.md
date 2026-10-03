@@ -64,6 +64,6 @@ pages in `hardly.local_site` (loopback, offline, deterministic):
 7. Login throttling / lockout messages (429 + `Retry-After`).
 8. Signed-request headers (HMAC `Authorization` params, `Date` + signature).
 
-Items 1, 5 and 7 now have detectors (`hardly_challenges`) and loopback pages
+Items 1, 5 and 7 now have detectors (`hardly_gate_bot_protection`) and loopback pages
 (`/private`, `/captcha`, `/limited` in `hardly.local_site`). Items 2, 3, 4, 6 and
 8 are still open.

@@ -19,8 +19,8 @@ never imports or names downstream projects.
 ## Three ways in
 
 **MCP (agents).** Run `hardly serve` (stdio). Configure in your editor; see the
-[README](../README.md#mcp-setup-cursor-and-others). Agents start with `hardly_modes`, then
-`hardly_open`. Prompts: `analyze_har`, `discover_apis`, `capture_portal`.
+[README](../README.md#mcp-setup-cursor-and-others). Agents start with `hardly_guide_mode`, then
+`hardly_session_open`. Prompts: `analyze_har`, `discover_apis`, `capture_portal`.
 Tools: [tools.md](tools.md).
 
 **CLI (scripts, CI).** Every analysis tool is a subcommand and prints JSON:
@@ -48,7 +48,7 @@ find_search_entry(conn, keywords=["your", "terms"])  # generic + your vocabulary
 
 Core functions take a SQLite connection and return plain dicts, so they are
 easy to call from tests and notebooks. Check `hardly capabilities` (or
-`hardly_capabilities`) for the feature list when you depend on a newer tool.
+`hardly_server_status`) for the feature list when you depend on a newer tool.
 
 ## Recommended loop for an SDK project
 

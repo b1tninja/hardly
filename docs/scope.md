@@ -28,6 +28,6 @@ credentials and authentication are handled. It is also an MCP server so agents c
 1. Would it still make sense if the target were a completely different kind of site?
 2. Does it read facts from the HAR or a live probe rather than restate what a model already knows?
    Prose advice stays behind `explain=true`.
-3. Is it a new tool, or can it extend an existing one (a section of `hardly_report`, a detector)?
+3. Is it a new tool, or can it extend an existing one (a section of `hardly_session_report`, a detector)?
    Prefer extending; the tool surface is already large (`docs/tools.md`).
 4. Tests use synthetic fixtures with neutral names; `tests/test_neutrality.py` enforces this.

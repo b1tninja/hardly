@@ -9,7 +9,7 @@ or reads a real browser; every other tool only reads loaded data. Merged tools t
 
 ## Guide and server
 
-### `hardly_guide_task_plan(goal, har_path=None, url=None)`
+### `hardly_guide_task_plan(goal=None, har_path=None, url=None)`
 
 FIRST CALL for a new task: ordered plan of hardly tool calls with example arguments, environment state and recommended tools for the goal. Example: hardly_guide_task_plan(goal='reverse engineer the login flow', har_path='/data/capture.har').
 
@@ -57,7 +57,7 @@ Writes a file: a scrubbed copy of a HAR with secret values, cookies and auth hea
 
 ### `hardly_write_har_split(har_path, output_dir, by='host', overwrite=False)`
 
-Writes files: split a HAR into one file per host (by='host') or per page (by='page') inside output_dir, streaming. Use for huge captures, then hardly_session_open each part. Example: hardly_write_har_split(har_path='/data/a.har', output_dir='/data/parts').
+Writes files: split a HAR into one file per host (by='host') or per page (by='page') inside output_dir, streaming. Example: hardly_write_har_split(har_path='/data/a.har', output_dir='/data/parts').
 
 ### `hardly_write_har_merged(har_paths, output_path, dedupe=True, overwrite=False)`
 
@@ -109,7 +109,7 @@ Headline COUNTS of a capture: requests per server, method and status, plus main_
 
 ### `hardly_session_traffic_stats(session_id, host=None, exclude_noise=True, limit=None, kind=None)`
 
-DISTRIBUTIONS of a capture: MIME mix, status classes, body sizes, initiator types, timing and payload_kinds (json, csv, html_table, pdf, ...) with sample entry_ids. Example: hardly_session_traffic_stats(session_id='S', host='app.example.com').
+DISTRIBUTIONS of a capture: MIME mix, status classes, body sizes, initiator types, timing and payload_kinds. Each has sample entry_ids. Example: hardly_session_traffic_stats(session_id='S', host='app.example.com').
 
 ### `hardly_session_body_coverage(session_id, host=None, exclude_noise=True, limit=None)`
 
@@ -179,7 +179,7 @@ Search inside one large body without loading it: JSONPath-lite ($.a[*].b, ..key)
 
 ### `hardly_entry_outline(session_id, entry_id, format=None, max_depth=8, side='response')`
 
-Offline outline of an HTML/XML body from a HAR entry: format markdown (headings/tables/forms/links), tree (tag tree) or aria (approximate YAML); omit format for all three. Redacted. Example: hardly_entry_outline(session_id='S', entry_id=5, format='markdown').
+Offline outline of an HTML/XML body from a HAR entry. format: markdown (headings/tables/forms/links), tree (tag tree) or aria (YAML); omit for all three. Example: hardly_entry_outline(session_id='S', entry_id=5, format='markdown').
 
 ### `hardly_entry_dependencies(session_id, entry_id, host=None, max_depth=8)`
 
@@ -205,7 +205,7 @@ List grouped endpoints (METHOD + path template) with counts, paged by limit/offs
 
 ### `hardly_endpoint_schema(session_id, method, path_template, host=None, sections=None, limit=None)`
 
-Request/response shapes of one endpoint template; sections: schema (default; JSON field names and types) and param_roles (each query/body field static, dynamic or sensitive). Example: hardly_endpoint_schema(session_id='S', method='GET', path_template='/api/items/{id}').
+Request/response shapes of one endpoint template. Sections: schema (default; JSON field names and types), param_roles (each field static, dynamic or sensitive). Example: hardly_endpoint_schema(session_id='S', method='GET', path_template='/api/items/{id}').
 
 ### `hardly_endpoint_graphql(session_id, host=None, limit=None)`
 
@@ -225,7 +225,7 @@ List ArcGIS REST endpoints (MapServer/FeatureServer/etc.) seen in the capture: l
 
 ### `hardly_tech_stack(session_id, host=None, limit=None, explain=False)`
 
-Fingerprint web frameworks, CMS, GIS stacks, UI toolkits and data-grid widgets (envelope and paging/sorting parameter styles) from header/cookie names, paths and body previews. Absent technology gives count 0. Example: hardly_tech_stack(session_id='S', explain=true).
+Fingerprint web frameworks, CMS, GIS stacks, UI toolkits and data-grid widgets from header/cookie names, paths and body previews. Absent technology gives count 0. Example: hardly_tech_stack(session_id='S', explain=true).
 
 ### `hardly_spec_contract_check(session_id, spec_path, host=None)`
 
@@ -243,11 +243,11 @@ Extract HTML forms and their inputs with signals (hidden fields, tokens, links, 
 
 ### `hardly_page_ui(session_id, entry_id=None, host=None, side='response', sections=None, keywords=None, exclude_noise=True, limit=None, offset=None)`
 
-Inventory UI controls: sections links, handlers (onclick/onsubmit, handler_functions), labels (default: all three) and search_links (ranked links likely to lead to a search page plus a suggested next click). Example: hardly_page_ui(session_id='S', sections=['search_links'], keywords=['search']).
+Inventory UI controls. Sections: links, handlers (onclick/onsubmit), labels (default all three), search_links (ranked links likely to lead to a search page). Example: hardly_page_ui(session_id='S', sections=['search_links'], keywords=['search']).
 
 ### `hardly_page_embedded_routes(session_id, host=None, entry_id=None, sections=None, explain=False, limit=None, offset=None)`
 
-Mine endpoints the page embeds; sections: script_routes (URL path literals in JavaScript bodies) and data_attrs (endpoints, config and framework hints in HTML data-* attributes); default both. Example: hardly_page_embedded_routes(session_id='S', sections=['data_attrs'], entry_id=5).
+Mine endpoints the page embeds. Sections: script_routes (URL path literals in JavaScript), data_attrs (endpoints and config in HTML data-* attributes); default both. Example: hardly_page_embedded_routes(session_id='S', sections=['data_attrs'], entry_id=5).
 
 ### `hardly_page_tables(session_id, entry_id=None, host=None)`
 
@@ -259,7 +259,7 @@ Authentication evidence; sections: quick (default; auth paths, token responses, 
 
 ### `hardly_gate_bot_protection(session_id, host=None, sections=None, limit=None, explain=False)`
 
-Detect gates in a capture: bot walls, captcha, login, rate limits, 401/403/429 challenges and the CDN/WAF bot-protection products hit; sections barriers, http_challenges, bot_protection (default all). Never evades. Example: hardly_gate_bot_protection(session_id='S', explain=true).
+Detect gates in a capture: bot walls, captcha, login, rate limits, 401/403/429 challenges and CDN/WAF bot-protection products. Never evades. Example: hardly_gate_bot_protection(session_id='S', explain=true).
 
 ## Live requests (send_*, confirm-gated)
 
@@ -273,7 +273,7 @@ LIVE (confirm-gated): find which headers, cookies, params, body fields and prior
 
 ### `hardly_send_entry_series(session_id, entry_ids=None, entry_id=None, confirm=False, env=None, delay_seconds=0.5, max_requests=20, allow_unsafe=False, allow_gates=None)`
 
-LIVE (confirm-gated): replay an ordered series (entry_ids, or the steps behind entry_id) and report the first step whose status, content-type or body shape diverges. Without confirm=true it returns the dry-run plan and missing inputs. Example: hardly_send_entry_series(session_id='S', entry_id=20, confirm=true).
+LIVE (confirm-gated): replay an ordered series and report the first step whose status, content-type or body shape diverges. Without confirm=true it returns the dry-run plan and missing inputs. Example: hardly_send_entry_series(session_id='S', entry_id=20, confirm=true).
 
 ### `hardly_send_site_crawl(url, keywords=None, confirm=False, max_pages=12, depth=2, delay_seconds=1.0, follow_external=False, respect_robots=True, timeout_seconds=15.0, user_agent=None, explain=False)`
 

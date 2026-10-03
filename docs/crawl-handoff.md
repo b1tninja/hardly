@@ -92,7 +92,7 @@ Practical guidance:
 | Keyword appears in the form *action* URL | `/search/permits` makes a one-box site search look specific | **Fixed** (only field names/ids vouch) |
 | Your keyword is a generic word | keyword `"search"` blesses every search box | **Fixed** (generic keywords are ignored for acceptance) |
 | Login forms | password field present | **Fixed** (skipped) |
-| Search UI exists only after JavaScript runs | SPA shell, `spa_login_suspected`, 0 forms | **Open**: use `hardly_capture_aria` or an `evaluate` step after load |
+| Search UI exists only after JavaScript runs | SPA shell, `spa_login_suspected`, 0 forms | **Open**: use `hardly_browser_inspect` or an `evaluate` step after load |
 
 ### 4.2 Clicking things that are not there
 

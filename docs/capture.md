@@ -19,10 +19,10 @@ hardly capture discover https://site.example --headless --wait 5
 hardly capture discover https://site.example --headless --recipe steps.json
 ```
 
-MCP: `hardly_discover(url, wait_seconds, recipe_json, …)` loads the page,
+MCP: `hardly_browser_capture_discover(url, wait_seconds, recipe_json, …)` loads the page,
 runs the recipe, stops, indexes the HAR and returns a `session_id` plus a
 brief, already in archive mode. If the brief shows a wall
-(`hardly_wall`), switch to interactive.
+(`hardly_gate_bot_protection`), switch to interactive.
 
 ### Recipes
 
@@ -43,10 +43,10 @@ A recipe is a JSON list of steps. Headless one-shots run **in-process**:
 `find_click` and `dismiss_consent` run both in headless one-shots and in the live
 session runner. `find_click` also searches same-origin iframes and open shadow DOM
 (not closed roots or cross-origin frames) and hovers menu triggers to reveal hidden
-submenu links (`hover: false` disables; hops report `via: hover+click`). The live capture session (`hardly_capture_start` + `hardly_capture_recipe`)
+submenu links (`hover: false` disables; hops report `via: hover+click`). The live capture session (`hardly_browser_start` + `hardly_browser_run_steps`)
 additionally supports `elements`, `aria`, `screenshot`, `note`, `url`, and
 selecting by `ref`/`text`/`role` from the accessibility snapshot. Use
-`hardly_capture_aria` to get Playwright accessibility YAML with `refs[]`, then
+`hardly_browser_inspect` to get Playwright accessibility YAML with `refs[]`, then
 prefer `ref` over fragile CSS. `hardly recipe-plan` drafts a recipe from a
 captured story; `hardly find-search` proposes the next `click` when you are
 still on a landing page.
@@ -79,8 +79,8 @@ For bot walls, CAPTCHA, MFA, or UIs an agent cannot script:
 hardly capture https://site.example -o capture.har     # browser opens; click; Enter/close to stop
 ```
 
-MCP: `hardly_capture_start(headed=true, channel="chrome")` → **ask the person
-what to click** → `hardly_capture_stop`. Headed capture needs a local
+MCP: `hardly_browser_start(headed=true, channel="chrome")` → **ask the person
+what to click** → `hardly_browser_stop`. Headed capture needs a local
 (non-container) MCP server with a display.
 
 ## Useful options
@@ -151,7 +151,7 @@ every HAR as a secret: `*.har` is git-ignored; don't share or commit them.
 a bad rewrite rule, an unexpected (non-canonical) domain (www vs apex, http vs https,
 trailing slash), or a redirect that needs a cookie set on an earlier hop. Capture classifies
 it as `redirect_loop` and retries once. Run `hardly redirect-diag <url> --yes`
-(MCP `hardly_redirect_diag`, `confirm=true`) to follow the chain by hand with and without
+(MCP `hardly_send_redirect_walk`, `confirm=true`) to follow the chain by hand with and without
 cookies, name the loop shape, and probe the alternate host. Output: statuses, redacted URLs
 and cookie names only.
 

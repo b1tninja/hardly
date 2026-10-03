@@ -9,7 +9,7 @@ project defines those and subclasses [`TargetAdapter`](#the-downstream-subclass-
 to plug in its own discovery.
 
 Code: `hardly.core.catalog`. CLI: `hardly catalog ...`. MCP:
-`hardly_catalog_list`, `hardly_catalog_upsert`, `hardly_catalog_verify`.
+`hardly_catalog_list`, `hardly_write_catalog_record`, `hardly_send_catalog_verify`.
 
 ## Schema (version 1)
 
@@ -78,7 +78,7 @@ hardly catalog export catalog.json --format csv -o catalog.csv
 
 `add` merges into an existing target (tags unioned, groups overlaid, endpoints
 merged by `(role, url)`); `--replace` replaces it. `verify` without `--yes`
-prints nothing live (and exits 1). The MCP tools mirror this; `hardly_catalog_verify`
+prints nothing live (and exits 1). The MCP tools mirror this; `hardly_send_catalog_verify`
 needs `confirm=true`.
 
 ## Verification

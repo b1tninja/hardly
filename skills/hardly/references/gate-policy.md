@@ -38,8 +38,8 @@ brief. The machine-readable form is `hardly.core.gates.POLICY`.
 ## Where it is enforced
 
 - `classify_response(status, headers, body, url)` - pure, per response.
-- `classify_gates(conn, host)` - session level; `hardly_wall` returns `gates` and
-  an `environment_blocked` verdict; `hardly_brief` prints a compact `gates`
+- `classify_gates(conn, host)` - session level; `hardly_gate_bot_protection` returns `gates` and
+  an `environment_blocked` verdict; `hardly_session_site_brief` prints a compact `gates`
   summary (class counts and actions).
 - `hardly.core.recipe_policy.check_step` - headless recipe guard. Refuses
   click/fill/press/evaluate/fetch steps that target a captcha or challenge

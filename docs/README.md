@@ -45,5 +45,5 @@ rules are in [AGENTS.md](../AGENTS.md) and [CONTRIBUTING.md](../CONTRIBUTING.md)
 
 hardly ships **technology helpers** and **generic resource classifications**. It does not ship site
 recipes, vendor/site names in logic, subject-specific vocabularies, or record schemas. Downstream
-projects pass their own vocabulary in as arguments (for example `hardly_find_search` `keywords`) and
+projects pass their own vocabulary in as arguments (for example `hardly_page_ui` `keywords`) and
 keep their own captures, fixtures and recipes. Details: [scope.md](scope.md).

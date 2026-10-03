@@ -33,7 +33,7 @@ flowchart LR
 3. **Query**: `index/query.py` and `core/*` modules read the index and return small dictionaries.
    Detectors return evidence (names, shapes, counts, entry ids); prose advice appears only with
    `explain=true`. Output is paginated and bodies are truncated.
-4. **Outputs**: `hardly_report` (one-pass evidence index), client stubs, OpenAPI, Postman, Markdown
+4. **Outputs**: `hardly_session_report` (one-pass evidence index), client stubs, OpenAPI, Postman, Markdown
    briefs and recipe plans are built from the same index.
 
 ## Capture paths
@@ -96,24 +96,24 @@ with open_session("idx.db") as s:                            # no re-ingest
 2. Opening it again returns the same live session without re-ingesting. Handles are reference counted:
    a nested `with` does not close the outer one, the session closes when the last handle closes,
    `close()` is idempotent per handle and saves nothing. The MCP/CLI layer holds one reference until
-   `hardly_close`.
+   `hardly_session_close`.
 3. Opening a live session again *with* `output_path` just saves it there.
 4. Ingest output is a pure function of the HAR bytes and `INDEX_VERSION` (tested: two ingests have equal
    table dumps), and reopening after close gives an identical summary.
 
 **Why no cache or path registry.** An implicit cache directory leaves files nobody asked for and nobody cleans up, and a registry of opened paths is
 hidden state too. So an unknown session id (after a restart, or any unsaved session) returns the
-deterministic `unknown_session` error telling the caller to call `hardly_open` again with the same
+deterministic `unknown_session` error telling the caller to call `hardly_session_open` again with the same
 path.
 
-**Source HAR.** `hardly_export_har(session_id, output_path, overwrite=False)` (`hardly export-har HAR -o
+**Source HAR.** `hardly_write_session_copy(session_id, output_path, overwrite=False)` (`hardly export-har HAR -o
 OUT`) copies the source HAR atomically (never in place).
 
 **Ephemeral captures.** A capture without an output path records to a private temp file
 (`<tempdir>/hardly-<uid>/ephemeral/`, dir 0700, file 0600), is ingested into a memory session and the
 file is deleted straight away (also on error, at exit, and by a sweep of files older than an hour at
 startup). The result says `har_path: null, ephemeral: true`; pass `har_path` / `-o` to keep the HAR,
-or `export_path` to `hardly_capture_stop` for an interactive capture. With an output path the file is
+or `export_path` to `hardly_browser_stop` for an interactive capture. With an output path the file is
 kept.
 
 **Read-only.** Query code never writes; temp tables stay allowed and use `temp_store=MEMORY`. A memory
