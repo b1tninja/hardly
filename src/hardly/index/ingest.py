@@ -43,6 +43,9 @@ from hardly.core.urls import parse_url, path_template
 from hardly.index.schema import connect, init_db
 
 PREVIEW_CHARS = 8000
+# Bump when ingest output changes meaning (redaction, shapes, signals) so cached
+# indexes built by older versions are rebuilt instead of reused.
+INDEX_VERSION = 3
 # HTML portals often bury forms after scripts/CSS; keep more for hardly_forms.
 HTML_PREVIEW_CHARS = 64_000
 
@@ -448,4 +451,5 @@ def ingest_har(har_path: str | Path, db_path: str | Path) -> dict[str, Any]:
         "statuses": counts["statuses"],
         "har_size": stat.st_size,
         "har_mtime": stat.st_mtime,
+        "index_version": INDEX_VERSION,
     }

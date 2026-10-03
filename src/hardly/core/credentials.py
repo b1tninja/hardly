@@ -480,10 +480,19 @@ def _shapes_from_har(
                 found: list[str] = []
                 if JWT_RE.search(blob):
                     found.append("jwt")
-                if LONG_HEX_RE.search(blob):
-                    found.append("hex")
-                elif BASE64_RE.search(blob) and "jwt" not in found:
-                    found.append("base64")
+                # Same rule as ingest: a bare token body only. Structured bodies
+                # are judged by token-like keys at ingest, never as a whole
+                # document (a long path or hash would otherwise match).
+                stripped = blob.strip()
+                if (
+                    len(stripped) <= 4096
+                    and " " not in stripped
+                    and "<" not in stripped
+                    and not stripped.startswith(("{", "["))
+                ):
+                    bare = classify_value_shape(stripped)
+                    if bare and bare != "jwt":
+                        found.append(bare)
                 for label in found:
                     out.append(
                         {
