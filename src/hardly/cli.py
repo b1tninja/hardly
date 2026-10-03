@@ -95,11 +95,11 @@ def _conn(har: str):
     return None if sid is None else sess.require_conn(sid)
 
 
-def _run_tool(name: str, **kwargs: Any) -> int:
+def _run_tool(tool: str, /, **kwargs: Any) -> int:
     """Call an MCP tool function in-process and print its JSON; exit 1 when it reports an error."""
     from hardly import server
 
-    text = getattr(server, f"hardly_{name}")(**kwargs)
+    text = getattr(server, f"hardly_{tool}")(**kwargs)
     print(text)
     try:
         data = json.loads(text)

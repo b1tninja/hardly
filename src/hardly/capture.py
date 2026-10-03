@@ -162,7 +162,7 @@ def playwright_available() -> bool:
 
 
 def playwright_status() -> dict[str, Any]:
-    """Diagnose the optional Playwright stack for agents and ``capture doctor``.
+    """Diagnose the optional Playwright stack for agents and ``hardly server status --sections browser_setup``.
 
     Distinguishes package-missing vs browser-binary-missing — the usual
     failure after ``pip install -e ".[capture]"`` without ``playwright install``.

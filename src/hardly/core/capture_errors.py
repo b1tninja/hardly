@@ -39,12 +39,12 @@ _ADVICE = {
         "usually a loop from a bad rewrite rule or an unexpected (non-canonical) domain - www vs "
         "apex, http vs https, a trailing slash - or a redirect that needs a cookie it set on an "
         "earlier hop. hardly retried once (the browser's cookie jar fills during the loop). "
-        "Run `hardly redirect-diag <url> --yes` to see the chain, then start from the canonical host."
+        "Run `hardly send redirect-walk <url> --confirm` to see the chain, then start from the canonical host."
     ),
     "http_status": (
         "The server answered with an error status or an auth challenge (401/429/503...) and no "
-        "renderable page. That response is the finding: it is in the HAR - run hardly gates / "
-        "challenges on it. Do not retry in a loop."
+        "renderable page. That response is the finding: it is in the HAR - run `hardly gate bot-protection HAR` "
+        "on it. Do not retry in a loop."
     ),
     "invalid_url": "The URL is not navigable (bad scheme, port or syntax). Check it; browsers block some ports.",
     "cert": (
@@ -54,15 +54,15 @@ _ADVICE = {
     "dns": "Hostname did not resolve. Check the URL spelling and DNS/network access.",
     "timeout": (
         "Operation timed out. Retry with a longer wait or a lighter recipe, "
-        "try block_noise=true; if it keeps timing out switch to interactive mode."
+        "try exclude_noise=true; if it keeps timing out switch to interactive mode."
     ),
     "refused": "Connection refused: nothing is listening at that host/port. Verify the URL.",
     "output_path": "The HAR output path (-o) is not usable. Give a writable file path, not a directory.",
     "slot_timeout": (
         "No capture slot freed up in time (too many concurrent browser captures). Retry "
-        "later, pass a longer --slot-timeout / slot_timeout_s, or raise HARDLY_CAPTURE_SLOTS."
+        "later, pass a longer --slot-timeout-seconds, or raise HARDLY_CAPTURE_SLOTS."
     ),
-    "unknown": "Unclassified failure; read the error text and run `hardly capture doctor`.",
+    "unknown": "Unclassified failure; read the error text and run `hardly server status --sections browser_setup`.",
 }
 _RETRYABLE = {"transient", "timeout", "redirect_loop", "slot_timeout"}
 

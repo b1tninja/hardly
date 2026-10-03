@@ -216,3 +216,27 @@ def test_cli_examples_parse_with_the_real_parser(capsys):
     capsys.readouterr()
     assert checked >= 20, "expected many CLI examples in the docs"
     assert not bad, "CLI examples that the real parser rejects (see docs/cli.md):\n" + "\n".join(bad[:40])
+
+
+def test_cli_command_paths_named_anywhere_exist():
+    """`hardly <group> <command>` spans in docs and source strings name real commands.
+
+    Unlike the parse test this also covers spans with placeholders (`hardly send redirect-walk <url>`)
+    and the strings the tools return (hints, plans), where only the command path is checked.
+    """
+    surface = json.loads((ROOT / "tests" / "cli_surface.json").read_text(encoding="utf-8"))
+    paths = set(surface)
+    groups = {p.split()[0] for p in paths}
+    span = re.compile(r"`hardly\s+([a-z][a-z-]*)(?:\s+([a-z][a-z-]*))?")
+    bad: list[str] = []
+    for name, text in TEXTS.items():
+        if name == "docs/cli.md":
+            continue
+        for m in span.finditer(text):
+            g, c = m.group(1), m.group(2)
+            line = text.count("\n", 0, m.start()) + 1
+            if g not in groups:
+                bad.append(f"{name}:{line}: `hardly {g}` is not a command group")
+            elif c and g != "serve" and f"{g} {c}" not in paths and c not in {"mcp", "is", "and", "or", "to", "for", "in", "the", "a"}:
+                bad.append(f"{name}:{line}: `hardly {g} {c}` is not a command")
+    assert not bad, "\n".join(bad[:40])

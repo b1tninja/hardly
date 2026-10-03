@@ -155,7 +155,7 @@ def test_spa_shell_needs_browser():
     home = page("Home", '<a href="/gadget-app">Gadget Search App</a>')
     out, _ = run({"/": home, "/gadget-app": spa})
     assert out["needs_browser"] and out["needs_browser"][0].endswith("/gadget-app")
-    assert any("capture discover" in n for n in out["next"])
+    assert any("capture-discover" in n for n in out["next"])
 
 
 def test_caps():
