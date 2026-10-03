@@ -15,6 +15,8 @@ import sqlite3
 from html.parser import HTMLParser
 from typing import Any
 
+from hardly.core.previews import is_truncated, preview_warnings
+
 _MASK_MAX = 24
 _HEADER_MAX = 60
 _MAX_COLSPAN = 20
@@ -417,7 +419,7 @@ def scan_session(
             params.append(host.lower())
     rows = conn.execute(
         f"""
-        SELECT e.entry_id, e.method, e.path, e.mime, b.content_type, b.preview_text
+        SELECT e.entry_id, e.method, e.path, e.mime, b.content_type, b.preview_text, b.size
         FROM entries e JOIN bodies b ON b.entry_id = e.entry_id
         WHERE {' AND '.join(clauses)}
         ORDER BY e.entry_id LIMIT ?
@@ -425,6 +427,7 @@ def scan_session(
         [*params, limit],
     ).fetchall()
     tables: list[dict[str, Any]] = []
+    truncated: list[dict[str, Any]] = []
     scanned = 0
     for r in rows:
         body = r["preview_text"] or ""
@@ -432,11 +435,15 @@ def scan_session(
         if "html" not in ct and not body.lstrip()[:20].lower().startswith(("<!doctype", "<html", "<table", "<div")):
             continue
         scanned += 1
+        if is_truncated(r["size"], body):
+            truncated.append({"entry_id": int(r["entry_id"])})
         for info in extract_tables(body, max_tables=max_tables):
             info["entry_id"] = int(r["entry_id"])
             info["path"] = r["path"]
             tables.append(info)
+    warnings = preview_warnings(truncated, "tables")
     return {
+        **({"warnings": warnings, "truncated_previews": len(truncated)} if warnings else {}),
         "host": host,
         "entry_id": entry_id,
         "entries_scanned": scanned,

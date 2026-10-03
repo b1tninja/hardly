@@ -263,3 +263,27 @@ def test_sample_har_expected_set(tmp_path, monkeypatch):
     # The synthetic portal page carries WebForms + antiforgery markers; nothing else.
     assert {t["id"] for t in r["technologies"]} == {"aspnet-webforms", "aspnet-antiforgery"}
     assert all("S3CR3T" not in json.dumps(t) for t in r["technologies"])
+
+
+def _ids(body, url="https://a.test/"):
+    return {t["id"] for t in fingerprint_response(200, {}, body, url)}
+
+
+def test_aspx_in_outbound_links_is_not_a_signal():
+    body = '<a href="https://other.test/page.aspx">x</a><script src="/a/b.aspx?v=1"></script>'
+    assert "aspnet-webforms" not in _ids(body)
+    assert "aspnet-webforms" in _ids("", "https://a.test/default.aspx?x=1")
+
+
+def test_ng_app_id_is_not_angularjs():
+    assert "angularjs" not in _ids('<div ng-app-id="x"></div>')
+    assert "angularjs" in _ids('<html ng-app="m"><div></div></html>')
+
+
+def test_polyfills_alone_is_not_angular():
+    assert "angular" not in _ids('<script src="/polyfills.js"></script>')
+
+
+def test_bare_redoc_word_is_not_a_signal():
+    assert "swagger-openapi" not in _ids("<p>The redoc of the matter.</p>")
+    assert "swagger-openapi" in _ids("<redoc spec-url='x'></redoc>")

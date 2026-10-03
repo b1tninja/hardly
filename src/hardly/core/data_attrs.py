@@ -20,6 +20,8 @@ from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
+from hardly.core.previews import is_truncated, preview_warnings
+
 _DATA = re.compile(r"^data-([a-z][a-z0-9\-_.:]*)$")
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?)?")
@@ -180,6 +182,16 @@ def extract_data_attributes(html: str, *, base_url: str = "") -> dict[str, Any]:
         for fid, attrs in fw_hits.items()
         if fid not in _AMBIGUOUS or len(attrs) >= 2
     ]
+    # data-sitekey is specific to captcha widgets: one attribute is enough, and it matters
+    # because the response token cannot be scripted.
+    if "data-sitekey" in stats and not any(f["id"] == "captcha-widget" for f in frameworks):
+        frameworks.append({"id": "captcha-widget", "attributes": sorted(fw_hits.get("captcha-widget", ["data-sitekey"]))[:8]})
+    for f in frameworks:
+        if f["id"] == "captcha-widget":
+            f["hint"] = (
+                "captcha widget (data-sitekey): the site expects a human-solved token; "
+                "do not script around it - use an interactive capture with a person."
+            )
     return {
         "elements": len(col.rows),
         "attribute_count": len(stats),
@@ -212,7 +224,7 @@ def scan_session(conn: Any, *, host: str | None = None, entry_id: int | None = N
         params.append(host.lower())
     rows = conn.execute(
         f"""
-        SELECT e.entry_id, e.scheme, e.host, e.path, b.preview_text
+        SELECT e.entry_id, e.scheme, e.host, e.path, b.preview_text, b.size
         FROM entries e JOIN bodies b ON b.entry_id = e.entry_id AND b.side = 'response'
         WHERE {where} ORDER BY e.entry_id LIMIT 200
         """,
@@ -224,7 +236,10 @@ def scan_session(conn: Any, *, host: str | None = None, entry_id: int | None = N
     frameworks: dict[str, set[str]] = defaultdict(set)
     ids: Counter[str] = Counter()
     pages = 0
+    truncated: list[dict[str, Any]] = []
     for row in rows:
+        if is_truncated(row["size"], row["preview_text"]):
+            truncated.append({"entry_id": row["entry_id"]})
         out = extract_data_attributes(row["preview_text"], base_url=f"{row['scheme']}://{row['host']}{row['path']}")
         if not out["elements"]:
             continue
@@ -252,7 +267,9 @@ def scan_session(conn: Any, *, host: str | None = None, entry_id: int | None = N
     for a in attributes:
         a["value_kinds"] = dict(a["value_kinds"].most_common(4))
         a["tags"] = dict(a["tags"].most_common(4))
+    warnings = preview_warnings(truncated, "data-* attributes")
     return {
+        **({"warnings": warnings, "truncated_previews": len(truncated)} if warnings else {}),
         "host": host,
         "pages_with_data_attributes": pages,
         "attribute_count": len(attributes),
