@@ -1029,8 +1029,9 @@ def hardly_diff(
     session_id_b: str,
     host: str | None = None,
     exclude_noise: bool = True,
+    credentials: bool = True,
 ) -> str:
-    """Compare endpoint templates between two open sessions (A vs B)."""
+    """Compare endpoint templates (and credential maps) between two sessions."""
     try:
         conn_a = sess.require_conn(session_id_a)
         conn_b = sess.require_conn(session_id_b)
@@ -1044,6 +1045,9 @@ def hardly_diff(
             conn_b,
             host=host,
             exclude_noise=exclude_noise,
+            credentials=credentials,
+            har_path_a=sess.get_har_path(session_id_a),
+            har_path_b=sess.get_har_path(session_id_b),
         )
     )
 

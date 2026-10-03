@@ -422,6 +422,9 @@ def cmd_diff(args: argparse.Namespace) -> int:
             sess.require_conn(b["session_id"]),
             host=args.host,
             exclude_noise=not args.include_noise,
+            credentials=not getattr(args, "no_credentials", False),
+            har_path_a=sess.get_har_path(a["session_id"]),
+            har_path_b=sess.get_har_path(b["session_id"]),
         )
     )
     return 0
@@ -1350,12 +1353,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     diff_p = sub.add_parser(
         "diff",
-        help="Compare endpoint templates between two HARs",
+        help="Compare endpoint templates (and credentials) between two HARs",
     )
     diff_p.add_argument("har_a")
     diff_p.add_argument("har_b")
     diff_p.add_argument("--host")
     diff_p.add_argument("--include-noise", action="store_true")
+    diff_p.add_argument(
+        "--no-credentials",
+        action="store_true",
+        help="Skip credentials/session map diff",
+    )
     diff_p.set_defaults(func=cmd_diff)
 
     recipe_plan_p = sub.add_parser(

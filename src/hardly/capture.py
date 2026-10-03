@@ -1030,17 +1030,35 @@ def discover_apis(
                 )
             elif isinstance(walls, list):
                 wall_hits = len(walls)
+            cred = (
+                (brief_out or {}).get("credentials")
+                if isinstance(brief_out, dict)
+                else None
+            ) or {}
+            auth_thin = not (
+                cred.get("session_cookies")
+                or cred.get("shapes_by_kind")
+                or cred.get("password_field_count")
+            )
             if wall_hits or (isinstance(brief_out, dict) and brief_out.get("error")):
                 out["next"] = (
                     f"Mode=archive (session_id={session_id}). Brief looks empty "
-                    "or walled — retry interactive: "
+                    "or walled — switch to interactive: "
                     "hardly_capture_start(headed=true, channel='chrome') and "
-                    "ask the person to click."
+                    "ASK THE PERSON to click."
                 )
+                out["suggest_mode"] = "interactive"
+            elif auth_thin and (brief_out or {}).get("host"):
+                out["next"] = (
+                    f"Mode=archive (session_id={session_id}). Little auth/"
+                    "session material — try interactive capture or a richer "
+                    "recipe; else hardly_endpoints / hardly_credentials."
+                )
+                out["suggest_mode"] = "interactive"
             else:
                 out["next"] = (
                     f"Mode=archive (session_id={session_id}). Drill with "
-                    "hardly_endpoints / hardly_content / hardly_correlate; "
+                    "hardly_credentials / hardly_endpoints / hardly_correlate; "
                     "if traffic looks thin, retry interactive with channel=chrome."
                 )
         except Exception as exc:  # noqa: BLE001

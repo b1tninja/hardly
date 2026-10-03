@@ -28,6 +28,15 @@ def recipe_from_story(
     seen_goto = False
     fill_names: list[str] = []
 
+    # Seed login identity/password placeholders from credentials map when present.
+    try:
+        from hardly.core.credentials import map_credentials
+
+        cred = map_credentials(conn, host=host, limit=20)
+    except Exception:  # noqa: BLE001
+        cred = {}
+    login_seeded = False
+
     for step in story.get("steps") or []:
         role = step.get("role")
         method = step.get("method")
@@ -49,6 +58,13 @@ def recipe_from_story(
                 }
             )
             seen_goto = True
+            if not login_seeded:
+                for fill in _login_fill_steps(cred):
+                    steps.append(fill)
+                    name = (fill.get("css") or "").removeprefix("[name='").removesuffix("']")
+                    if name:
+                        fill_names.append(name)
+                login_seeded = True
 
         for form in step.get("forms") or []:
             for name in form.get("field_names") or []:
@@ -150,6 +166,19 @@ def recipe_from_story(
                 }
             )
 
+    if not login_seeded and (cred.get("password_fields") or cred.get("identity_fields")):
+        # No page/auth story step — still offer login fills after a synthetic goto note.
+        steps.append(
+            {
+                "op": "note",
+                "text": (
+                    "No page/auth step in story; fill steps below come from "
+                    "hardly_credentials — goto the login URL first."
+                ),
+            }
+        )
+        steps.extend(_login_fill_steps(cred))
+
     # Capture recipe runner may not understand "note" — keep as comments in export.
     runnable = [s for s in steps if s.get("op") != "note"]
     notes = [s for s in steps if s.get("op") == "note"]
@@ -167,12 +196,61 @@ def recipe_from_story(
         "steps": runnable if not written else None,
         "notes": notes[:20],
         "output_path": written,
+        "login_seeded": bool(
+            cred.get("password_fields") or cred.get("identity_fields")
+        ),
         "next": (
             "hardly_capture_start(channel=chrome) -> recipe (includes aria) -> "
             "swap css/text for ref=eN from aria.refs -> stop. "
-            "Fallback: hardly_capture_elements for xpath/css."
+            "Fallback: hardly_capture_elements for xpath/css. "
+            "If walls/MFA: interactive mode and ask the person."
         ),
     }
+
+
+def _login_fill_steps(cred: dict[str, Any]) -> list[dict[str, Any]]:
+    steps: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for field in (cred.get("identity_fields") or [])[:4]:
+        name = str(field.get("name") or "")
+        if not name or name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        steps.append(
+            {
+                "op": "fill",
+                "css": f"[name='{name}']",
+                "value": f"PLACEHOLDER_{name}",
+                "note": "identity field from hardly_credentials — prefer aria ref",
+            }
+        )
+    for field in (cred.get("password_fields") or [])[:2]:
+        name = str(field.get("name") or "")
+        if not name or name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        steps.append(
+            {
+                "op": "fill",
+                "css": f"[name='{name}']",
+                "value": "PLACEHOLDER_PASSWORD",
+                "note": (
+                    "password field from hardly_credentials — fill only in a "
+                    "headed interactive session if MFA/walls; never log the value"
+                ),
+            }
+        )
+    if steps:
+        steps.append(
+            {
+                "op": "note",
+                "text": (
+                    "After fills: click Sign in / Submit via aria ref; "
+                    "then hardly_capture_stop -> hardly_credentials"
+                ),
+            }
+        )
+    return steps
 
 
 def _scheme_host(conn: sqlite3.Connection, entry_id: int) -> str | None:

@@ -234,6 +234,11 @@ def _shape_hits(
     hits: list[dict[str, Any]] = []
     seen: set[tuple[Any, ...]] = set()
 
+    # Prefer ingest-time tags (fast; no HAR re-scan).
+    indexed = _shapes_from_index(conn, host=host, limit=limit)
+    if indexed:
+        return indexed
+
     # Query string values (raw in index — classify only).
     for qs in _query_secret_names(conn, host=host, limit=limit):
         shape = qs.get("shape")
@@ -311,6 +316,57 @@ def _shape_hits(
             hits.append(hit)
 
     return hits[:limit]
+
+
+def _shapes_from_index(
+    conn: sqlite3.Connection,
+    *,
+    host: str | None,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Read value_shapes rows written at ingest time."""
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM sqlite_master "
+            "WHERE type='table' AND name='value_shapes'"
+        ).fetchone()
+        if not row or int(row["n"] if isinstance(row, sqlite3.Row) else row[0]) < 1:
+            return []
+        count = conn.execute("SELECT COUNT(*) AS n FROM value_shapes").fetchone()
+        if not count or int(count["n"] if isinstance(count, sqlite3.Row) else count[0]) < 1:
+            return []
+    except sqlite3.Error:
+        return []
+
+    clauses = ["e.is_noise = 0"]
+    params: list[Any] = []
+    if host:
+        clauses.append("e.host = ?")
+        params.append(host.lower())
+    rows = conn.execute(
+        f"""
+        SELECT e.entry_id, e.method, e.path, s.side, s.where_kind, s.name, s.shape
+        FROM value_shapes s
+        JOIN entries e ON e.entry_id = s.entry_id
+        WHERE {" AND ".join(clauses)}
+        ORDER BY e.entry_id ASC, s.id ASC
+        LIMIT ?
+        """,
+        [*params, limit],
+    ).fetchall()
+    return [
+        {
+            "entry_id": r["entry_id"],
+            "method": r["method"],
+            "path": r["path"],
+            "side": r["side"],
+            "where": r["where_kind"],
+            "name": r["name"],
+            "shape": r["shape"],
+            "source": "index",
+        }
+        for r in rows
+    ]
 
 
 def _shapes_from_har(

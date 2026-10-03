@@ -67,6 +67,18 @@ CREATE VIRTUAL TABLE IF NOT EXISTS bodies_fts USING fts5(
     side UNINDEXED,
     preview_text
 );
+
+CREATE TABLE IF NOT EXISTS value_shapes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id INTEGER NOT NULL REFERENCES entries(entry_id),
+    side TEXT NOT NULL,
+    where_kind TEXT NOT NULL,
+    name TEXT,
+    shape TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_shapes_entry ON value_shapes(entry_id);
+CREATE INDEX IF NOT EXISTS idx_shapes_shape ON value_shapes(shape);
 """
 
 

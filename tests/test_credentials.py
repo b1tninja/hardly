@@ -87,3 +87,29 @@ def test_brief_includes_credentials(tmp_path, monkeypatch):
     assert "credentials" in brief
     assert brief["credentials"]["password_field_count"] >= 1
     assert "hardly_credentials" in (brief.get("next") or "")
+
+
+def test_ingest_stores_value_shapes(tmp_path, monkeypatch):
+    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    info = sess.open_har(str(FIX), force=True)
+    conn = sess.require_conn(info["session_id"])
+    n = conn.execute("SELECT COUNT(*) AS n FROM value_shapes").fetchone()["n"]
+    assert n >= 1
+    result = map_credentials(
+        conn,
+        har_path=sess.get_har_path(info["session_id"]),
+        host="api.example.com",
+    )
+    assert any(s.get("source") == "index" for s in result["shapes"])
+
+
+def test_diff_includes_credentials(tmp_path, monkeypatch):
+    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    from hardly.core.diff import diff_sessions
+
+    info = sess.open_har(str(FIX), force=True)
+    conn = sess.require_conn(info["session_id"])
+    out = diff_sessions(conn, conn, host="api.example.com", credentials=True)
+    assert "credentials" in out
+    assert out["credentials"]["changed"] is False
+    assert "shared" in out["credentials"]["session_cookies"]

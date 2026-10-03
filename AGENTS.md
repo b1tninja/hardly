@@ -70,7 +70,7 @@ Prefer MCP/CLI helpers over reading the HAR:
 7. After a capture: `hardly_wall` (Akamai/CF), `hardly_issues` /
    `hardly_coverage` if bodies look empty; `hardly_slow` /
    `hardly_duplicates` for odd traffic; `hardly_pages` for pageref groups;
-   `hardly_diff` vs an earlier session
+   `hardly_diff` vs an earlier session (includes credentials delta)
 8. `hardly_entry` / `hardly_schema` / export — only for needed details
 
 Optional dep for capture: `pip install -e ".[capture]"` +

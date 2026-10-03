@@ -27,7 +27,15 @@ def _num(value: Any) -> float | int | None:
         return None
 
 from hardly.core.filters import is_noise
-from hardly.core.redact import redact_body_text, redact_header_value, is_sensitive_header
+from hardly.core.redact import (
+    BASE64_RE,
+    JWT_RE,
+    LONG_HEX_RE,
+    classify_value_shape,
+    is_sensitive_header,
+    redact_body_text,
+    redact_header_value,
+)
 from hardly.core.urls import parse_url, path_template
 from hardly.index.schema import connect, init_db
 
@@ -156,6 +164,90 @@ def _store_headers(conn, entry_id: int, side: str, headers: list[dict]) -> None:
             """,
             (entry_id, side, name, redacted, raw),
         )
+        _record_header_shapes(conn, entry_id, side, name, value)
+
+
+def _record_shape(
+    conn,
+    entry_id: int,
+    side: str,
+    where_kind: str,
+    shape: str,
+    name: str | None = None,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO value_shapes (entry_id, side, where_kind, name, shape)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (entry_id, side, where_kind, name, shape),
+    )
+
+
+def _record_header_shapes(
+    conn, entry_id: int, side: str, name: str, value: str
+) -> None:
+    low = name.lower()
+    if low in {"cookie", "set-cookie"}:
+        # First name=value only for Set-Cookie; Cookie may have several.
+        parts = value.split(";")
+        pairs = []
+        if low == "set-cookie":
+            if parts and "=" in parts[0]:
+                n, _, v = parts[0].partition("=")
+                pairs.append((n.strip(), v.strip()))
+        else:
+            for part in parts:
+                part = part.strip()
+                if "=" not in part:
+                    continue
+                n, _, v = part.partition("=")
+                n = n.strip()
+                if n.lower() in {
+                    "path",
+                    "domain",
+                    "expires",
+                    "max-age",
+                    "secure",
+                    "httponly",
+                    "samesite",
+                }:
+                    continue
+                pairs.append((n, v.strip()))
+        for n, v in pairs:
+            shape = classify_value_shape(v)
+            if shape:
+                _record_shape(conn, entry_id, side, "cookie", shape, n)
+        return
+    shape = classify_value_shape(value)
+    if shape:
+        _record_shape(conn, entry_id, side, "header", shape, name or None)
+
+
+def _record_query_shapes(conn, entry_id: int, query: dict[str, Any] | None) -> None:
+    if not query:
+        return
+    for name, value in query.items():
+        candidates = value if isinstance(value, list) else [value]
+        for item in candidates:
+            if not isinstance(item, str):
+                continue
+            shape = classify_value_shape(item)
+            if shape:
+                _record_shape(conn, entry_id, "request", "query", shape, str(name))
+
+
+def _record_body_shapes(
+    conn, entry_id: int, side: str, text: str | None
+) -> None:
+    if not text or len(text) > 200_000:
+        return
+    if JWT_RE.search(text):
+        _record_shape(conn, entry_id, side, "body", "jwt", None)
+    if LONG_HEX_RE.search(text):
+        _record_shape(conn, entry_id, side, "body", "hex", None)
+    elif BASE64_RE.search(text) and not JWT_RE.search(text):
+        _record_shape(conn, entry_id, side, "body", "base64", None)
 
 
 def ingest_har(har_path: str | Path, db_path: str | Path) -> dict[str, Any]:
@@ -250,6 +342,9 @@ def ingest_har(har_path: str | Path, db_path: str | Path) -> dict[str, Any]:
             _store_headers(conn, entry_id, "response", _header_list(resp.get("headers")))
             _store_body(conn, entry_id, "request", req_text, req_mime or (post or {}).get("mimeType"), req_size)
             _store_body(conn, entry_id, "response", resp_text, mime, resp_size)
+            _record_query_shapes(conn, entry_id, parsed.get("query"))
+            _record_body_shapes(conn, entry_id, "request", req_text)
+            _record_body_shapes(conn, entry_id, "response", resp_text)
 
             counts["entries"] += 1
             if noise:
