@@ -91,6 +91,13 @@ _PORTAL_HEADER_LOGIN = (
     + '<a href="/portal/lookup">Widget lookup</a></body></html>'
 )
 
+# Client-rendered lookup: the form only exists after a script runs.
+_PORTAL_SPA = """<!doctype html><html><body><div id="app">Loading…</div>
+<script>setTimeout(function(){document.getElementById('app').innerHTML=
+'<form action="/portal/results"><input type="text" name="owner_name"><input type="text" name="parcel_number">'+
+'<input type="submit" value="Go"></form>';},700);</script></body></html>"""
+_PORTAL_SPA_HOME = """<!doctype html><html><body><a href="/portal/spa">Parcel search</a></body></html>"""
+
 _INDEX = """<!doctype html><html><head><title>Local demo</title></head><body>
 <a href="/directory.aspx">Widget directory search</a> <a href="/login">Sign in</a>
 <a href="/api/items">items</a></body></html>"""
@@ -127,6 +134,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(_LOGIN, cookie="JSESSIONID=localdemo0002; path=/; HttpOnly; SameSite=Lax")
         elif path == "/portal":
             self._send(_PORTAL)
+        elif path == "/portal/spa":
+            self._send(_PORTAL_SPA)
+        elif path == "/portal/spahome":
+            self._send(_PORTAL_SPA_HOME)
         elif path == "/portal/w1":
             self._send(_PORTAL_W1)
         elif path == "/portal/w2":

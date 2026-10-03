@@ -141,3 +141,19 @@ def test_one_box_search_accepted_only_after_deliberate_navigation():
     newsletter = extract_html_structure('<form action="/subscribe"><input type="email" name="email"></form>')
     assert reached(newsletter, allow_site_search=True) is None       # utility forms stay rejected
     assert has_search_term("Search Online Catalog") and not has_search_term("Tanks - fire permit application")
+
+
+def test_site_search_with_scope_selector_is_not_a_lookup():
+    from hardly.core.search_nav import search_form_reached as reached
+
+    scoped = extract_html_structure(
+        '<form action="/results"><select name="search_type"><option>all</option></select>'
+        '<input type="text" name="q"><input type="submit"></form>'
+    )
+    assert reached(scoped) is None
+    assert reached(scoped, allow_site_search=True) is not None  # deliberately navigated here
+    real = extract_html_structure(
+        '<form action="/results"><select name="county"><option>a</option></select>'
+        '<input type="text" name="owner_name"><input type="submit"></form>'
+    )
+    assert reached(real) is not None

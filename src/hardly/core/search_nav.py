@@ -179,6 +179,17 @@ def search_form_reached(
         if not entry or all((f.get("kind") == "select" or f.get("type") == "select") for f in entry):
             continue
         names = [str(f.get("name") or f.get("id") or "") for f in entry]
+        # A site-search box with a scope selector (q + search_type/scope/site)
+        # is still the site-wide widget, not a lookup form.
+        free = [f for f in entry if (f.get("type") or f.get("kind") or "").lower() != "select" and f.get("kind") != "select"]
+        if (
+            len(free) == 1
+            and len(entry) > 1
+            and _SITE_SEARCH_NAME.match(str(free[0].get("name") or free[0].get("id") or ""))
+            and not allow_site_search
+            and not any(k in " ".join(names).lower() for k in kw)
+        ):
+            continue
         # A keyword vouches for a form only through its field names (or id),
         # never through the action URL: /search/permits is still a site search.
         blob = " ".join(names + [form.get("id") or ""]).lower()

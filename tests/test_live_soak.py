@@ -265,3 +265,12 @@ def test_header_login_box_does_not_stop_navigation(tmp_path, monkeypatch):
     res = _find_click_on(tmp_path, monkeypatch, "/portal/hl", ["widget"])
     assert "blocked" not in res, res
     assert res["reached"] and res["url"].endswith("/portal/lookup")
+
+
+@pytest.mark.skipif(not playwright_available(), reason="playwright not installed")
+def test_find_click_waits_for_a_client_rendered_form(tmp_path, monkeypatch):
+    if not playwright_status().get("ready"):
+        pytest.skip("Playwright browser not ready")
+    res = _find_click_on(tmp_path, monkeypatch, "/portal/spahome", ["parcel"])
+    assert res["reached"], res
+    assert set(res["form"]["fields"]) == {"owner_name", "parcel_number"}

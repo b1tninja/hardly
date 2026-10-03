@@ -23,6 +23,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from hardly.core.browser_detect import (
     expected_chromium_build,
@@ -1483,6 +1484,22 @@ def _settled_content(page: Any) -> str:
         page.wait_for_load_state("domcontentloaded", timeout=8_000)
     except Exception:  # noqa: BLE001
         pass
+    # Client-rendered apps build their forms after load. Only when the page has
+    # nothing to type into yet: let the network go quiet, then wait (briefly)
+    # for an input to appear.
+    try:
+        has_inputs = page.locator("input:visible, select:visible, textarea:visible").count() > 0
+    except Exception:  # noqa: BLE001
+        has_inputs = False
+    if not has_inputs:
+        try:
+            page.wait_for_load_state("networkidle", timeout=3_000)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            page.wait_for_selector("input:visible, select:visible, textarea:visible", timeout=1_500)
+        except Exception:  # noqa: BLE001
+            pass
     html = ""
     for _ in range(4):
         try:
@@ -1611,7 +1628,10 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
         hops.append(
             {"from": before, "clicked": pick["text"], "css": pick["click"]["css"], "to": page.url, "via": via}
         )
-        last_strong = has_search_term(pick["text"]) and (
+        # A one-box search counts as THE search only if the click really landed
+        # on a new, non-root page (not the homepage's own header search).
+        landed = page.url != before and bool(urlparse(page.url).path.strip("/"))
+        last_strong = landed and has_search_term(pick["text"]) and (
             not kw_lower or any(k in (pick["text"] or "").lower() for k in kw_lower)
         )
     return {"reached": form is not None, "form": form, "hops": hops, "url": page.url}

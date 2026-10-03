@@ -64,7 +64,27 @@ class _Page:
         pass
 
     def locator(self, css):
-        self.clicked.append(css)
+        return _Locator(self, css)
+
+
+class _Locator:
+    """Inspecting the page is fine; clicking through a gate is not."""
+
+    def __init__(self, page, css):
+        self.page, self.css = page, css
+
+    @property
+    def first(self):
+        return self
+
+    def count(self):
+        return 1
+
+    def wait_for(self, *a, **k):
+        pass
+
+    def click(self, *a, **k):
+        self.page.clicked.append(self.css)
         raise AssertionError("must not click through a gate")
 
 
