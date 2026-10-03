@@ -84,17 +84,18 @@ def rank_search_links(
         )
         if link.get("css"):
             css = link["css"]
-        out.append(
-            {
-                "kind": link.get("kind") or "link",
-                "target": link.get("target") or "",
-                "score": score,
-                "matched_keywords": matched,
-                "text": text,
-                "href": href,
-                "click": {"op": "click", "css": css},
-            }
-        )
+        row = {
+            "kind": link.get("kind") or "link",
+            "target": link.get("target") or "",
+            "score": score,
+            "matched_keywords": matched,
+            "text": text,
+            "href": href,
+            "click": {"op": "click", "css": css},
+        }
+        # Elements found inside iframes / shadow roots carry where they live.
+        row.update({k: link[k] for k in ("frame", "idx", "shadow") if k in link})
+        out.append(row)
     out.sort(key=lambda r: (-r["score"], r["href"]))
     return out[:limit]
 
@@ -208,11 +209,16 @@ def search_form_reached(
 
 
 def _form_hit(form: dict[str, Any], entry: list[dict[str, Any]]) -> dict[str, Any]:
-    return {
+    hit = {
         "action": form.get("action") or "",
         "method": form.get("method") or "",
         "fields": [f.get("name") or f.get("id") or "" for f in entry][:12],
     }
+    if form.get("frame"):
+        hit["frame"] = form["frame"]
+    if form.get("shadow"):
+        hit["shadow"] = True
+    return hit
 
 
 def page_candidates(
@@ -221,10 +227,24 @@ def page_candidates(
     base_url: str = "",
     keywords: tuple[str, ...] | list[str] = (),
     limit: int = 15,
+    extra_links: list[dict[str, Any]] | None = None,
+    extra_forms: list[dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Ranked click targets for one page plus its parsed structure."""
+    """Ranked click targets for one page plus its parsed structure.
+
+    ``extra_links`` / ``extra_forms`` are link-/form-shaped rows the static HTML
+    cannot show (same-origin iframes, open shadow DOM, revealed menus); they are
+    ranked with the page's own links and the forms are appended to
+    ``structure["forms"]``.
+    """
     structure = extract_html_structure(html, base_url=base_url)
-    links = (structure.get("links") or []) + actions_as_links(structure.get("actions") or [])
+    if extra_forms:
+        structure["forms"] = list(structure.get("forms") or []) + list(extra_forms)
+    links = (
+        (structure.get("links") or [])
+        + actions_as_links(structure.get("actions") or [])
+        + list(extra_links or [])
+    )
     kw = tuple(k.strip() for k in keywords if k and k.strip())
     return rank_search_links(links, keywords=kw, limit=limit), structure
 

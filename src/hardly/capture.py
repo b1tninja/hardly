@@ -793,7 +793,10 @@ def navigate_capture(capture_id: str | None, url: str) -> dict[str, Any]:
 
 
 _RPC_OPS = frozenset(
-    {"elements", "click", "fill", "press", "url", "aria", "screenshot"}
+    {
+        "elements", "click", "fill", "press", "url", "aria", "screenshot",
+        "goto", "find_click", "dismiss_consent",
+    }
 )
 
 
@@ -876,6 +879,7 @@ def click_capture(
     role: str = "",
     name: str = "",
     timeout_ms: int = 10_000,
+    wait_until: str = "",
 ) -> dict[str, Any]:
     """Click a visible control on the active capture tab.
 
@@ -893,6 +897,64 @@ def click_capture(
         role=role,
         name=name,
         timeout_ms=int(timeout_ms),
+        wait_until=str(wait_until or ""),
+    )
+
+
+def goto_capture(
+    capture_id: str | None = None,
+    *,
+    url: str,
+    wait_until: str = "domcontentloaded",
+    timeout_ms: int = 60_000,
+) -> dict[str, Any]:
+    """Navigate the active tab and wait for ``wait_until`` (synchronous, unlike ``navigate_capture``)."""
+    if not str(url or "").strip():
+        raise CaptureError("goto requires url")
+    return capture_rpc(
+        capture_id,
+        "goto",
+        timeout=float(timeout_ms) / 1000.0 + 15.0,
+        url=str(url).strip(),
+        wait_until=_step_wait_until({"wait_until": wait_until}),
+        timeout_ms=int(timeout_ms),
+    )
+
+
+def find_click_capture(
+    capture_id: str | None = None,
+    *,
+    keywords: list[str] | None = None,
+    max_hops: int = 4,
+    min_fields: int = 2,
+    hover: bool = True,
+    timeout_ms: int = 0,
+    wait_until: str = "domcontentloaded",
+) -> dict[str, Any]:
+    """Run ``find_click`` (rank links/buttons, hop until a search form) on the live tab.
+
+    Same behaviour as the in-process recipe op, including same-origin iframes,
+    open shadow DOM and hover-to-reveal menus.
+    """
+    hops = min(max(int(max_hops), 1), 8)
+    args: dict[str, Any] = {
+        "keywords": [str(k) for k in (keywords or [])],
+        "max_hops": hops,
+        "min_fields": int(min_fields),
+        "hover": bool(hover),
+        "wait_until": _step_wait_until({"wait_until": wait_until}),
+    }
+    if timeout_ms:
+        args["timeout_ms"] = int(timeout_ms)
+    return capture_rpc(capture_id, "find_click", timeout=45.0 * (hops + 1) + 15.0, **args)
+
+
+def dismiss_consent_capture(
+    capture_id: str | None = None, *, prefer: str = "reject", timeout_ms: int = 5_000
+) -> dict[str, Any]:
+    """Dismiss a cookie/consent dialog on the live tab (reject-first; never gates)."""
+    return capture_rpc(
+        capture_id, "dismiss_consent", prefer=str(prefer or "reject"), timeout_ms=int(timeout_ms)
     )
 
 
@@ -991,6 +1053,8 @@ _RECIPE_OPS = frozenset(
         "aria",
         "screenshot",
         "note",
+        "find_click",
+        "dismiss_consent",
     }
 )
 
@@ -1042,10 +1106,19 @@ def run_capture_recipe(
                 url = str(raw.get("url") or "").strip()
                 if not url:
                     raise CaptureError("goto requires url")
-                navigate_capture(cid, url)
-                # Give navigation a moment; url rpc confirms.
-                time.sleep(min(_wait_ms(raw, 500) / 1000.0, 10.0))
-                step_out["result"] = capture_page_url(cid)
+                if raw.get("wait_until") or raw.get("timeout_ms"):
+                    # Synchronous navigation: honours wait_until / timeout_ms.
+                    step_out["result"] = goto_capture(
+                        cid,
+                        url=url,
+                        wait_until=str(raw.get("wait_until") or "domcontentloaded"),
+                        timeout_ms=_step_timeout(raw, 60_000) or 60_000,
+                    )
+                else:
+                    navigate_capture(cid, url)
+                    # Give navigation a moment; url rpc confirms.
+                    time.sleep(min(_wait_ms(raw, 500) / 1000.0, 10.0))
+                    step_out["result"] = capture_page_url(cid)
             elif op == "wait":
                 ms = min(max(_wait_ms(raw, 1000), 0), 30_000)
                 time.sleep(ms / 1000.0)
@@ -1081,7 +1154,24 @@ def run_capture_recipe(
                     text=str(raw.get("text") or ""),
                     role=str(raw.get("role") or ""),
                     name=str(raw.get("name") or ""),
-                    timeout_ms=int(raw.get("timeout_ms") or 10_000),
+                    timeout_ms=_step_timeout(raw, 10_000) or 10_000,
+                    wait_until=str(raw.get("wait_until") or ""),
+                )
+            elif op == "find_click":
+                step_out["result"] = find_click_capture(
+                    cid,
+                    keywords=[str(k) for k in (raw.get("keywords") or [])],
+                    max_hops=int(raw.get("max_hops") or 4),
+                    min_fields=int(raw.get("min_fields") or 2),
+                    hover=raw.get("hover") is not False,
+                    timeout_ms=_step_timeout(raw) or 0,
+                    wait_until=str(raw.get("wait_until") or "domcontentloaded"),
+                )
+            elif op == "dismiss_consent":
+                step_out["result"] = dismiss_consent_capture(
+                    cid,
+                    prefer=str(raw.get("prefer") or "reject"),
+                    timeout_ms=_step_timeout(raw, 5_000) or 5_000,
                 )
             elif op == "fill":
                 step_out["result"] = fill_capture(
@@ -1741,20 +1831,215 @@ def _landed_on_new_page(before: str, after: str) -> bool:
     return bool(a.path.strip("/")) and a.path != b.path
 
 
+_WAIT_UNTIL_VALUES = ("commit", "domcontentloaded", "load", "networkidle")
+
+
+def _step_wait_until(raw: dict[str, Any], default: str = "domcontentloaded") -> str:
+    """Validated ``wait_until`` of a step (``commit|domcontentloaded|load|networkidle``)."""
+    val = str(raw.get("wait_until") or default).strip().lower()
+    if val not in _WAIT_UNTIL_VALUES:
+        raise CaptureError(f"wait_until must be one of {list(_WAIT_UNTIL_VALUES)}, got {val!r}")
+    return val
+
+
+def _step_timeout(raw: dict[str, Any], default: int | None = None) -> int | None:
+    """``timeout_ms`` of a step, clamped to 100 ms .. 300 s (``default`` when absent)."""
+    if raw.get("timeout_ms") in (None, "", 0):
+        return default
+    try:
+        return min(max(int(float(raw["timeout_ms"])), 100), 300_000)
+    except (TypeError, ValueError) as exc:
+        raise CaptureError(f"timeout_ms must be a number, got {raw['timeout_ms']!r}") from exc
+
+
+def _after_click_wait(page: Any, wait_until: str | None, timeout: int) -> dict[str, Any]:
+    """Wait for the load state a click step asked for; a timeout is reported, not raised."""
+    if not wait_until or wait_until == "commit":
+        return {}
+    try:
+        page.wait_for_load_state(wait_until, timeout=timeout)
+    except Exception as exc:  # noqa: BLE001
+        return {"wait_timeout": wait_until, "wait_error": str(exc)[:120]}
+    return {}
+
+
+# --- frames and shadow DOM ---------------------------------------------------
+
+
+def _nav_frames(page: Any) -> list[Any]:
+    """Main frame plus same-origin child frames (their DOM is readable)."""
+    from hardly.core.page_nav import same_origin_frame
+
+    main = page.main_frame
+    out = [main]
+    try:
+        for fr in page.frames:
+            if fr is main:
+                continue
+            try:
+                if fr.is_detached() or not same_origin_frame(fr.url, page.url):
+                    continue
+            except Exception:  # noqa: BLE001
+                continue
+            out.append(fr)
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def _collect_nav_links(page: Any) -> list[dict[str, Any]]:
+    """Clickable controls in the page, its same-origin iframes and open shadow roots."""
+    from hardly.core.page_nav import PAGE_NAV_JS
+
+    rows: list[dict[str, Any]] = []
+    for fi, fr in enumerate(_nav_frames(page)):
+        try:
+            items = fr.evaluate(PAGE_NAV_JS, {"op": "links"}) or []
+        except Exception:  # noqa: BLE001 — frame navigated away / detached
+            continue
+        for it in items:
+            it["frame"] = fi
+            rows.append(it)
+    return rows
+
+
+def _link_row(it: dict[str, Any]) -> dict[str, Any] | None:
+    """Link-shaped row (for ranking) from a ``_collect_nav_links`` item."""
+    from hardly.core.search_nav import _q
+
+    text = (it.get("text") or "").strip()
+    if not text:
+        return None
+    tag = it.get("tag") or "a"
+    href = it.get("href") or f"action:{it.get('kind')}:{it['frame']}:{it['idx']}"
+    return {
+        "text": text,
+        "href": href,
+        "kind": it.get("kind"),
+        "target": it.get("target") or "",
+        "css": f"{tag}:has-text({_q(text)})" if len(text) <= 80 else f"{tag}",
+        "frame": it["frame"],
+        "idx": it["idx"],
+        "shadow": bool(it.get("shadow")),
+        "visible": bool(it.get("visible")),
+    }
+
+
+def _extra_dom(page: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Links and forms the static HTML misses: same-origin iframes and shadow roots."""
+    from hardly.core.page_nav import PAGE_NAV_JS
+
+    links = [
+        r for r in (
+            _link_row(it) for it in _collect_nav_links(page) if it["frame"] > 0 or it.get("shadow")
+        ) if r
+    ]
+    forms: list[dict[str, Any]] = []
+    for fi, fr in enumerate(_nav_frames(page)):
+        try:
+            items = fr.evaluate(PAGE_NAV_JS, {"op": "forms"}) or []
+        except Exception:  # noqa: BLE001
+            continue
+        for f in items:
+            if (fi == 0 and not f.get("shadow")) or not f.get("visible"):
+                continue
+            forms.append({**f, "frame": fr.url if fi else "", "shadow": bool(f.get("shadow"))})
+    return links, forms
+
+
+def _element_handle(page: Any, row: dict[str, Any]) -> Any:
+    """Playwright element handle for a collected row (works across frames/shadow)."""
+    from hardly.core.page_nav import PAGE_NAV_JS
+
+    frames = _nav_frames(page)
+    if row["frame"] >= len(frames):
+        raise CaptureError("frame is gone")
+    el = frames[row["frame"]].evaluate_handle(PAGE_NAV_JS, {"op": "get", "idx": row["idx"]}).as_element()
+    if el is None:
+        raise CaptureError("element is gone")
+    return el
+
+
+def _pick_key(c: dict[str, Any]) -> str:
+    if c.get("idx") is not None:
+        return f"{c.get('frame', 0)}:{c['idx']}:{c['click']['css']}"
+    return c["click"]["css"]
+
+
+# --- hover-to-reveal menus ---------------------------------------------------
+
+
+def _hover_reveal(
+    page: Any, accept: Any, *, keywords: list[str] | tuple[str, ...] = (), limit: int = 6
+) -> tuple[dict[str, Any], Any] | None:
+    """Hover menu triggers until ``accept(rows)`` finds a newly revealed link.
+
+    A trigger is a visible control that has hidden submenu links beside it (or
+    ``aria-haspopup`` / ``aria-expanded=false``). ``accept`` gets link-shaped
+    rows that were hidden before the hover and visible after it, and returns
+    the one to follow (or ``None``). Returns ``(trigger_row, accepted)``; the
+    pointer is parked away from the menu when nothing matches.
+    """
+    from hardly.core.search_nav import score_link
+
+    before = _collect_nav_links(page)
+    seen = {(r.get("href") or "", r["text"]) for r in before if r.get("visible")}
+    triggers = [r for r in before if r.get("visible") and r.get("trigger") and r.get("text")]
+    kw = tuple(keywords)
+    triggers.sort(key=lambda r: -score_link(r["text"], r.get("href") or "", kw)[0])
+    for trig in triggers[:limit]:
+        try:
+            _element_handle(page, trig).hover(timeout=2_000)
+            page.wait_for_timeout(300)
+        except Exception:  # noqa: BLE001
+            continue
+        rows = [
+            lr for it in _collect_nav_links(page)
+            if it.get("visible") and (it.get("href") or "", it["text"]) not in seen
+            for lr in [_link_row(it)] if lr
+        ]
+        hit = accept(rows) if rows else None
+        if hit is not None:
+            return trig, hit
+        try:
+            page.mouse.move(0, 0)
+            page.wait_for_timeout(120)
+        except Exception:  # noqa: BLE001
+            pass
+    return None
+
+
+def _click_row(page: Any, row: dict[str, Any], trigger: dict[str, Any] | None, timeout: int) -> None:
+    """Click a collected row, re-hovering its menu trigger first when it has one."""
+    if trigger is not None:
+        _element_handle(page, trigger).hover(timeout=2_000)
+        page.wait_for_timeout(250)
+    _element_handle(page, row).click(timeout=timeout)
+
+
 def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
     """Follow ranked links/buttons hop by hop until a search form appears.
 
     Step fields: ``keywords`` (list of domain terms), ``max_hops`` (default 4,
-    cap 8), ``min_fields`` (default 2). Generic signals plus caller keywords
-    choose the click; visited targets are never re-clicked. Hidden elements,
-    ``target=_blank`` links and failed clicks fall back to navigating straight
-    to the link's ``href``.
+    cap 8), ``min_fields`` (default 2), ``hover`` (default true: hover menu
+    triggers to reveal hidden submenu links), ``timeout_ms`` (per click /
+    navigation) and ``wait_until`` (load state to wait for after a click).
+    Generic signals plus caller keywords choose the click; visited targets are
+    never re-clicked. Same-origin iframes and open shadow roots are searched
+    too. Hidden elements, ``target=_blank`` links and failed clicks fall back
+    to navigating straight to the link's ``href``.
     """
-    from hardly.core.search_nav import has_search_term, page_candidates, search_form_reached
+    from hardly.core.search_nav import has_search_term, page_candidates, rank_search_links, search_form_reached
 
     keywords = [str(k) for k in (raw.get("keywords") or [])]
     max_hops = min(max(int(raw.get("max_hops") or 4), 1), 8)
     min_fields = max(int(raw.get("min_fields") or 2), 1)
+    use_hover = raw.get("hover") is not False
+    step_to = _step_timeout(raw)
+    click_to = step_to or 6_000
+    goto_to = step_to or 30_000
+    load_to = step_to or 8_000
+    wait_until = _step_wait_until(raw)
     visited: set[str] = set()
     hops: list[dict[str, Any]] = []
     form = None
@@ -1783,7 +2068,13 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
                 "url": page.url,
                 "blocked": blocked,
             }
-        cands, structure = page_candidates(html, base_url=page.url, keywords=keywords)
+        try:
+            extra_links, extra_forms = _extra_dom(page)
+        except Exception:  # noqa: BLE001 — test doubles / mid-navigation
+            extra_links, extra_forms = [], []
+        cands, structure = page_candidates(
+            html, base_url=page.url, keywords=keywords, extra_links=extra_links, extra_forms=extra_forms
+        )
         form = search_form_reached(
             structure, min_fields=min_fields, keywords=keywords, allow_site_search=last_strong
         )
@@ -1798,7 +2089,7 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
         ok_hops = [h for h in hops if not h.get("error")]
 
         def _eligible(c: dict[str, Any]) -> bool:
-            if c["click"]["css"] in visited:
+            if _pick_key(c) in visited:
                 return False
             if not ok_hops:
                 return c["score"] >= 1
@@ -1808,33 +2099,80 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
             return (not kw_lower) or any(k in text for k in kw_lower)
 
         pick = next((c for c in cands if _eligible(c)), None)
+        trigger: dict[str, Any] | None = None
+        if pick is None and use_hover:
+            # Nothing eligible is showing: open hover menus and rank what appears.
+            def _accept_ranked(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+                return next(
+                    (c for c in rank_search_links(rows, keywords=tuple(keywords)) if _eligible(c)), None
+                )
+
+            try:
+                hit = _hover_reveal(page, _accept_ranked, keywords=keywords)
+            except Exception:  # noqa: BLE001
+                hit = None
+            if hit:
+                trigger, pick = hit
         if pick is None:
             break
-        visited.add(pick["click"]["css"])
+        visited.add(_pick_key(pick))
         before = page.url
         href = pick.get("href") or ""
         has_href = href.startswith(("http://", "https://"))
+        in_extra = pick.get("idx") is not None
         via = "click"
         try:
-            if has_href and pick.get("target") == "_blank":
+            if trigger is not None:
+                _click_row(page, pick, trigger, click_to)
+                via = "hover+click"
+            elif has_href and pick.get("target") == "_blank":
                 via = "goto"  # would open a new tab we are not tracking
-                _goto_with_retry(page, href, timeout=30_000)
+                _goto_with_retry(page, href, wait_until=wait_until, timeout=goto_to)
+            elif in_extra:
+                try:
+                    _element_handle(page, pick).click(timeout=min(click_to, 3_000))
+                except Exception:  # noqa: BLE001 — hidden/covered element
+                    if not has_href or pick.get("frame"):
+                        raise
+                    via = "goto"
+                    _goto_with_retry(page, href, wait_until=wait_until, timeout=goto_to)
             else:
                 # first *visible* match: the same text often also sits in a hidden mega-menu
                 loc = page.locator(pick["click"]["css"] + ":visible").first
                 try:
                     loc.wait_for(state="visible", timeout=1_500)
-                    loc.click(timeout=6_000)
+                    loc.click(timeout=click_to)
                 except Exception:  # noqa: BLE001 — hidden/covered element
-                    if not has_href:
+                    # A submenu link that is only visible while its parent is hovered.
+                    revealed = None
+                    if use_hover:
+                        try:
+                            revealed = _hover_reveal(
+                                page,
+                                lambda rows, p=pick: next(
+                                    (r for r in rows if r["text"] == p["text"] and (r["href"] == p["href"] or not has_href)),
+                                    None,
+                                ),
+                                keywords=keywords,
+                            )
+                        except Exception:  # noqa: BLE001
+                            revealed = None
+                    if revealed:
+                        trigger = revealed[0]
+                        _click_row(page, revealed[1], trigger, click_to)
+                        via = "hover+click"
+                    elif has_href:
+                        via = "goto"
+                        _goto_with_retry(page, href, wait_until=wait_until, timeout=goto_to)
+                    else:
                         raise
-                    via = "goto"
-                    _goto_with_retry(page, href, timeout=30_000)
         except Exception as exc:  # noqa: BLE001
             hops.append({"from": before, "clicked": pick["text"], "error": str(exc)[:120]})
             continue
         try:
-            page.wait_for_load_state("domcontentloaded", timeout=8_000)
+            page.wait_for_load_state(
+                "domcontentloaded" if wait_until == "commit" else wait_until, timeout=load_to
+            )
         except Exception:  # noqa: BLE001
             pass
         page.wait_for_timeout(400)
@@ -1846,9 +2184,12 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
             except Exception:  # noqa: BLE001
                 break
             continue
-        hops.append(
-            {"from": before, "clicked": pick["text"], "css": pick["click"]["css"], "to": page.url, "via": via}
-        )
+        hop = {"from": before, "clicked": pick["text"], "css": pick["click"]["css"], "to": page.url, "via": via}
+        if trigger is not None:
+            hop["hover"] = trigger["text"]
+        if in_extra and (pick.get("frame") or pick.get("shadow")):
+            hop["where"] = "iframe" if pick.get("frame") else "shadow"
+        hops.append(hop)
         # A one-box search counts as THE search only if the click really landed
         # on a new, non-root page (not the homepage's own header search).
         landed = _landed_on_new_page(before, page.url)
@@ -1863,21 +2204,97 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
     return {"reached": form is not None, "form": form, "hops": hops, "url": page.url}
 
 
+# --- consent banners ---------------------------------------------------------
+
+
+def _dismiss_consent(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
+    """Dismiss a cookie / consent dialog by clicking its reject (else accept) control.
+
+    ``prefer`` is ``"reject"`` (default) or ``"accept"``. Only dialogs whose
+    text is about cookies/consent are touched; login, captcha, terms/disclaimer
+    and form-bearing dialogs are refused and listed under ``refused`` (they stay
+    governed by docs/gate-policy.md), as is any page that is itself a bot wall
+    or captcha. No banner is not an error: ``dismissed`` is false.
+    """
+    from hardly.core.page_nav import PAGE_NAV_JS, consent_refusal, pick_consent_control
+
+    prefer = "accept" if str(raw.get("prefer") or "reject").lower() == "accept" else "reject"
+    timeout = _step_timeout(raw, 5_000) or 5_000
+    walls = [g for g in _page_gate_classes(page, _settled_content(page)) if g in {"bot_wall", "captcha"}]
+    if walls:
+        return {"dismissed": False, "refused": [{"reason": w} for w in walls], "url": page.url}
+
+    def scan() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        ready: list[dict[str, Any]] = []
+        refused: list[dict[str, Any]] = []
+        for fi, fr in enumerate(_nav_frames(page)):
+            try:
+                containers = fr.evaluate(PAGE_NAV_JS, {"op": "consent"}) or []
+            except Exception:  # noqa: BLE001
+                continue
+            for c in sorted(containers, key=lambda c: len(c.get("text") or "")):
+                reason = consent_refusal(c)
+                if reason == "not_consent":
+                    continue
+                if reason:
+                    refused.append({"reason": reason, "frame": fi, "text": (c.get("text") or "")[:80]})
+                    continue
+                ctrl, kind = pick_consent_control(c.get("controls") or [], prefer)
+                if ctrl:
+                    ready.append({"frame": fi, "idx": ctrl["idx"], "label": ctrl["label"], "action": kind})
+        return ready, refused
+
+    ready, refused = scan()
+    if not ready:
+        return {
+            "dismissed": False,
+            "refused": refused,
+            "url": page.url,
+            "note": (
+                "dialog(s) left alone: gate policy applies"
+                if refused
+                else "no cookie/consent dialog with a reject/accept control"
+            ),
+        }
+    pick = ready[0]
+    try:
+        _element_handle(page, pick).click(timeout=timeout)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "dismissed": False,
+            "refused": refused,
+            "label": pick["label"],
+            "error": str(exc)[:120],
+            "url": page.url,
+        }
+    page.wait_for_timeout(400)
+    again, _ = scan()
+    return {
+        "dismissed": True,
+        "action": pick["action"],
+        "label": pick["label"],
+        "gone": not any(a["label"] == pick["label"] for a in again),
+        "refused": refused,
+        "url": page.url,
+    }
+
+
 _COMMON_STEP_KEYS = frozenset({"op", "note", "comment", "label"})
 #: Allowed keys per op; ops absent here are not key-checked.
 _STEP_KEYS: dict[str, frozenset[str]] = {
     "wait": frozenset({"ms", "seconds"}),
-    "goto": frozenset({"url", "ms", "seconds"}),
-    "click": frozenset({"css", "selector", "timeout_ms"}),
+    "goto": frozenset({"url", "ms", "seconds", "timeout_ms", "wait_until"}),
+    "click": frozenset({"css", "selector", "timeout_ms", "wait_until"}),
     "fill": frozenset({"css", "selector", "value", "timeout_ms", "allow_login"}),
     "press": frozenset({"key"}),
-    "find_click": frozenset({"keywords", "max_hops", "min_fields"}),
+    "find_click": frozenset({"keywords", "max_hops", "min_fields", "hover", "timeout_ms", "wait_until"}),
+    "dismiss_consent": frozenset({"prefer", "timeout_ms"}),
     "evaluate": frozenset({"js", "expression", "allow_login"}),
     "fetch": frozenset({"url", "method", "headers", "body"}),
 }
 #: Worker-backed runner accepts richer targets for click/fill/press.
 _STEP_KEYS_WORKER: dict[str, frozenset[str]] = {
-    "click": frozenset({"css", "selector", "ref", "xpath", "text", "role", "name", "timeout_ms"}),
+    "click": frozenset({"css", "selector", "ref", "xpath", "text", "role", "name", "timeout_ms", "wait_until"}),
     "fill": frozenset({"css", "selector", "ref", "xpath", "value", "timeout_ms", "allow_login"}),
     "press": frozenset({"key", "ref", "xpath", "css", "selector", "timeout_ms"}),
 }
@@ -1945,15 +2362,22 @@ def _run_inprocess_recipe(
                 dest = str(raw.get("url") or "").strip()
                 if not dest:
                     raise CaptureError("goto requires url")
-                _goto_with_retry(page, dest)
+                _goto_with_retry(
+                    page,
+                    dest,
+                    wait_until=_step_wait_until(raw),
+                    timeout=_step_timeout(raw, 60_000) or 60_000,
+                )
                 step_out["result"] = {"url": page.url}
             elif op == "click":
                 css = str(raw.get("css") or raw.get("selector") or "").strip()
                 if not css:
                     raise CaptureError("click requires css")
-                page.locator(css).first.click(timeout=int(raw.get("timeout_ms") or 10_000))
+                click_to = _step_timeout(raw, 10_000) or 10_000
+                wu = _step_wait_until(raw, "") if raw.get("wait_until") else ""
+                page.locator(css).first.click(timeout=click_to)
                 page.wait_for_timeout(300)
-                step_out["result"] = {"url": page.url}
+                step_out["result"] = {"url": page.url, **_after_click_wait(page, wu, click_to)}
             elif op == "fill":
                 css = str(raw.get("css") or raw.get("selector") or "").strip()
                 if not css:
@@ -1978,6 +2402,8 @@ def _run_inprocess_recipe(
                 step_out["result"] = {"url": page.url}
             elif op == "find_click":
                 step_out["result"] = _find_click(page, raw)
+            elif op == "dismiss_consent":
+                step_out["result"] = _dismiss_consent(page, raw)
             elif op == "evaluate":
                 js = str(raw.get("js") or raw.get("expression") or "").strip()
                 if not js:

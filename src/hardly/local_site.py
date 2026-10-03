@@ -7,7 +7,9 @@ token-name indirection login, JSON API). Content is invented.
 from __future__ import annotations
 
 import json
+import socket
 import threading
+import time
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Iterator
@@ -98,6 +100,90 @@ _PORTAL_SPA = """<!doctype html><html><body><div id="app">Loading…</div>
 '<input type="submit" value="Go"></form>';},700);</script></body></html>"""
 _PORTAL_SPA_HOME = """<!doctype html><html><body><a href="/portal/spa">Parcel search</a></body></html>"""
 
+# --- /nav2/: iframe, shadow DOM, hover menus, consent dialogs, slow loads -----
+_NAV2_LOOKUP = """<!doctype html><html><body><h1>Widget lookup</h1>
+<form method="get" action="/nav2/results"><label>Widget name <input type="text" name="name"></label>
+<label>Serial <input type="text" name="serial"></label><input type="submit" value="Search"></form></body></html>"""
+
+_NAV2_FRAME = """<!doctype html><html><body><h1>Portal</h1>
+<iframe id="inner" src="/nav2/frame-inner" width="500" height="200"></iframe></body></html>"""
+_NAV2_FRAME_INNER = """<!doctype html><html><body><a href="/nav2/lookup">Widget lookup</a></body></html>"""
+
+_NAV2_SHADOW = """<!doctype html><html><body><h1>Portal</h1><div id="host"></div>
+<script>var r=document.getElementById('host').attachShadow({mode:'open'});
+r.innerHTML='<nav><a href="/nav2/lookup">Widget lookup</a></nav>';</script></body></html>"""
+
+_NAV2_HOVER = """<!doctype html><html><head><style>
+.sub{display:none;position:absolute;background:#eee}.has-sub:hover > .sub{display:block}
+nav li{display:inline-block;margin-right:2em}</style></head><body><nav><ul>
+<li><a href="/nav2/about">About</a></li>
+<li class="has-sub"><a href="#" aria-haspopup="true">Services</a>
+<ul class="sub"><li><a href="/nav2/lookup">Widget lookup</a></li><li><a href="/nav2/faq">Help</a></li></ul></li>
+</ul></nav></body></html>"""
+
+_NAV2_BANNER_JS = (
+    "<script>window.__choice='';function pick(c){window.__choice=c;"
+    "document.getElementById('cookie-banner').style.display='none';}</script>"
+)
+_NAV2_CONSENT = (
+    """<!doctype html><html><body><h1>Home</h1><a href="/nav2/lookup">Widget lookup</a>
+<div id="cookie-banner" role="dialog" style="position:fixed;bottom:0;left:0;right:0;background:#fff;border:1px solid #888;padding:12px">
+<p>We use cookies to improve this site. Choose how we may use them.</p>
+<button onclick="pick('accept')">Accept all</button>
+<button onclick="pick('settings')">Manage preferences</button>
+<button onclick="pick('reject')">Reject all</button></div>"""
+    + _NAV2_BANNER_JS
+    + "</body></html>"
+)
+_NAV2_CONSENT_ACCEPT = (
+    """<!doctype html><html><body><h1>Home</h1>
+<div id="cookie-banner" role="dialog" style="position:fixed;bottom:0;left:0;right:0;background:#fff;padding:12px">
+<p>This site uses cookies.</p><button onclick="pick('accept')">Got it</button></div>"""
+    + _NAV2_BANNER_JS
+    + "</body></html>"
+)
+_NAV2_TERMS = (
+    """<!doctype html><html><body><h1>Records</h1>
+<div id="cookie-banner" role="dialog" style="position:fixed;top:20%;left:20%;width:60%;background:#fff;border:1px solid #888;padding:12px">
+<p>Terms of use: by entering you give consent to these terms and agree not to use automated access.</p>
+<button onclick="pick('agree')">I agree</button><button onclick="pick('leave')">Decline</button></div>"""
+    + _NAV2_BANNER_JS
+    + "</body></html>"
+)
+_NAV2_LOGIN_DIALOG = (
+    """<!doctype html><html><body><h1>Members</h1>
+<div id="cookie-banner" role="dialog" style="position:fixed;top:20%;left:20%;width:60%;background:#fff;border:1px solid #888;padding:12px">
+<p>We use cookies. Sign in to continue.</p><input type="text" name="user"><input type="password" name="pw">
+<button onclick="pick('signin')">Sign in</button><button onclick="pick('accept')">Accept</button></div>"""
+    + _NAV2_BANNER_JS
+    + "</body></html>"
+)
+_NAV2_CAPTCHA_DIALOG = (
+    """<!doctype html><html><body><h1>Check</h1>
+<div id="cookie-banner" role="dialog" style="position:fixed;top:20%;left:20%;width:60%;background:#fff;border:1px solid #888;padding:12px">
+<p>Cookies and consent: confirm you are human.</p><div class="g-recaptcha" data-sitekey="x"></div>
+<button onclick="pick('accept')">Accept</button></div>"""
+    + _NAV2_BANNER_JS
+    + "</body></html>"
+)
+# domcontentloaded fires at once; `load` waits for the slow image.
+_NAV2_SLOW = """<!doctype html><html><body><p>slow page</p><img src="/nav2/slow.gif?ms=2500"></body></html>"""
+_GIF = bytes.fromhex("47494638396101000100800000000000ffffff21f90401000000002c00000000010001000002024401003b")
+
+_NAV2_PAGES = {
+    "/nav2/lookup": _NAV2_LOOKUP,
+    "/nav2/frame": _NAV2_FRAME,
+    "/nav2/frame-inner": _NAV2_FRAME_INNER,
+    "/nav2/shadow": _NAV2_SHADOW,
+    "/nav2/hover": _NAV2_HOVER,
+    "/nav2/consent": _NAV2_CONSENT,
+    "/nav2/consent-accept": _NAV2_CONSENT_ACCEPT,
+    "/nav2/terms": _NAV2_TERMS,
+    "/nav2/login-dialog": _NAV2_LOGIN_DIALOG,
+    "/nav2/captcha-dialog": _NAV2_CAPTCHA_DIALOG,
+    "/nav2/slow": _NAV2_SLOW,
+}
+
 _INDEX = """<!doctype html><html><head><title>Local demo</title></head><body>
 <a href="/directory.aspx">Widget directory search</a> <a href="/login">Sign in</a>
 <a href="/api/items">items</a></body></html>"""
@@ -128,7 +214,26 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         path = self.path.split("?", 1)[0]
-        if path == "/directory.aspx":
+        if path == "/nav2/slow.gif":
+            query = self.path.partition("?")[2]
+            ms = int(query.split("ms=")[1].split("&")[0]) if "ms=" in query else 2500
+            time.sleep(min(ms, 10_000) / 1000.0)
+            # The browser may have given up on this image already; MSG_NOSIGNAL keeps a
+            # write to its closed socket from raising SIGPIPE (fatal if a test reset it).
+            head = (
+                "HTTP/1.1 200 OK\r\nContent-Type: image/gif\r\n"
+                f"Content-Length: {len(_GIF)}\r\nConnection: close\r\n\r\n"
+            ).encode()
+            try:
+                self.connection.send(head + _GIF, getattr(socket, "MSG_NOSIGNAL", 0))
+            except OSError:
+                pass
+            self.close_connection = True
+        elif path in _NAV2_PAGES:
+            self._send(_NAV2_PAGES[path])
+        elif path.startswith("/nav2/"):
+            self._send("<html><body><p>" + path.rsplit("/", 1)[-1] + "</p></body></html>")
+        elif path == "/directory.aspx":
             self._send(_WEBFORMS, cookie="ASP.NET_SessionId=localdemo0001; path=/; HttpOnly")
         elif path == "/login":
             self._send(_LOGIN, cookie="JSESSIONID=localdemo0002; path=/; HttpOnly; SameSite=Lax")
