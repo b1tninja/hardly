@@ -33,7 +33,7 @@ A recipe is a JSON list of steps. Headless one-shots run **in-process**:
 | `click` | `css` (or `selector`), `timeout_ms` | Playwright selectors: `#id`, `a:has-text("Next")` |
 | `fill` | `css`, `value` | |
 | `press` | `key` | default `Enter` |
-| `find_click` | `keywords` (your domain terms), `max_hops` (default 4, max 8), `min_fields` (default 2) | follows the best-ranked link/button/postback each hop until a real search form appears (login forms and one-box site search are skipped); result has `reached`, `form`, `hops` |
+| `find_click` | `keywords` (your domain terms), `max_hops` (default 4, max 8), `min_fields` (default 2) | follows the best-ranked link/button/postback each hop until a real search form appears; result has `reached`, `form`, `hops` (each hop's `via` is `click` or `goto`). The goal check skips login forms, one-box site search, newsletter/feedback/translate widgets, email-only and select-only forms, and nameless inputs; hidden elements and `target=_blank` links fall back to navigating to the link's `href` |
 | `evaluate` | `js` | result is returned in the step output |
 | `fetch` | `url`, `method`, `headers`, `body` | same-tab `fetch`, so APIs/GraphQL land in the HAR without clicking through a UI |
 

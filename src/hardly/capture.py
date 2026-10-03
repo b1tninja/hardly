@@ -1151,12 +1151,33 @@ def capture_headless(
     return out
 
 
+def _settled_content(page: Any) -> str:
+    """``page.content()`` that survives in-flight navigations and empty shells."""
+    try:
+        page.wait_for_load_state("domcontentloaded", timeout=8_000)
+    except Exception:  # noqa: BLE001
+        pass
+    html = ""
+    for _ in range(4):
+        try:
+            html = page.content()
+        except Exception:  # noqa: BLE001 — "page is navigating and changing the content"
+            page.wait_for_timeout(600)
+            continue
+        if len(html) > 120:
+            return html
+        page.wait_for_timeout(600)
+    return html
+
+
 def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
     """Follow ranked links/buttons hop by hop until a search form appears.
 
     Step fields: ``keywords`` (list of domain terms), ``max_hops`` (default 4,
     cap 8), ``min_fields`` (default 2). Generic signals plus caller keywords
-    choose the click; visited targets are never re-clicked.
+    choose the click; visited targets are never re-clicked. Hidden elements,
+    ``target=_blank`` links and failed clicks fall back to navigating straight
+    to the link's ``href``.
     """
     from hardly.core.search_nav import page_candidates, search_form_reached
 
@@ -1167,9 +1188,9 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
     hops: list[dict[str, Any]] = []
     form = None
     for _ in range(max_hops + 1):
-        html = page.content()
+        html = _settled_content(page)
         cands, structure = page_candidates(html, base_url=page.url, keywords=keywords)
-        form = search_form_reached(structure, min_fields=min_fields)
+        form = search_form_reached(structure, min_fields=min_fields, keywords=keywords)
         if form:
             break
         if len(hops) >= max_hops:
@@ -1179,8 +1200,23 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
             break
         visited.add(pick["click"]["css"])
         before = page.url
+        href = pick.get("href") or ""
+        has_href = href.startswith(("http://", "https://"))
+        via = "click"
         try:
-            page.locator(pick["click"]["css"]).first.click(timeout=8_000)
+            if has_href and pick.get("target") == "_blank":
+                via = "goto"  # would open a new tab we are not tracking
+                page.goto(href, wait_until="domcontentloaded", timeout=30_000)
+            else:
+                loc = page.locator(pick["click"]["css"]).first
+                try:
+                    loc.wait_for(state="visible", timeout=1_500)
+                    loc.click(timeout=6_000)
+                except Exception:  # noqa: BLE001 — hidden/covered element
+                    if not has_href:
+                        raise
+                    via = "goto"
+                    page.goto(href, wait_until="domcontentloaded", timeout=30_000)
         except Exception as exc:  # noqa: BLE001
             hops.append({"from": before, "clicked": pick["text"], "error": str(exc)[:120]})
             continue
@@ -1190,7 +1226,7 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
             pass
         page.wait_for_timeout(400)
         hops.append(
-            {"from": before, "clicked": pick["text"], "css": pick["click"]["css"], "to": page.url}
+            {"from": before, "clicked": pick["text"], "css": pick["click"]["css"], "to": page.url, "via": via}
         )
     return {"reached": form is not None, "form": form, "hops": hops, "url": page.url}
 

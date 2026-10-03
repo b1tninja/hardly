@@ -57,6 +57,16 @@ _PORTAL_LOOKUP = """<!doctype html><html><body><h1>Widget lookup</h1>
 <label>Category <select name="category"><option>a</option><option>b</option></select></label>
 <input type="submit" value="Search"></form></body></html>"""
 
+# Real-world navigation traps: hidden mobile trigger, link in an inactive
+# carousel slide, a target=_blank link, and utility forms that are not the goal.
+_PORTAL_TRAPS = """<!doctype html><html><body>
+<form action="/subscribe" method="post"><input type="email" name="email"><input type="submit" value="Subscribe"></form>
+<form action="/find"><input type="text" name="keys"><input type="submit" value="Go"></form>
+<button id="mobile-trigger-search" style="display:none" onclick="location.href='/nowhere'">View Search</button>
+<div style="visibility:hidden"><a href="/portal/lookup">Business entity search</a></div>
+<a href="/portal/lookup" target="_blank">Records lookup (opens in new tab)</a>
+</body></html>"""
+
 _INDEX = """<!doctype html><html><head><title>Local demo</title></head><body>
 <a href="/directory.aspx">Widget directory search</a> <a href="/login">Sign in</a>
 <a href="/api/items">items</a></body></html>"""
@@ -93,6 +103,8 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(_LOGIN, cookie="JSESSIONID=localdemo0002; path=/; HttpOnly; SameSite=Lax")
         elif path == "/portal":
             self._send(_PORTAL)
+        elif path == "/portal/traps":
+            self._send(_PORTAL_TRAPS)
         elif path == "/portal/services":
             self._send(_PORTAL_SERVICES)
         elif path == "/portal/lookup":

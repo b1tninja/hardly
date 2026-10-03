@@ -175,3 +175,31 @@ def test_find_click_navigates_to_search_form(tmp_path, monkeypatch):
     assert result["url"].endswith("/portal/lookup")
     assert [h["clicked"] for h in result["hops"]] == ["Online services", "Widget lookup"]
     assert set(result["form"]["fields"]) == {"name", "category"}
+
+
+@pytest.mark.skipif(not playwright_available(), reason="playwright not installed")
+def test_find_click_survives_real_world_traps(tmp_path, monkeypatch):
+    """Utility forms are not the goal; hidden and new-tab links fall back to href."""
+    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    if not playwright_status().get("ready"):
+        pytest.skip("Playwright browser not ready")
+
+    from hardly.capture import capture_headless
+    from hardly.local_site import serve
+
+    with serve() as base:
+        recipe = [
+            {"op": "goto", "url": f"{base}/portal/traps"},
+            {"op": "find_click", "keywords": ["entity", "lookup"], "max_hops": 3},
+        ]
+        cap = capture_headless(
+            f"{base}/portal/traps", wait_seconds=0.3, recipe=recipe, open_session=False, brief=False
+        )
+    result = next(
+        s for s in cap["discover"]["recipe"]["steps"] if s["op"] == "find_click"
+    )["result"]
+    assert result["reached"], result
+    assert result["url"].endswith("/portal/lookup")
+    assert result["hops"], "the traps page has no search form of its own"
+    assert result["hops"][0]["via"] == "goto"  # hidden / new-tab link navigated by href
+    assert "mobile-trigger-search" not in str(result["hops"])

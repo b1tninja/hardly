@@ -32,6 +32,7 @@ _GATEWAY = re.compile(
     re.I,
 )
 _GATEWAY_WEIGHT = 2
+_HIDDENISH = re.compile(r"mobile|offcanvas|off-canvas|sr-only|skip|hamburger|navbar-toggle", re.I)
 _KEYWORD_WEIGHT = 10
 _GENERIC_WEIGHT = 3
 
@@ -80,6 +81,7 @@ def rank_search_links(
         out.append(
             {
                 "kind": link.get("kind") or "link",
+                "target": link.get("target") or "",
                 "score": score,
                 "matched_keywords": matched,
                 "text": text,
@@ -95,6 +97,9 @@ def actions_as_links(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Adapt JS click targets (buttons, postback/js links) to link-shaped rows."""
     out = []
     for a in actions:
+        # Hidden mobile/off-canvas triggers are never what a visitor uses.
+        if _HIDDENISH.search(f"{a.get('id') or ''} {a.get('name') or ''}"):
+            continue
         sel = f"#{a['id']}" if a.get("id") and re.fullmatch(r"[A-Za-z][\w-]*", a["id"]) else None
         out.append(
             {
@@ -108,43 +113,72 @@ def actions_as_links(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 _SITE_SEARCH_NAME = re.compile(
-    r"^(q|s|search|query|keyword|keywords|term|searchterm|site-search)$", re.I
+    r"^(q|s|search|query|keyword|keywords|term|searchterm|site-?search|keys|search[-_]?(term|text|box|input|query|field)|"
+    r"cdssearchtext|searchtext|st|k|text)$",
+    re.I,
+)
+# Forms that exist on almost every site and are never the lookup we want.
+_UTILITY_ACTION = re.compile(
+    r"translate|subscribe|newsletter|govdelivery|feedback|report[-_]?a?[-_]?problem|signup|sign-up|"
+    r"register|login|signin|comment|contact|unsubscribe|/search/?$|/find/?$",
+    re.I,
 )
 _ENTRY_TYPES = frozenset(
-    {"text", "search", "number", "date", "email", "tel", "select", "textarea", "datetime-local", "month"}
+    {"text", "search", "number", "date", "tel", "select", "textarea", "datetime-local", "month"}
 )
 
 
 def search_form_reached(
-    structure: dict[str, Any], *, min_fields: int = 2
+    structure: dict[str, Any],
+    *,
+    min_fields: int = 2,
+    keywords: tuple[str, ...] | list[str] = (),
 ) -> dict[str, Any] | None:
     """First form that looks like a real search/lookup form, else ``None``.
 
-    Skips login forms (password field) and one-box site-search widgets, so a
-    landing page's header search does not end navigation early.
+    Skips login forms, one-box site search, newsletter/feedback/translate
+    widgets, email-only and select-only forms, and forms whose inputs have no
+    names (nothing to submit). A one-field form counts only when its field name
+    is specific and, if ``keywords`` are given, mentions one of them.
     """
+    kw = [k.lower() for k in keywords if k]
     for form in structure.get("forms") or []:
         fields = form.get("fields") or []
         if any((f.get("type") or "").lower() == "password" for f in fields):
             continue
-        entry = [
-            f for f in fields
-            if (f.get("type") or f.get("kind") or "").lower() in _ENTRY_TYPES
-            or f.get("kind") in {"select", "textarea"}
-        ]
-        if not entry:
-            continue
-        if len(entry) < min_fields and not (
-            len(entry) == 1
-            and not _SITE_SEARCH_NAME.match(str(entry[0].get("name") or entry[0].get("id") or ""))
+        if _UTILITY_ACTION.search(form.get("action") or "") and not any(
+            k in (form.get("action") or "").lower() for k in kw
         ):
             continue
-        return {
-            "action": form.get("action") or "",
-            "method": form.get("method") or "",
-            "fields": [f.get("name") or f.get("id") or "" for f in entry][:12],
-        }
+        entry = [
+            f for f in fields
+            if ((f.get("type") or f.get("kind") or "").lower() in _ENTRY_TYPES or f.get("kind") in {"select", "textarea"})
+            and (f.get("name") or f.get("id"))
+        ]
+        if not entry or all((f.get("kind") == "select" or f.get("type") == "select") for f in entry):
+            continue
+        names = [str(f.get("name") or f.get("id") or "") for f in entry]
+        blob = " ".join(names + [form.get("action") or "", form.get("id") or ""]).lower()
+        kw_hit = any(k in blob for k in kw)
+        if len(entry) >= max(min_fields, 2):
+            return _form_hit(form, entry)
+        # single named field: needs a specific name (and a keyword when given)
+        name = names[0]
+        if _SITE_SEARCH_NAME.match(name) or "search" in name.lower():
+            if not kw_hit:
+                continue
+        elif kw and not kw_hit:
+            continue
+        return _form_hit(form, entry)
     return None
+
+
+def _form_hit(form: dict[str, Any], entry: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "action": form.get("action") or "",
+        "method": form.get("method") or "",
+        "fields": [f.get("name") or f.get("id") or "" for f in entry][:12],
+    }
 
 
 def page_candidates(
@@ -176,7 +210,13 @@ def find_search_entry(
     from hardly.index import query as q
 
     kw = tuple(k.strip() for k in keywords if k and k.strip())
-    host = host or q.preferred_host(conn)
+    if not host:
+        # The page we navigate is the first HTML document, not whichever host
+        # has the most hits (an embedded video host would win otherwise).
+        first = conn.execute(
+            "SELECT host FROM entries WHERE status = 200 AND mime LIKE '%html%' ORDER BY entry_id LIMIT 1"
+        ).fetchone()
+        host = first["host"] if first else q.preferred_host(conn)
     where, params = "e.is_noise = 0 AND sb.preview_text IS NOT NULL", []
     if host:
         where += " AND e.host = ?"
