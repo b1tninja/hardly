@@ -166,10 +166,11 @@ def detect_grids(
                     param_entries.setdefault(style, []).append(eid)
 
     # Libraries named in request URLs (scripts are separate HAR entries).
-    for row in rows:
-        target = f"{row['path']}"
+    # (static assets are flagged noise, so this pass ignores that filter)
+    url_sql = "SELECT entry_id, path FROM entries" + (" WHERE host = ?" if host else "") + " LIMIT 5000"
+    for row in conn.execute(url_sql, [host.lower()] if host else []):
         for name, pat in _URL_LIBS:
-            if pat.search(target):
+            if pat.search(row["path"] or ""):
                 html_hits.setdefault(name, []).append(int(row["entry_id"]))
     # Signals computed at ingest on the full body (markers often sit beyond
     # the stored preview). Absent in sessions indexed by older versions.
