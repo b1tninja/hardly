@@ -240,13 +240,16 @@ auth notes, and the date you verified them.
 ## 6. Status of the navigation hardening
 
 First live sweep (21 portal landing pages, before the fixes): 3 produced a
-result, and none of those got there by navigating (8 were goal-detector false
-positives, the rest failed on hidden elements, navigation races or bot walls).
+result, and none of those got there by navigating. Most "reached" results were
+goal-detector false positives (site-search boxes, newsletter, translate and
+feedback forms); the rest failed on hidden elements, navigation races, or bot
+walls.
 
 Re-sweep after the goal-detector, visibility and retry fixes (partial, 11 of
 17 sites when this was written): Delaware reached its real entity-search form
 (three named fields); the Library of Congress reached its catalog search; a
-state patent office SPA search page was reached by link; the others still
+national patent and trademark office's trademark-search page was reached by link;
+the others still
 wandered after a good first hop or landed on browser error pages. The
 follow-up patch (feedback wording never a candidate, evidence floor after hop 1,
 step back from `chrome-error://`, keyword vouching by field name only) was

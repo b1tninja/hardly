@@ -15,6 +15,7 @@ SDK you build with it.
 | [capture.md](capture.md) | Recording HARs: headless, interactive, recipes, env vars, containers |
 | [technologies.md](technologies.md) | What hardly detects, per technology, and what it does not |
 | [integrating.md](integrating.md) | Using hardly from another project (MCP, CLI, Python), fixtures, soak |
+| [crawl-handoff.md](crawl-handoff.md) | Crawl strategy, budgets, and a catalogue of traps hit during live testing |
 | [tools.md](tools.md) | Generated reference for every MCP tool |
 
 Setup (venv, Docker, Cursor MCP) lives in the top-level [README](../README.md);
