@@ -86,6 +86,16 @@ CREATE TABLE IF NOT EXISTS value_shapes (
     shape TEXT NOT NULL
 );
 
+-- Shape-only summaries of stream encodings (grpc-web, protobuf, msgpack, csv, sse, websocket).
+CREATE TABLE IF NOT EXISTS stream_info (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id INTEGER NOT NULL REFERENCES entries(entry_id),
+    side TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    summary_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_stream_info_entry ON stream_info(entry_id);
+
 CREATE INDEX IF NOT EXISTS idx_shapes_entry ON value_shapes(entry_id);
 CREATE INDEX IF NOT EXISTS idx_shapes_shape ON value_shapes(shape);
 """
