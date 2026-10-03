@@ -29,7 +29,7 @@ def session_id(tmp_path, monkeypatch):
 def test_open_summary(session_id):
     conn = sess.require_conn(session_id)
     summary = q.summary(conn)
-    assert summary["entries"] == 7
+    assert summary["entries"] == 22
     assert summary["noise"] >= 3  # js, options, analytics
     assert summary["api"] >= 3
 

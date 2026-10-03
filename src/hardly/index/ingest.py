@@ -32,12 +32,39 @@ from hardly.core.urls import parse_url, path_template
 from hardly.index.schema import connect, init_db
 
 PREVIEW_CHARS = 8000
+# HTML portals often bury forms after scripts/CSS; keep more for hardly_forms.
+HTML_PREVIEW_CHARS = 64_000
 
 
 def _header_list(headers: list | None) -> list[dict]:
     if not headers:
         return []
     return [{"name": h.get("name", ""), "value": h.get("value", "")} for h in headers]
+
+
+def _initiator(entry: dict) -> tuple[str | None, str | None]:
+    """Extract Chrome-style _initiator type + URL (stack frame fallback)."""
+    init = entry.get("_initiator") or entry.get("initiator") or {}
+    if not isinstance(init, dict):
+        return None, None
+    init_type = init.get("type")
+    url = init.get("url")
+    if not url:
+        stack = init.get("stack") or {}
+        frames = stack.get("callFrames") or []
+        if frames and isinstance(frames[0], dict):
+            url = frames[0].get("url")
+        parent = stack.get("parent") or {}
+        if not url and isinstance(parent, dict):
+            pframes = parent.get("callFrames") or []
+            if pframes and isinstance(pframes[0], dict):
+                url = pframes[0].get("url")
+    if url and len(str(url)) > 2000:
+        url = str(url)[:2000]
+    return (
+        str(init_type) if init_type else None,
+        str(url) if url else None,
+    )
 
 
 def _body_text(content: dict | None) -> tuple[str | None, str | None, int]:
@@ -93,7 +120,12 @@ def _store_body(
     preview = None
     sha = None
     if text is not None:
-        redacted = redact_body_text(text, max_chars=PREVIEW_CHARS)
+        limit = (
+            HTML_PREVIEW_CHARS
+            if mime and "html" in str(mime).lower()
+            else PREVIEW_CHARS
+        )
+        redacted = redact_body_text(text, max_chars=limit)
         preview = redacted["text"]
         sha = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
         size = redacted["size"] or size
@@ -181,14 +213,16 @@ def ingest_har(har_path: str | Path, db_path: str | Path) -> dict[str, Any]:
             resp_text, resp_mime, resp_size = _body_text(content)
             mime = mime or resp_mime
             time_ms = _num(entry.get("time"))
+            init_type, init_url = _initiator(entry)
 
             conn.execute(
                 """
                 INSERT INTO entries (
                     entry_id, method, scheme, host, path, path_template,
                     query_json, query_raw, status, mime, started_datetime, time_ms,
-                    is_noise, has_req_body, has_resp_body
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    is_noise, has_req_body, has_resp_body,
+                    pageref, initiator_type, initiator_url
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     entry_id,
@@ -206,6 +240,9 @@ def ingest_har(har_path: str | Path, db_path: str | Path) -> dict[str, Any]:
                     1 if noise else 0,
                     1 if req_text else 0,
                     1 if resp_text else 0,
+                    entry.get("pageref") or None,
+                    init_type,
+                    init_url,
                 ),
             )
 

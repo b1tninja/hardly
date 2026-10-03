@@ -139,12 +139,17 @@ def export_openapi(
 
         paths.setdefault(path_key, {})[method] = op
 
-    doc = {
+    security_schemes, security = _security_from_auth(conn, host=host)
+
+    doc: dict[str, Any] = {
         "openapi": "3.0.3",
         "info": {"title": title, "version": "0.1.0"},
         "servers": list(servers.values()),
         "paths": paths,
     }
+    if security_schemes:
+        doc["components"] = {"securitySchemes": security_schemes}
+        doc["security"] = security
 
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -161,7 +166,58 @@ def export_openapi(
         "format": fmt,
         "paths": len(paths),
         "host": host,
+        "security_schemes": list(security_schemes.keys()),
     }
+
+
+def _security_from_auth(
+    conn: sqlite3.Connection, *, host: str | None
+) -> tuple[dict[str, Any], list[dict[str, list]]]:
+    """Build OpenAPI securitySchemes from hardly_auth heuristics."""
+    from hardly.core.auth import detect_auth
+
+    auth = detect_auth(conn, host=host)
+    headers = {
+        **(auth.get("auth_related_headers") or {}),
+        **(auth.get("custom_auth_headers") or {}),
+    }
+    schemes: dict[str, Any] = {}
+    if "authorization" in headers:
+        schemes["bearerAuth"] = {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "Authorization header seen in capture (often stripped by Chrome HAR).",
+        }
+    if "cookie" in headers or "set-cookie" in headers:
+        schemes["cookieAuth"] = {
+            "type": "apiKey",
+            "in": "cookie",
+            "name": "session",
+            "description": "Session cookie — name is a placeholder; check hardly_cookies.",
+        }
+    for name in sorted(headers):
+        if name in {"authorization", "cookie", "set-cookie"}:
+            continue
+        if "csrf" in name or "xsrf" in name:
+            key = "csrfHeader"
+            if key not in schemes:
+                schemes[key] = {
+                    "type": "apiKey",
+                    "in": "header",
+                    "name": name,
+                    "description": "CSRF / XSRF header observed in capture.",
+                }
+        elif "api" in name or name.endswith("-key") or "auth" in name:
+            key = "apiKeyHeader"
+            if key not in schemes:
+                schemes[key] = {
+                    "type": "apiKey",
+                    "in": "header",
+                    "name": name,
+                }
+    security = [{name: []} for name in schemes][:4]
+    return schemes, security
 
 
 def _to_yaml(obj: Any, indent: int = 0) -> str:

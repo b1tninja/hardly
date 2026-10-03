@@ -25,13 +25,18 @@ CREATE TABLE IF NOT EXISTS entries (
     time_ms REAL,
     is_noise INTEGER NOT NULL DEFAULT 0,
     has_req_body INTEGER NOT NULL DEFAULT 0,
-    has_resp_body INTEGER NOT NULL DEFAULT 0
+    has_resp_body INTEGER NOT NULL DEFAULT 0,
+    pageref TEXT,
+    initiator_type TEXT,
+    initiator_url TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_entries_host ON entries(host);
 CREATE INDEX IF NOT EXISTS idx_entries_template ON entries(host, method, path_template);
 CREATE INDEX IF NOT EXISTS idx_entries_noise ON entries(is_noise);
 CREATE INDEX IF NOT EXISTS idx_entries_path ON entries(path);
+CREATE INDEX IF NOT EXISTS idx_entries_pageref ON entries(pageref);
+CREATE INDEX IF NOT EXISTS idx_entries_initiator ON entries(initiator_url);
 
 CREATE TABLE IF NOT EXISTS headers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,7 +71,9 @@ CREATE VIRTUAL TABLE IF NOT EXISTS bodies_fts USING fts5(
 
 
 def connect(db_path: str) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
+    # MCP dispatches each tool call on its own thread. The session keeps one
+    # connection; SQLite's default serialized mode makes that safe.
+    conn = sqlite3.connect(db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")

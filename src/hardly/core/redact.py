@@ -44,8 +44,19 @@ SENSITIVE_JSON_KEYS = frozenset(
         "session",
         "cookie",
         "jwt",
+        "passcode",
+        "passphrase",
+        "accountnumber",
+        "routingnumber",
+        "cardnumber",
+        "securitycode",
+        "securityanswer",
     }
 )
+
+# Short names that are a secret only as the whole key ("Pwd" in Accela's sign-in, "pin"): matched exactly, so "shipping"
+# or "pinned" are not redacted.
+EXACT_SENSITIVE_KEYS = frozenset({"pwd", "pass", "pw", "pin", "otp", "ssn", "cvv", "cvc", "mfa", "code2fa"})
 
 JWT_RE = re.compile(
     r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"
@@ -59,6 +70,12 @@ def is_sensitive_header(name: str) -> bool:
 
 def is_sensitive_key(key: str) -> bool:
     k = key.lower().replace("-", "").replace("_", "")
+    # An ASP.NET field name carries its control path ("ctl00$PlaceHolderMain$txtPwd"): judge its last part too.
+    tail = re.split(r"[$.:\[\]]", key)[-1].lower().replace("-", "").replace("_", "") if key else k
+    if k in EXACT_SENSITIVE_KEYS or tail in EXACT_SENSITIVE_KEYS:
+        return True
+    if tail.startswith(("txt", "tb")) and tail[3:] in EXACT_SENSITIVE_KEYS | {"password", "passwd"}:
+        return True
     for s in SENSITIVE_JSON_KEYS:
         if s.replace("_", "") in k or k == s.replace("_", ""):
             return True
@@ -137,8 +154,24 @@ def redact_body_text(text: str | None, *, max_chars: int = 4000) -> dict:
         return {"text": out_text, "size": size, "truncated": truncated, "json": True}
     except (json.JSONDecodeError, TypeError, ValueError):
         return {
-            "text": redact_string(preview),
+            "text": redact_form(redact_string(preview)),
             "size": size,
             "truncated": truncated,
             "json": False,
         }
+
+
+_FORM_PAIR = re.compile(r"(^|&)([^&=\s]{1,200})=([^&]*)")
+
+
+def redact_form(text: str) -> str:
+    """Redact the values of sensitive fields in a form-encoded body (``Name=x&Pwd=y``); other text is unchanged."""
+    if not text or "=" not in text or "\n" in text.strip():
+        return text
+    from urllib.parse import unquote_plus
+
+    def swap(m: re.Match) -> str:
+        key = unquote_plus(m.group(2))
+        return f"{m.group(1)}{m.group(2)}={REDACTED}" if is_sensitive_key(key) else m.group(0)
+
+    return _FORM_PAIR.sub(swap, text)

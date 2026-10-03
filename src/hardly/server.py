@@ -20,11 +20,39 @@ from hardly.index import query as q
 mcp = FastMCP(
     "hardly",
     instructions=(
-        "HAR analysis tools. Always open a HAR with hardly_open first, then use "
-        "session_id with other tools. Responses are redacted and truncated — "
-        "never read the raw HAR file into context."
+        "HAR analysis tools. Call hardly_capabilities / hardly_help first if "
+        "unsure. Always open a HAR with hardly_open first, then use "
+        "session_id with other tools. After MCP restart, hardly_reopen or any "
+        "tool auto-reattaches a cached session_id. Responses are redacted and "
+        "truncated — never read the raw HAR file into context. "
+        "For HTML portals: start with hardly_brief (or hardly_recommend), "
+        "then hardly_forms / hardly_correlate / hardly_trace / hardly_secrets; "
+        "hardly_routes + hardly_tree + hardly_around for detail XHRs; "
+        "hardly_params for static/dynamic fields; hardly_graphql when relevant. "
+        "hardly_stub / hardly_recipe_plan for client sketches. "
+        "Exports: md / openapi / postman / brief. "
+        "If urllib gets 403, check hardly_wall before retrying. "
+        "To record: hardly_capture_start (prefer channel=chrome), drive with "
+        "hardly_capture_elements / _recipe / _click / _fill, then "
+        "hardly_capture_stop."
     ),
 )
+
+
+@mcp.tool
+def hardly_capabilities() -> str:
+    """Version, feature flags, and tool names — use to detect a stale MCP server."""
+    from hardly.capabilities import capabilities
+
+    return _ok(capabilities())
+
+
+@mcp.tool
+def hardly_help(topic: str = "") -> str:
+    """Categorized tool catalog and workflows. Pass topic e.g. portal, tokens, capture."""
+    from hardly.core.help import tool_help
+
+    return _ok(tool_help(topic or None))
 
 
 def _ok(data: Any) -> str:
@@ -45,6 +73,395 @@ def hardly_open(har_path: str, force: bool = False) -> str:
 
 
 @mcp.tool
+def hardly_capture_start(
+    url: str = "",
+    har_path: str = "",
+    headed: bool = True,
+    channel: str = "",
+    url_filter: str = "",
+    omit_content: bool = False,
+    label: str = "",
+    profile: str = "",
+    same_tab: bool = True,
+    trace: bool = False,
+) -> str:
+    """Spawn Chromium with Playwright HAR recording.
+
+    Requires optional deps: ``pip install -e ".[capture]"`` and
+    ``playwright install chromium``. Leave headed=true so a person can click
+    through portals that block plain urllib (e.g. Acclaim). Returns capture_id;
+    call hardly_capture_stop when done (capture_id optional = latest running).
+    channel may be \"chrome\" or \"msedge\". url_filter is a Playwright glob
+    (e.g. ``**/searchPost/**``) to keep the HAR small. profile keeps cookies.
+    same_tab (default true) forces target=_blank / window.open into the current
+    tab; set false to allow real popups (still recorded in the same context).
+    trace=true writes a ``.trace.zip`` beside the HAR (or set HARDLY_CAPTURE_TRACE=1).
+    """
+    try:
+        from hardly.capture import CaptureError, start_capture
+    except ImportError as exc:
+        return _err(exc)
+    try:
+        result = start_capture(
+            url,
+            har_path or None,
+            headed=headed,
+            channel=channel,
+            url_filter=url_filter,
+            omit_content=omit_content,
+            label=label,
+            user_data_dir=profile or None,
+            trace=True if trace else None,
+            same_tab=same_tab,
+        )
+        # Keep channel_hint / aria-ref next from start_capture.
+        return _ok(result)
+    except CaptureError as exc:
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_capture_stop(
+    capture_id: str = "",
+    open_session: bool = True,
+    force: bool = False,
+) -> str:
+    """Stop a capture, flush the HAR, optionally hardly_open it.
+
+    Omit capture_id to stop the latest running capture.
+    """
+    try:
+        from hardly.capture import CaptureError, stop_capture
+    except ImportError as exc:
+        return _err(exc)
+    try:
+        return _ok(
+            stop_capture(
+                capture_id or None,
+                open_session=open_session,
+                force=force,
+            )
+        )
+    except CaptureError as exc:
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_capture_goto(url: str, capture_id: str = "") -> str:
+    """Navigate the running capture's tab (latest if capture_id omitted)."""
+    try:
+        from hardly.capture import CaptureError, navigate_capture
+    except ImportError as exc:
+        return _err(exc)
+    try:
+        return _ok(navigate_capture(capture_id or None, url))
+    except CaptureError as exc:
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_capture_elements(
+    capture_id: str = "",
+    limit: int = 40,
+    query: str = "",
+) -> str:
+    """List visible interactive elements on the live capture tab.
+
+    Returns tag/text/href plus ``css`` and ``xpath`` locators for each control
+    (buttons, links, inputs, onclick nodes). Use those with
+    hardly_capture_click / hardly_capture_fill. Omit capture_id = latest running.
+    Optional ``query`` is a CSS selector override for which nodes to scan.
+    """
+    try:
+        from hardly.capture import CaptureError, list_capture_elements
+    except ImportError as exc:
+        return _err(exc)
+    try:
+        return _ok(
+            list_capture_elements(
+                capture_id or None,
+                limit=min(max(1, limit), 100),
+                query=query or "",
+            )
+        )
+    except CaptureError as exc:
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_capture_click(
+    capture_id: str = "",
+    ref: str = "",
+    xpath: str = "",
+    css: str = "",
+    text: str = "",
+    role: str = "",
+    name: str = "",
+    timeout_ms: int = 10000,
+) -> str:
+    """Click a visible element on the live capture tab.
+
+    Prefer ``ref`` from ``hardly_capture_aria`` (e.g. ``e12`` / ``[ref=e12]``).
+    Else xpath/css from hardly_capture_elements, or text= / role=+name=.
+    """
+    try:
+        from hardly.capture import CaptureError, click_capture
+    except ImportError as exc:
+        return _err(exc)
+    try:
+        return _ok(
+            click_capture(
+                capture_id or None,
+                ref=ref,
+                xpath=xpath,
+                css=css,
+                text=text,
+                role=role,
+                name=name,
+                timeout_ms=timeout_ms,
+            )
+        )
+    except CaptureError as exc:
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_capture_fill(
+    capture_id: str = "",
+    value: str = "",
+    ref: str = "",
+    xpath: str = "",
+    css: str = "",
+    timeout_ms: int = 10000,
+) -> str:
+    """Fill an input/textarea on the live capture tab.
+
+    Prefer ``ref`` from ``hardly_capture_aria``; else xpath or css.
+    """
+    try:
+        from hardly.capture import CaptureError, fill_capture
+    except ImportError as exc:
+        return _err(exc)
+    try:
+        return _ok(
+            fill_capture(
+                capture_id or None,
+                value=value,
+                ref=ref,
+                xpath=xpath,
+                css=css,
+                timeout_ms=timeout_ms,
+            )
+        )
+    except CaptureError as exc:
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_capture_press(
+    capture_id: str = "",
+    key: str = "Enter",
+    ref: str = "",
+    xpath: str = "",
+    css: str = "",
+    timeout_ms: int = 10000,
+) -> str:
+    """Press a key on the live tab (optionally on a ref/xpath/css locator)."""
+    try:
+        from hardly.capture import CaptureError, press_capture
+    except ImportError as exc:
+        return _err(exc)
+    try:
+        return _ok(
+            press_capture(
+                capture_id or None,
+                key=key,
+                ref=ref,
+                xpath=xpath,
+                css=css,
+                timeout_ms=timeout_ms,
+            )
+        )
+    except CaptureError as exc:
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_capture_url(capture_id: str = "") -> str:
+    """Return the live capture tab's current URL and title."""
+    try:
+        from hardly.capture import CaptureError, capture_page_url
+    except ImportError as exc:
+        return _err(exc)
+    try:
+        return _ok(capture_page_url(capture_id or None))
+    except CaptureError as exc:
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_capture_aria(
+    capture_id: str = "",
+    selector: str = "",
+    mode: str = "ai",
+) -> str:
+    """Live Playwright accessibility snapshot (YAML) for the capture tab.
+
+    This is the rendered ARIA tree (roles/names/states) — best for driving the
+    UI. ``mode="ai"`` (default) asks Playwright for refs like ``[ref=eN]`` when
+    the installed build supports it; falls back to default otherwise.
+    Optional CSS ``selector`` scopes the snapshot (default: body).
+    For offline HAR HTML/XML bodies use ``hardly_outline`` instead.
+    """
+    try:
+        from hardly.capture import CaptureError, capture_aria_snapshot
+    except ImportError as exc:
+        return _err(exc)
+    try:
+        return _ok(
+            capture_aria_snapshot(
+                capture_id or None,
+                selector=selector or "",
+                mode=mode or "ai",
+            )
+        )
+    except CaptureError as exc:
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_capture_doctor() -> str:
+    """Diagnose the optional Playwright install (package vs browser binaries).
+
+    Call when capture_available is false or capture_start fails. Returns
+    version, which browsers are on disk, feature flags (aria_snapshot /
+    aria_mode_ai), and the exact install commands to run.
+    """
+    try:
+        from hardly.capture import playwright_status
+    except ImportError as exc:
+        return _err(exc)
+    return _ok(playwright_status())
+
+
+@mcp.tool
+def hardly_capture_screenshot(
+    capture_id: str = "",
+    path: str = "",
+    full_page: bool = False,
+) -> str:
+    """PNG screenshot of the live capture tab (path optional → cache dir)."""
+    try:
+        from hardly.capture import CaptureError, capture_screenshot
+    except ImportError as exc:
+        return _err(exc)
+    try:
+        return _ok(
+            capture_screenshot(
+                capture_id or None,
+                path=path or "",
+                full_page=full_page,
+            )
+        )
+    except CaptureError as exc:
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_capture_recipe(
+    steps: list[dict],
+    capture_id: str = "",
+    stop_on_error: bool = True,
+) -> str:
+    """Run a scripted sequence on the live capture tab.
+
+    Each step: ``{"op":"goto"|"wait"|"elements"|"click"|"fill"|"press"|"url"|"aria",
+    ...}``. Example::
+
+        [
+          {"op":"goto","url":"https://example.com/search"},
+          {"op":"wait","ms":1000},
+          {"op":"click","text":"I Accept"},
+          {"op":"fill","css":"#SearchOnName","value":"EXAMPLE"},
+          {"op":"click","css":"input[type=submit]"},
+          {"op":"wait","ms":2000},
+          {"op":"elements","limit":30}
+        ]
+    """
+    try:
+        from hardly.capture import CaptureError, run_capture_recipe
+    except ImportError as exc:
+        return _err(exc)
+    try:
+        return _ok(
+            run_capture_recipe(
+                steps,
+                capture_id=capture_id or None,
+                stop_on_error=stop_on_error,
+            )
+        )
+    except CaptureError as exc:
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_capture_list() -> str:
+    """List browser capture sessions (in-process and persisted sidecars)."""
+    try:
+        from hardly.capture import list_captures
+    except ImportError as exc:
+        return _err(exc)
+    return _ok({"captures": list_captures()})
+
+
+@mcp.tool
+def hardly_capture_status(capture_id: str = "") -> str:
+    """Status for one capture_id, or the latest running capture if omitted."""
+    try:
+        from hardly.capture import CaptureError, get_capture, latest_running_id
+    except ImportError as exc:
+        return _err(exc)
+    try:
+        cid = capture_id or latest_running_id()
+        if not cid:
+            return _err(CaptureError("no running capture"))
+        return _ok(get_capture(cid))
+    except CaptureError as exc:
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_capture_once(
+    url: str,
+    wait_seconds: float = 20,
+    har_path: str = "",
+    headed: bool = False,
+    channel: str = "",
+    url_filter: str = "",
+    open_session: bool = True,
+) -> str:
+    """Scripted capture: open URL, wait, stop, optionally open a session."""
+    try:
+        from hardly.capture import CaptureError, capture_for
+    except ImportError as exc:
+        return _err(exc)
+    try:
+        return _ok(
+            capture_for(
+                url,
+                har_path or None,
+                wait_seconds=wait_seconds,
+                headed=headed,
+                channel=channel,
+                url_filter=url_filter,
+                open_session=open_session,
+            )
+        )
+    except CaptureError as exc:
+        return _err(exc)
+
+
+@mcp.tool
 def hardly_list_sessions() -> str:
     """List cached and currently open HAR sessions."""
     return _ok({"sessions": sess.list_sessions()})
@@ -54,6 +471,16 @@ def hardly_list_sessions() -> str:
 def hardly_close(session_id: str) -> str:
     """Close an open session (cache file is kept on disk)."""
     return _ok(sess.close_session(session_id))
+
+
+@mcp.tool
+def hardly_reopen(session_id: str, force: bool = False) -> str:
+    """Reattach a cached session after MCP restart (no HAR path needed).
+
+    Other tools also auto-reopen on require_conn; call this explicitly when
+    list_sessions shows open=false but you still have the session_id.
+    """
+    return _ok(sess.reopen_session(session_id, force=force))
 
 
 @mcp.tool
@@ -67,13 +494,43 @@ def hardly_summary(session_id: str) -> str:
 
 
 @mcp.tool
+def hardly_coverage(
+    session_id: str,
+    host: str | None = None,
+    exclude_noise: bool = True,
+    limit: int = 20,
+) -> str:
+    """Body-preview coverage: how many entries have usable text vs empty/truncated.
+
+    Useful after Playwright captures that used to omit XHR bodies (size=-1).
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    return _ok(
+        q.body_coverage(
+            conn,
+            host=host,
+            exclude_noise=exclude_noise,
+            limit=min(limit, 50),
+        )
+    )
+
+
+@mcp.tool
 def hardly_hosts(session_id: str, exclude_noise: bool = False) -> str:
     """List hosts with request counts."""
     try:
         conn = sess.require_conn(session_id)
     except KeyError as exc:
         return _err(exc)
-    return _ok({"hosts": q.list_hosts(conn, exclude_noise=exclude_noise)})
+    return _ok(
+        {
+            "hosts": q.list_hosts(conn, exclude_noise=exclude_noise),
+            "preferred_host": q.preferred_host(conn),
+        }
+    )
 
 
 @mcp.tool
@@ -108,12 +565,21 @@ def hardly_search(
     method: str | None = None,
     status: int | None = None,
     body_contains: str | None = None,
+    header_name: str | None = None,
+    header_contains: str | None = None,
+    mime_contains: str | None = None,
+    content_kind: str | None = None,
     exclude_noise: bool = True,
     exclude_options: bool = True,
     limit: int = 50,
     offset: int = 0,
 ) -> str:
-    """Search entries by host, path, method, status, or body text. Returns entry IDs."""
+    """Search entries by host, path, method, status, body, header, mime, or content_kind.
+
+    ``content_kind`` uses the classifier: json, jsonl, jsonp, csv, html,
+    html_table (or table), pdf, image, css, javascript, …
+    Result rows include ``content_kind`` / hints.
+    """
     try:
         conn = sess.require_conn(session_id)
     except KeyError as exc:
@@ -126,11 +592,33 @@ def hardly_search(
             method=method,
             status=status,
             body_contains=body_contains,
+            header_name=header_name,
+            header_contains=header_contains,
+            mime_contains=mime_contains,
+            content_kind=content_kind,
             exclude_noise=exclude_noise,
             exclude_options=exclude_options,
             limit=min(limit, 200),
             offset=offset,
         )
+    )
+
+
+@mcp.tool
+def hardly_stats(
+    session_id: str,
+    host: str | None = None,
+    exclude_noise: bool = True,
+) -> str:
+    """MIME mix, status classes, body sizes, initiator types, timing."""
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.stats import traffic_stats
+
+    return _ok(
+        traffic_stats(conn, host=host, exclude_noise=exclude_noise)
     )
 
 
@@ -142,6 +630,130 @@ def hardly_entry(session_id: str, entry_id: int, body_chars: int = 4000) -> str:
     except KeyError as exc:
         return _err(exc)
     return _ok(q.get_entry(conn, entry_id, body_chars=min(body_chars, 20000)))
+
+
+@mcp.tool
+def hardly_forms(
+    session_id: str,
+    entry_id: int | None = None,
+    host: str | None = None,
+    side: str = "response",
+    exclude_noise: bool = False,
+    limit: int = 30,
+    offset: int = 0,
+) -> str:
+    """Extract HTML forms, inputs, links, onclick/onsubmit handlers, and signals.
+
+    Omit entry_id to scan the session. Pass entry_id for the full inventory
+    on one response (values redacted / truncated). Prefer this over dumping
+    HTML bodies when reversing guest portals.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    if entry_id is not None:
+        return _ok(q.forms_for_entry(conn, entry_id, side=side or "response"))
+    return _ok(
+        q.list_forms(
+            conn,
+            host=host,
+            side=side or "response",
+            exclude_noise=exclude_noise,
+            limit=min(limit, 100),
+            offset=offset,
+        )
+    )
+
+
+@mcp.tool
+def hardly_ui(
+    session_id: str,
+    entry_id: int | None = None,
+    host: str | None = None,
+    side: str = "response",
+    exclude_noise: bool = False,
+    limit: int = 30,
+    offset: int = 0,
+) -> str:
+    """Inventory UI surfaces: links, onclick/onsubmit handlers, forms.
+
+    Same scan as hardly_forms, named for link/handler-first workflows.
+    ``handler_functions`` lists JS names to cross-check with hardly_routes.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    if entry_id is not None:
+        return _ok(q.ui_for_entry(conn, entry_id, side=side or "response"))
+    return _ok(
+        q.list_forms(
+            conn,
+            host=host,
+            side=side or "response",
+            exclude_noise=exclude_noise,
+            limit=min(limit, 100),
+            offset=offset,
+        )
+    )
+
+
+@mcp.tool
+def hardly_routes(
+    session_id: str,
+    host: str | None = None,
+    limit: int = 40,
+    offset: int = 0,
+) -> str:
+    """Mine URL path literals from JavaScript bodies (often reveals detail APIs).
+
+    Prefer this when search works but the document-detail URL is unknown —
+    app JS usually hard-codes paths like ``/Details/`` or ``/documentdetails/``.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    return _ok(
+        q.list_js_routes(
+            conn,
+            host=host,
+            limit=min(limit, 100),
+            offset=offset,
+        )
+    )
+
+
+@mcp.tool
+def hardly_around(
+    session_id: str,
+    entry_id: int,
+    before: int = 5,
+    after: int = 15,
+    exclude_noise: bool = True,
+    host: str | None = None,
+) -> str:
+    """Chronological neighbors of one entry (click → following XHRs).
+
+    Pass the entry_id of a navigation or grid click candidate; inspect
+    positive ``delta_ms`` rows for the detail/search API that followed.
+    Defaults to the same host as the center entry.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    return _ok(
+        q.entries_around(
+            conn,
+            entry_id,
+            before=max(0, min(before, 50)),
+            after=max(0, min(after, 100)),
+            exclude_noise=exclude_noise,
+            host=host,
+        )
+    )
 
 
 @mcp.tool
@@ -188,6 +800,506 @@ def hardly_flow(
             exclude_noise=exclude_noise,
             limit=min(limit, 500),
             offset=offset,
+        )
+    )
+
+
+@mcp.tool
+def hardly_brief(
+    session_id: str,
+    host: str | None = None,
+) -> str:
+    """One-shot portal RE brief: story + forms + routes + correlate + issues.
+
+    Prefer this first on guest portals, then drill with the named tools.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.brief import portal_brief
+
+    return _ok(
+        portal_brief(
+            conn,
+            har_path=sess.get_har_path(session_id),
+            host=host,
+        )
+    )
+
+
+@mcp.tool
+def hardly_story(
+    session_id: str,
+    host: str | None = None,
+    limit: int = 40,
+    exclude_noise: bool = True,
+    include_related: bool = True,
+) -> str:
+    """Stitch a portal session into annotated steps (role, forms, labels, fields).
+
+    Prefer this over raw hardly_flow when reversing guest portals — collapses
+    duplicates and attaches request field names / HTML form hints / labels.
+    Same-apex API hosts are merged by default (SPA app.* + api.*).
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.story import portal_story
+
+    return _ok(
+        portal_story(
+            conn,
+            host=host,
+            limit=min(limit, 80),
+            exclude_noise=exclude_noise,
+            include_related=include_related,
+        )
+    )
+
+
+@mcp.tool
+def hardly_stub(
+    session_id: str,
+    entry_ids: list[int] | None = None,
+    host: str | None = None,
+    output_path: str = "",
+    class_name: str = "PortalClient",
+) -> str:
+    """Generate a minimal urllib client sketch from story steps or entry_ids.
+
+    Secrets become PLACEHOLDER_*. Pass output_path to write a .py file (code
+    omitted from the tool response when written).
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.stub import client_stub
+
+    return _ok(
+        client_stub(
+            conn,
+            entry_ids=entry_ids,
+            host=host,
+            output_path=output_path or None,
+            class_name=class_name or "PortalClient",
+        )
+    )
+
+
+@mcp.tool
+def hardly_correlate(
+    session_id: str,
+    host: str | None = None,
+    limit: int = 40,
+) -> str:
+    """Find dynamic values reused from earlier responses into later requests.
+
+    CSRF / ViewState / session cookies / JSON tokens. Never returns raw values
+    — only entry ids, name hints, and value shape. Prefers the on-disk HAR.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.correlate import correlate_tokens
+
+    return _ok(
+        correlate_tokens(
+            conn,
+            har_path=sess.get_har_path(session_id),
+            host=host,
+            limit=min(limit, 80),
+        )
+    )
+
+
+@mcp.tool
+def hardly_cookies(
+    session_id: str,
+    host: str | None = None,
+    limit: int = 60,
+) -> str:
+    """Cookie name timeline (Set-Cookie / Cookie). Values are never returned."""
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.cookies import cookie_timeline
+
+    return _ok(
+        cookie_timeline(
+            conn,
+            har_path=sess.get_har_path(session_id),
+            host=host,
+            limit=min(limit, 120),
+        )
+    )
+
+
+@mcp.tool
+def hardly_diff(
+    session_id_a: str,
+    session_id_b: str,
+    host: str | None = None,
+    exclude_noise: bool = True,
+) -> str:
+    """Compare endpoint templates between two open sessions (A vs B)."""
+    try:
+        conn_a = sess.require_conn(session_id_a)
+        conn_b = sess.require_conn(session_id_b)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.diff import diff_sessions
+
+    return _ok(
+        diff_sessions(
+            conn_a,
+            conn_b,
+            host=host,
+            exclude_noise=exclude_noise,
+        )
+    )
+
+
+@mcp.tool
+def hardly_recipe_plan(
+    session_id: str,
+    host: str | None = None,
+    output_path: str = "",
+    limit: int = 30,
+) -> str:
+    """Suggest a capture recipe (goto/fill/click) from hardly_story.
+
+    Heuristic — refine selectors with hardly_capture_elements before running
+    via hardly_capture_recipe. Pass output_path to write steps JSON to disk.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.recipe_plan import recipe_from_story
+
+    return _ok(
+        recipe_from_story(
+            conn,
+            host=host,
+            output_path=output_path or None,
+            limit=min(limit, 60),
+        )
+    )
+
+
+@mcp.tool
+def hardly_redirects(
+    session_id: str,
+    host: str | None = None,
+    limit: int = 30,
+) -> str:
+    """List 3xx redirect hops and matched follow-up entry ids when present."""
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.redirects import redirect_chains
+
+    return _ok(
+        redirect_chains(conn, host=host, limit=min(limit, 80))
+    )
+
+
+@mcp.tool
+def hardly_issues(
+    session_id: str,
+    host: str | None = None,
+    limit: int = 40,
+) -> str:
+    """Capture-quality issues: empty bodies, 4xx/5xx, redirects without Location."""
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.issues import find_issues
+
+    return _ok(find_issues(conn, host=host, limit=min(limit, 60)))
+
+
+@mcp.tool
+def hardly_trace(
+    session_id: str,
+    name: str = "",
+    value: str = "",
+    host: str | None = None,
+    limit: int = 40,
+) -> str:
+    """Trace a field name or exact value across the capture.
+
+    Pass name (e.g. __VIEWSTATE) and/or value. Values are never echoed back —
+    only entry ids, where, and value length/kind.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.trace import trace_field
+
+    return _ok(
+        trace_field(
+            conn,
+            name=name or None,
+            value=value or None,
+            har_path=sess.get_har_path(session_id),
+            host=host,
+            limit=min(limit, 80),
+        )
+    )
+
+
+@mcp.tool
+def hardly_secrets(
+    session_id: str,
+    host: str | None = None,
+    limit: int = 40,
+) -> str:
+    """Locate sensitive header/field *names* (password, token, cookie, …).
+
+    Never returns values — only entry ids and names for rotation awareness.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.secrets import locate_secrets
+
+    return _ok(locate_secrets(conn, host=host, limit=min(limit, 60)))
+
+
+@mcp.tool
+def hardly_recommend(goal: str) -> str:
+    """Suggest which hardly tools to call next for a short goal string."""
+    from hardly.core.recommend import recommend_tools
+
+    return _ok(recommend_tools(goal))
+
+
+@mcp.tool
+def hardly_tree(
+    session_id: str,
+    entry_id: int,
+    exclude_noise: bool = True,
+    child_limit: int = 40,
+) -> str:
+    """Initiator parent/children for an entry (from HAR _initiator / pageref)."""
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.tree import entry_tree
+
+    return _ok(
+        entry_tree(
+            conn,
+            entry_id,
+            exclude_noise=exclude_noise,
+            child_limit=min(child_limit, 80),
+        )
+    )
+
+
+@mcp.tool
+def hardly_params(
+    session_id: str,
+    method: str,
+    host: str,
+    path_template: str,
+    limit: int = 30,
+) -> str:
+    """Classify query/body fields as static, dynamic, or sensitive across samples."""
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.params import param_variance
+
+    return _ok(
+        param_variance(
+            conn,
+            method=method,
+            host=host,
+            path_template=path_template,
+            limit=min(limit, 80),
+        )
+    )
+
+
+@mcp.tool
+def hardly_outline(
+    session_id: str,
+    entry_id: int,
+    format: str = "all",
+    max_depth: int = 8,
+    side: str = "response",
+) -> str:
+    """Offline HTML/XML document outline from a HAR entry body (no Playwright).
+
+    Returns compact ``markdown`` (headings/tables/forms/links), indented
+    ``tree`` (tag#id.class), and approximate ``aria`` YAML. Sensitive values
+    are redacted. Prefer this over asking the model to parse raw HTML/XML.
+    For the *live* accessibility tree during capture, use hardly_capture_aria.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.outline import outline_entry
+
+    return _ok(
+        outline_entry(
+            conn,
+            entry_id,
+            side=side or "response",
+            format=format or "all",
+            max_depth=min(max(1, max_depth), 14),
+        )
+    )
+
+
+@mcp.tool
+def hardly_content(
+    session_id: str,
+    host: str | None = None,
+    kind: str | None = None,
+    exclude_noise: bool = True,
+    limit: int = 80,
+) -> str:
+    """Classify response payloads: json/jsonl/jsonp/csv/html_table/pdf/image/css/…
+
+    Returns a histogram plus sample entry_ids. Each hardly_entry also includes
+    a ``content`` object (table headers, json keys, csv columns, hints).
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.classify import summarize_content
+
+    return _ok(
+        summarize_content(
+            conn,
+            host=host,
+            kind=kind,
+            exclude_noise=exclude_noise,
+            limit=min(limit, 400),
+        )
+    )
+
+
+@mcp.tool
+def hardly_graphql(
+    session_id: str,
+    host: str | None = None,
+    limit: int = 40,
+) -> str:
+    """Detect GraphQL operations (operationName / query / mutation)."""
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.graphql import detect_graphql
+
+    return _ok(detect_graphql(conn, host=host, limit=min(limit, 80)))
+
+
+@mcp.tool
+def hardly_duplicates(
+    session_id: str,
+    host: str | None = None,
+    exclude_noise: bool = True,
+    min_count: int = 2,
+    limit: int = 30,
+) -> str:
+    """Find repeated method+path_template groups (polling / retries)."""
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.duplicates import find_duplicates
+
+    return _ok(
+        find_duplicates(
+            conn,
+            host=host,
+            exclude_noise=exclude_noise,
+            min_count=min_count,
+            limit=min(limit, 80),
+        )
+    )
+
+
+@mcp.tool
+def hardly_slow(
+    session_id: str,
+    host: str | None = None,
+    exclude_noise: bool = True,
+    limit: int = 20,
+    min_ms: float = 0,
+) -> str:
+    """List the slowest requests by HAR time_ms."""
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.slow import slowest_entries
+
+    return _ok(
+        slowest_entries(
+            conn,
+            host=host,
+            exclude_noise=exclude_noise,
+            limit=min(limit, 50),
+            min_ms=min_ms,
+        )
+    )
+
+
+@mcp.tool
+def hardly_wall(
+    session_id: str,
+    host: str | None = None,
+    limit: int = 30,
+) -> str:
+    """Detect bot walls / challenges (Akamai, Cloudflare, captcha, 403/429)."""
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.wall import detect_walls
+
+    return _ok(detect_walls(conn, host=host, limit=min(limit, 60)))
+
+
+@mcp.tool
+def hardly_pages(
+    session_id: str,
+    host: str | None = None,
+    exclude_noise: bool = True,
+    limit: int = 40,
+) -> str:
+    """List HAR pageref groups (browser page loads) with document hints."""
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.pages import list_pages
+
+    return _ok(
+        list_pages(
+            conn,
+            host=host,
+            exclude_noise=exclude_noise,
+            limit=min(limit, 80),
         )
     )
 
@@ -275,6 +1387,55 @@ def hardly_export_openapi(
 
 
 @mcp.tool
+def hardly_export_postman(
+    session_id: str,
+    output_path: str,
+    host: str | None = None,
+    exclude_noise: bool = True,
+    name: str = "HAR-derived API",
+) -> str:
+    """Write a Postman Collection v2.1 JSON (secrets as {{placeholders}})."""
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.export_postman import export_postman
+
+    return _ok(
+        export_postman(
+            conn,
+            resolve_path(output_path),
+            host=host,
+            exclude_noise=exclude_noise,
+            name=name,
+        )
+    )
+
+
+@mcp.tool
+def hardly_export_brief(
+    session_id: str,
+    output_path: str,
+    host: str | None = None,
+) -> str:
+    """Write a portal RE brief Markdown file (story, correlate, forms, routes)."""
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.export_brief import export_brief_md
+
+    return _ok(
+        export_brief_md(
+            conn,
+            resolve_path(output_path),
+            har_path=sess.get_har_path(session_id),
+            host=host,
+        )
+    )
+
+
+@mcp.tool
 def hardly_curl(
     session_id: str,
     entry_id: int,
@@ -351,6 +1512,29 @@ def find_auth_flow(host: str) -> str:
         "2. hardly_flow(host=..., path_prefix=/login or similar)\n"
         "3. hardly_compare_entries on pre/post MFA login requests\n"
         "4. Note tokens in response bodies (Chrome may strip Authorization cookies)."
+    )
+
+
+@mcp.prompt
+def capture_portal(url: str) -> str:
+    """Guide for recording a browser HAR of a portal that needs human clicks."""
+    return (
+        f"Capture network traffic for `{url}` then analyze it:\n"
+        "1. hardly_capture_doctor if capture_available is false.\n"
+        "2. hardly_capture_start(url=..., headed=true, channel='chrome' "
+        "for Akamai/bot walls; optional trace=true).\n"
+        "3. Drive UI: hardly_capture_aria (mode=ai) -> "
+        "hardly_capture_click/fill with ref from refs[] "
+        "(fallback: elements -> xpath/css), or ask a person to click.\n"
+        "4. hardly_capture_stop(capture_id, open_session=true).\n"
+        "5. hardly_brief(session_id) — one-shot portal RE summary "
+        "(do not Read the HAR file).\n"
+        "6. Drill: hardly_content / hardly_outline / hardly_forms / "
+        "hardly_ui / hardly_correlate / hardly_cookies.\n"
+        "7. hardly_routes() + hardly_around(entry_id) for detail XHRs.\n"
+        "8. hardly_stub / hardly_recipe_plan for a client sketch or next capture.\n"
+        "Note: Cursor's built-in browser does not feed HARs into hardly; "
+        "Playwright capture (or a manual DevTools HAR export) is required."
     )
 
 

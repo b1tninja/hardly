@@ -7,6 +7,8 @@ import re
 import sqlite3
 from typing import Any
 
+from hardly.core.html_forms import extract_html_structure
+from hardly.core.js_routes import extract_js_routes
 from hardly.core.redact import redact_body_text
 from hardly.core.schema_infer import infer_schema
 
@@ -15,6 +17,84 @@ _FORBIDDEN = re.compile(
     r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|ATTACH|DETACH|PRAGMA|REPLACE|CREATE|VACUUM)\b",
     re.I,
 )
+
+
+def body_coverage(
+    conn: sqlite3.Connection,
+    *,
+    host: str | None = None,
+    exclude_noise: bool = True,
+    limit: int = 20,
+) -> dict:
+    """Report how many entries have usable body previews vs empty / truncated."""
+    clauses = ["1=1"]
+    params: list[Any] = []
+    if host:
+        clauses.append("e.host = ?")
+        params.append(host.lower())
+    if exclude_noise:
+        clauses.append("e.is_noise = 0")
+    where = " AND ".join(clauses)
+    row = conn.execute(
+        f"""
+        SELECT
+          COUNT(*) AS entries,
+          SUM(CASE WHEN b.preview_text IS NOT NULL AND length(b.preview_text) > 0
+                   THEN 1 ELSE 0 END) AS with_preview,
+          SUM(CASE WHEN b.size IS NOT NULL AND b.size < 0 THEN 1 ELSE 0 END)
+              AS size_negative,
+          SUM(CASE WHEN b.size IS NOT NULL AND b.preview_text IS NOT NULL
+                    AND b.size > length(b.preview_text) + 100 THEN 1 ELSE 0 END)
+              AS truncated,
+          SUM(CASE WHEN e.has_resp_body = 0 THEN 1 ELSE 0 END) AS no_resp_body
+        FROM entries e
+        LEFT JOIN bodies b ON b.entry_id = e.entry_id AND b.side = 'response'
+        WHERE {where}
+        """,
+        params,
+    ).fetchone()
+    entries = int(row["entries"] or 0)
+    with_preview = int(row["with_preview"] or 0)
+    missing = [
+        {
+            "entry_id": r["entry_id"],
+            "method": r["method"],
+            "path": r["path"],
+            "status": r["status"],
+            "mime": r["mime"],
+            "size": r["size"],
+            "preview_len": len(r["preview_text"] or "") if r["preview_text"] else 0,
+        }
+        for r in conn.execute(
+            f"""
+            SELECT e.entry_id, e.method, e.path, e.status, e.mime,
+                   b.size, b.preview_text
+            FROM entries e
+            LEFT JOIN bodies b ON b.entry_id = e.entry_id AND b.side = 'response'
+            WHERE {where}
+              AND (b.preview_text IS NULL OR length(b.preview_text) = 0)
+              AND e.method != 'OPTIONS'
+            ORDER BY e.entry_id
+            LIMIT ?
+            """,
+            [*params, min(limit, 50)],
+        ).fetchall()
+    ]
+    return {
+        "entries": entries,
+        "with_preview": with_preview,
+        "without_preview": max(0, entries - with_preview),
+        "size_negative": int(row["size_negative"] or 0),
+        "truncated": int(row["truncated"] or 0),
+        "no_resp_body_flag": int(row["no_resp_body"] or 0),
+        "preview_ratio": round(with_preview / entries, 3) if entries else 0.0,
+        "missing_sample": missing,
+        "next": (
+            "Low preview_ratio on XHR-heavy portals usually means the capture "
+            "predated body backfill — re-capture with current hardly, or use "
+            "hardly_probe / live clients for those paths."
+        ),
+    }
 
 
 def summary(conn: sqlite3.Connection) -> dict:
@@ -59,6 +139,73 @@ def list_hosts(conn: sqlite3.Connection, *, exclude_noise: bool = False) -> list
         """
     ).fetchall()
     return [{"host": r["host"], "count": r["count"]} for r in rows]
+
+
+def _host_apex(host: str) -> str:
+    """Cheap registrable-domain guess (last two labels)."""
+    parts = (host or "").lower().split(".")
+    if len(parts) >= 2:
+        return ".".join(parts[-2:])
+    return (host or "").lower()
+
+
+def preferred_host(conn: sqlite3.Connection) -> str | None:
+    """Pick the host that best represents the guest portal, not a payment iframe.
+
+    Seed from the busiest non-noise host, then stay on that apex domain.
+    Prefer an HTML document host on that apex (app.*) over a pure API sibling
+    and over third-party HTML (Stripe / Google Pay / captcha).
+    """
+    seed = conn.execute(
+        """
+        SELECT host, COUNT(*) AS c FROM entries
+        WHERE is_noise = 0
+        GROUP BY host ORDER BY c DESC LIMIT 1
+        """
+    ).fetchone()
+    if not seed:
+        return None
+    apex = _host_apex(seed["host"])
+    rows = conn.execute(
+        """
+        SELECT host,
+               COUNT(*) AS api_cnt,
+               SUM(
+                 CASE
+                   WHEN lower(IFNULL(mime, '')) LIKE '%html%'
+                        AND method = 'GET'
+                        AND status BETWEEN 200 AND 399
+                   THEN 1 ELSE 0
+                 END
+               ) AS html_cnt,
+               SUM(
+                 CASE
+                   WHEN method IN ('POST', 'PUT', 'PATCH')
+                        AND (
+                          lower(IFNULL(mime, '')) LIKE '%html%'
+                          OR path LIKE '%.aspx%'
+                          OR path LIKE '%/login%'
+                          OR path LIKE '%/signin%'
+                        )
+                   THEN 1 ELSE 0
+                 END
+               ) AS formish_cnt
+        FROM entries
+        WHERE is_noise = 0
+          AND (host = ? OR host LIKE ?)
+        GROUP BY host
+        """,
+        (apex, f"%.{apex}"),
+    ).fetchall()
+    if not rows:
+        return seed["host"]
+
+    def score(row: sqlite3.Row) -> tuple:
+        return (row["html_cnt"], row["formish_cnt"], row["api_cnt"])
+
+    with_html = [r for r in rows if (r["html_cnt"] or 0) > 0]
+    pick = max(with_html or rows, key=score)
+    return pick["host"]
 
 
 def list_endpoints(
@@ -126,11 +273,17 @@ def search_entries(
     method: str | None = None,
     status: int | None = None,
     body_contains: str | None = None,
+    header_name: str | None = None,
+    header_contains: str | None = None,
+    mime_contains: str | None = None,
+    content_kind: str | None = None,
     exclude_noise: bool = True,
     exclude_options: bool = True,
     limit: int = 50,
     offset: int = 0,
 ) -> dict:
+    from hardly.core.classify import classify_response
+
     clauses = ["1=1"]
     params: list[Any] = []
     if host:
@@ -145,39 +298,68 @@ def search_entries(
     if status is not None:
         clauses.append("e.status = ?")
         params.append(status)
+    if mime_contains:
+        clauses.append("e.mime LIKE ?")
+        params.append(f"%{mime_contains}%")
     if exclude_noise:
         clauses.append("e.is_noise = 0")
     if exclude_options:
         clauses.append("e.method != 'OPTIONS'")
 
-    join = ""
+    joins: list[str] = []
+    # Always left-join response body so we can classify the result page cheaply.
+    joins.append(
+        "LEFT JOIN bodies b ON b.entry_id = e.entry_id AND b.side = 'response'"
+    )
     if body_contains:
-        join = "JOIN bodies b ON b.entry_id = e.entry_id"
         clauses.append("b.preview_text LIKE ?")
         params.append(f"%{body_contains}%")
+    if header_name or header_contains:
+        joins.append("JOIN headers h ON h.entry_id = e.entry_id")
+        if header_name:
+            clauses.append("lower(h.name) = ?")
+            params.append(header_name.lower())
+        if header_contains:
+            clauses.append(
+                "(h.value_redacted LIKE ? OR IFNULL(h.value_raw, '') LIKE ?)"
+            )
+            params.append(f"%{header_contains}%")
+            params.append(f"%{header_contains}%")
 
+    join = " ".join(joins)
     where = " AND ".join(clauses)
-    total = conn.execute(
-        f"SELECT COUNT(DISTINCT e.entry_id) AS c FROM entries e {join} WHERE {where}",
-        params,
-    ).fetchone()["c"]
+    want_kind = (content_kind or "").strip().lower() or None
+
+    # When filtering by content kind, scan a wider window then paginate in Python.
+    scan_limit = min(max(limit + offset, limit) * (8 if want_kind else 1), 2000)
     rows = conn.execute(
         f"""
         SELECT DISTINCT e.entry_id, e.method, e.host, e.path, e.path_template,
-               e.status, e.started_datetime, e.time_ms
+               e.status, e.started_datetime, e.time_ms, e.mime,
+               b.preview_text, b.size AS body_size, b.content_type
         FROM entries e {join}
         WHERE {where}
         ORDER BY e.entry_id
-        LIMIT ? OFFSET ?
+        LIMIT ?
         """,
-        params + [limit, offset],
+        params + [scan_limit],
     ).fetchall()
 
-    return {
-        "total": total,
-        "limit": limit,
-        "offset": offset,
-        "entries": [
+    entries: list[dict] = []
+    for r in rows:
+        content = classify_response(
+            mime=r["content_type"] or r["mime"],
+            path=r["path"],
+            body=r["preview_text"],
+            size=r["body_size"],
+        )
+        kind = (content.get("kind") or "").lower()
+        subtype = (content.get("subtype") or "").lower()
+        if want_kind and want_kind not in {kind, subtype}:
+            # Also allow html_table match via kind=table
+            if not (want_kind == "table" and kind == "html_table"):
+                continue
+        entries.append(
             {
                 "entry_id": r["entry_id"],
                 "method": r["method"],
@@ -185,11 +367,415 @@ def search_entries(
                 "path": r["path"],
                 "path_template": r["path_template"],
                 "status": r["status"],
+                "mime": r["mime"],
+                "content_kind": content.get("kind"),
+                "content_subtype": content.get("subtype"),
+                "content_hints": (content.get("hints") or [])[:6],
                 "started_datetime": r["started_datetime"],
                 "time_ms": r["time_ms"],
             }
-            for r in rows
-        ],
+        )
+
+    total = len(entries)
+    page = entries[offset : offset + limit]
+    # Without kind filter, approximate total via SQL when we didn't exhaust the scan.
+    if not want_kind:
+        total = conn.execute(
+            f"SELECT COUNT(DISTINCT e.entry_id) AS c FROM entries e {join} WHERE {where}",
+            params,
+        ).fetchone()["c"]
+
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "content_kind": want_kind,
+        "entries": page,
+        "note": (
+            "content_kind filter scans up to 2000 candidates then classifies; "
+            "total is match count within that window."
+            if want_kind
+            else None
+        ),
+    }
+
+
+def forms_for_entry(
+    conn: sqlite3.Connection,
+    entry_id: int,
+    *,
+    side: str = "response",
+) -> dict:
+    """Extract forms/inputs/signals from one entry body (redacted)."""
+    row = conn.execute(
+        "SELECT * FROM entries WHERE entry_id = ?", (entry_id,)
+    ).fetchone()
+    if not row:
+        return {"error": f"entry_id {entry_id} not found"}
+    body = conn.execute(
+        "SELECT content_type, size, preview_text FROM bodies "
+        "WHERE entry_id = ? AND side = ?",
+        (entry_id, side),
+    ).fetchone()
+    if not body or not body["preview_text"]:
+        return {
+            "entry_id": entry_id,
+            "side": side,
+            "url": _entry_url(row),
+            "forms": [],
+            "loose_inputs": [],
+            "signals": {},
+            "form_count": 0,
+            "note": f"no {side} body preview stored",
+        }
+    url = _entry_url(row)
+    structure = extract_html_structure(body["preview_text"], base_url=url)
+    preview_len = len(body["preview_text"] or "")
+    size = int(body["size"] or 0)
+    note = None
+    if size > preview_len + 100:
+        note = (
+            f"parsed stored preview ({preview_len} chars); "
+            f"original body size={size} — forms near the end may be missing"
+        )
+    return {
+        "entry_id": entry_id,
+        "side": side,
+        "url": url,
+        "method": row["method"],
+        "status": row["status"],
+        "content_type": body["content_type"],
+        "note": note,
+        **structure,
+    }
+
+
+def list_forms(
+    conn: sqlite3.Connection,
+    *,
+    host: str | None = None,
+    side: str = "response",
+    exclude_noise: bool = False,
+    limit: int = 30,
+    offset: int = 0,
+) -> dict:
+    """Scan HTML-ish bodies for forms; return compact per-entry summaries."""
+    clauses = [
+        "b.side = ?",
+        "(b.content_type LIKE '%html%' OR b.preview_text LIKE '%<form%' "
+        "OR b.preview_text LIKE '%<input%' OR b.preview_text LIKE '%<a %' "
+        "OR b.preview_text LIKE '%onclick%' OR b.preview_text LIKE '%onsubmit%' "
+        "OR b.preview_text LIKE '%detailLabel%' OR b.preview_text LIKE '%<th%')",
+        "b.preview_text IS NOT NULL",
+    ]
+    params: list[Any] = [side]
+    if host:
+        clauses.append("e.host = ?")
+        params.append(host.lower())
+    if exclude_noise:
+        clauses.append("e.is_noise = 0")
+    where = " AND ".join(clauses)
+    rows = conn.execute(
+        f"""
+        SELECT e.entry_id, e.method, e.scheme, e.host, e.path, e.query_raw,
+               e.status, e.mime, b.content_type, b.size, b.preview_text
+        FROM entries e
+        JOIN bodies b ON b.entry_id = e.entry_id
+        WHERE {where}
+        ORDER BY e.entry_id
+        LIMIT ? OFFSET ?
+        """,
+        [*params, min(limit, 100), offset],
+    ).fetchall()
+    entries: list[dict] = []
+    for row in rows:
+        url = _entry_url(row)
+        structure = extract_html_structure(row["preview_text"] or "", base_url=url)
+        wf = structure.get("webforms") or {}
+        if (
+            structure["form_count"] == 0
+            and not structure.get("loose_inputs")
+            and not structure.get("signals")
+            and not structure.get("links")
+            and not structure.get("handlers")
+            and not structure.get("labels")
+            and not wf.get("aspnet")
+        ):
+            continue
+        forms_brief = [
+            {
+                "action": f.get("action"),
+                "method": f.get("method"),
+                "id": f.get("id") or None,
+                "xpath": f.get("xpath"),
+                "field_count": f.get("field_count"),
+                "field_names": f.get("field_names"),
+                "onsubmit": f.get("onsubmit"),
+                "onsubmit_functions": f.get("onsubmit_functions"),
+            }
+            for f in structure.get("forms") or []
+        ]
+        entries.append(
+            {
+                "entry_id": row["entry_id"],
+                "method": row["method"],
+                "url": url,
+                "status": row["status"],
+                "form_count": structure["form_count"],
+                "field_count": structure.get("field_count"),
+                "link_count": structure.get("link_count"),
+                "handler_count": structure.get("handler_count"),
+                "label_count": structure.get("label_count"),
+                "forms": forms_brief,
+                "links": [
+                    {
+                        "href": link.get("href"),
+                        "text": link.get("text"),
+                        "target": link.get("target") or None,
+                        "xpath": link.get("xpath") or None,
+                    }
+                    for link in (structure.get("links") or [])[:12]
+                ],
+                "labels": (structure.get("labels") or [])[:20],
+                "handler_functions": structure.get("handler_functions") or [],
+                "signals": structure.get("signals") or {},
+                "webforms": {
+                    "aspnet": bool(wf.get("aspnet")),
+                    "hidden_fields": (wf.get("hidden_fields") or [])[:12],
+                    "dopostback_count": wf.get("dopostback_count") or 0,
+                },
+                "loose_input_names": [
+                    f.get("name")
+                    for f in structure.get("loose_inputs") or []
+                    if f.get("name")
+                ][:40],
+            }
+        )
+    return {
+        "side": side,
+        "count": len(entries),
+        "limit": limit,
+        "offset": offset,
+        "entries": entries,
+        "next": (
+            "Call hardly_forms or hardly_ui with entry_id for full field / "
+            "link / handler lists (values redacted / truncated). Cross-check "
+            "handler_functions against hardly_routes."
+        ),
+    }
+
+
+def ui_for_entry(
+    conn: sqlite3.Connection,
+    entry_id: int,
+    *,
+    side: str = "response",
+) -> dict:
+    """Alias of forms_for_entry focused on UI surfaces (same payload)."""
+    return forms_for_entry(conn, entry_id, side=side)
+
+
+def _entry_url(row: sqlite3.Row) -> str:
+    scheme = row["scheme"] or "https"
+    host = row["host"]
+    path = row["path"]
+    query = row["query_raw"] or ""
+    url = f"{scheme}://{host}{path}"
+    if query:
+        url += f"?{query}"
+    return url
+
+
+def list_js_routes(
+    conn: sqlite3.Connection,
+    *,
+    host: str | None = None,
+    limit: int = 40,
+    offset: int = 0,
+) -> dict:
+    """Mine path literals from JavaScript response bodies."""
+    clauses = [
+        "b.side = 'response'",
+        "b.preview_text IS NOT NULL",
+        "("
+        "b.content_type LIKE '%javascript%' OR b.content_type LIKE '%ecmascript%' "
+        "OR e.path LIKE '%.js' OR e.mime LIKE '%javascript%'"
+        ")",
+    ]
+    params: list[Any] = []
+    if host:
+        clauses.append("e.host = ?")
+        params.append(host.lower())
+    where = " AND ".join(clauses)
+    rows = conn.execute(
+        f"""
+        SELECT e.entry_id, e.host, e.path, e.scheme, e.query_raw, b.preview_text
+        FROM entries e
+        JOIN bodies b ON b.entry_id = e.entry_id
+        WHERE {where}
+        ORDER BY e.entry_id
+        """,
+        params,
+    ).fetchall()
+
+    by_path: dict[str, dict[str, Any]] = {}
+    sources_scanned = 0
+    for row in rows:
+        text = row["preview_text"] or ""
+        if len(text) < 40 or "function" not in text and "/" not in text:
+            # Still try short files that only hold URL constants.
+            if "'" not in text and '"' not in text:
+                continue
+        sources_scanned += 1
+        base = f"{row['scheme']}://{row['host']}{row['path']}"
+        for route in extract_js_routes(text, base_url=base):
+            path = route["path"]
+            agg = by_path.setdefault(
+                path,
+                {
+                    "path": path,
+                    "count": 0,
+                    "score": route["score"],
+                    "samples": [],
+                    "source_entry_ids": [],
+                },
+            )
+            agg["count"] += route["count"]
+            agg["score"] = max(agg["score"], route["score"])
+            if row["entry_id"] not in agg["source_entry_ids"]:
+                if len(agg["source_entry_ids"]) < 8:
+                    agg["source_entry_ids"].append(row["entry_id"])
+            for sample in route.get("samples") or []:
+                if sample not in agg["samples"] and len(agg["samples"]) < 3:
+                    agg["samples"].append(sample)
+
+    ranked = sorted(
+        by_path.values(),
+        key=lambda r: (-r["score"], -r["count"], r["path"]),
+    )
+    page = ranked[offset : offset + min(limit, 100)]
+    return {
+        "sources_scanned": sources_scanned,
+        "route_count": len(ranked),
+        "limit": limit,
+        "offset": offset,
+        "routes": page,
+        "next": (
+            "Paths are string literals from JS — confirm against hardly_endpoints "
+            "/ hardly_around after a click that should hit them."
+        ),
+    }
+
+
+def entries_around(
+    conn: sqlite3.Connection,
+    entry_id: int,
+    *,
+    before: int = 5,
+    after: int = 15,
+    exclude_noise: bool = True,
+    host: str | None = None,
+) -> dict:
+    """Return neighbors of an entry in chronological order (click → XHR)."""
+    center = conn.execute(
+        "SELECT * FROM entries WHERE entry_id = ?", (entry_id,)
+    ).fetchone()
+    if not center:
+        return {"error": f"entry_id {entry_id} not found"}
+
+    clauses = ["1=1"]
+    params: list[Any] = []
+    if exclude_noise:
+        clauses.append("is_noise = 0")
+    if host:
+        clauses.append("host = ?")
+        params.append(host.lower())
+    elif center["host"]:
+        # Default: same host as the center entry (portal XHRs).
+        clauses.append("host = ?")
+        params.append(center["host"])
+    where = " AND ".join(clauses)
+    rows = conn.execute(
+        f"""
+        SELECT entry_id, method, scheme, host, path, query_raw, status, mime,
+               started_datetime, time_ms, is_noise, has_resp_body
+        FROM entries
+        WHERE {where}
+        ORDER BY started_datetime ASC, entry_id ASC
+        """,
+        params,
+    ).fetchall()
+
+    ids = [r["entry_id"] for r in rows]
+    try:
+        idx = ids.index(entry_id)
+    except ValueError:
+        # Center filtered out (noise / host); include it explicitly.
+        rows = list(rows)
+        # Re-fetch full ordered list without exclude for positioning
+        all_rows = conn.execute(
+            """
+            SELECT entry_id, method, scheme, host, path, query_raw, status, mime,
+                   started_datetime, time_ms, is_noise, has_resp_body
+            FROM entries
+            WHERE host = ?
+            ORDER BY started_datetime ASC, entry_id ASC
+            """,
+            (center["host"],),
+        ).fetchall()
+        ids = [r["entry_id"] for r in all_rows]
+        if entry_id not in ids:
+            return {"error": f"entry_id {entry_id} not in host timeline"}
+        idx = ids.index(entry_id)
+        rows = all_rows
+
+    start = max(0, idx - max(0, before))
+    end = min(len(rows), idx + max(0, after) + 1)
+    window = rows[start:end]
+    center_started = center["started_datetime"] or ""
+
+    def delta_ms(started: str | None) -> float | None:
+        if not started or not center_started:
+            return None
+        try:
+            # HAR timestamps are ISO-ish; compare via datetime when possible.
+            from datetime import datetime
+
+            def parse(ts: str) -> datetime:
+                return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+            return (parse(started) - parse(center_started)).total_seconds() * 1000.0
+        except ValueError:
+            return None
+
+    entries = []
+    for row in window:
+        entries.append(
+            {
+                "entry_id": row["entry_id"],
+                "method": row["method"],
+                "url": _entry_url(row),
+                "path": row["path"],
+                "status": row["status"],
+                "mime": row["mime"],
+                "started_datetime": row["started_datetime"],
+                "delta_ms": delta_ms(row["started_datetime"]),
+                "is_center": row["entry_id"] == entry_id,
+                "has_resp_body": bool(row["has_resp_body"]),
+                "is_noise": bool(row["is_noise"]),
+            }
+        )
+    return {
+        "center_entry_id": entry_id,
+        "host": center["host"],
+        "before": before,
+        "after": after,
+        "count": len(entries),
+        "entries": entries,
+        "next": (
+            "Use hardly_entry / hardly_forms on XHRs after the center "
+            "(positive delta_ms) to map the click handler."
+        ),
     }
 
 
@@ -213,6 +799,9 @@ def get_entry(
         headers[h["side"]].append({"name": h["name"], "value": h["value_redacted"]})
 
     bodies = {}
+    resp_preview = None
+    resp_size = None
+    resp_ct = None
     for b in conn.execute(
         "SELECT side, content_type, size, preview_text FROM bodies WHERE entry_id = ?",
         (entry_id,),
@@ -223,6 +812,19 @@ def get_entry(
             "size": b["size"],
             **preview,
         }
+        if b["side"] == "response":
+            resp_preview = b["preview_text"]
+            resp_size = b["size"]
+            resp_ct = b["content_type"]
+
+    from hardly.core.classify import classify_response
+
+    content = classify_response(
+        mime=resp_ct or row["mime"],
+        path=row["path"],
+        body=resp_preview,
+        size=resp_size,
+    )
 
     return {
         "entry_id": row["entry_id"],
@@ -235,9 +837,17 @@ def get_entry(
         "query": json.loads(row["query_json"]) if row["query_json"] else {},
         "status": row["status"],
         "mime": row["mime"],
+        "content": content,
         "started_datetime": row["started_datetime"],
         "time_ms": row["time_ms"],
         "is_noise": bool(row["is_noise"]),
+        "pageref": row["pageref"] if "pageref" in row.keys() else None,
+        "initiator_type": (
+            row["initiator_type"] if "initiator_type" in row.keys() else None
+        ),
+        "initiator_url": (
+            row["initiator_url"] if "initiator_url" in row.keys() else None
+        ),
         "headers": headers,
         "bodies": bodies,
     }

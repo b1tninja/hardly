@@ -165,11 +165,119 @@ def get_conn(session_id: str) -> sqlite3.Connection | None:
         return sess["conn"] if sess else None
 
 
+def reopen_session(session_id: str, *, force: bool = False) -> dict:
+    """Reattach a cached session after MCP restart (by session_id).
+
+    Prefers reopening the original HAR path via open_har. If the HAR file is
+    gone but the SQLite index remains, attaches the index read-only for query.
+    """
+    sid = (session_id or "").strip()
+    if not sid:
+        return {"error": "session_id required"}
+    with _lock:
+        if sid in _sessions and not force:
+            from hardly.index.query import summary
+
+            return {
+                "session_id": sid,
+                "cached": True,
+                "reopened": False,
+                **summary(_sessions[sid]["conn"]),
+            }
+
+    meta_path = cache_dir() / f"{sid}.json"
+    db_path = cache_dir() / f"{sid}.db"
+    if not meta_path.is_file() and not db_path.is_file():
+        return {
+            "error": f"Unknown session_id: {sid}",
+            "hint": "Call hardly_list_sessions, then hardly_open(har_path) or reopen.",
+        }
+
+    meta: dict[str, Any] = {}
+    if meta_path.is_file():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            meta = {}
+
+    har_path = meta.get("har_path")
+    if har_path:
+        resolved = resolve_path(har_path)
+        if resolved.is_file():
+            result = open_har(resolved, force=force)
+            if "error" not in result:
+                result["reopened"] = True
+            return result
+
+    if not db_path.is_file():
+        return {
+            "error": f"Cache incomplete for session_id {sid}",
+            "har_path": har_path,
+            "hint": "Re-run hardly_open with the HAR path.",
+        }
+
+    from hardly.index.query import summary
+
+    with _lock:
+        if sid in _sessions:
+            try:
+                _sessions[sid]["conn"].close()
+            except sqlite3.Error:
+                pass
+        conn = connect(str(db_path))
+        _sessions[sid] = {
+            "conn": conn,
+            "har_path": har_path or "",
+            "db_path": str(db_path),
+        }
+        return {
+            "session_id": sid,
+            "cached": True,
+            "reopened": True,
+            "har_missing": not bool(har_path and Path(str(har_path)).is_file()),
+            "har_path": har_path,
+            **summary(conn),
+            "next": (
+                "Index attached from cache. Correlate/cookies prefer the HAR "
+                "on disk — re-open the path if token matching looks thin."
+            ),
+        }
+
+
 def require_conn(session_id: str) -> sqlite3.Connection:
+    conn = get_conn(session_id)
+    if conn is not None:
+        return conn
+    # MCP restarts drop in-memory sessions; auto-reattach from cache.
+    result = reopen_session(session_id)
+    if "error" in result:
+        raise KeyError(
+            f"Unknown session_id: {session_id}. Call hardly_open first "
+            f"(or hardly_reopen if list_sessions still shows it)."
+        )
     conn = get_conn(session_id)
     if conn is None:
         raise KeyError(f"Unknown session_id: {session_id}. Call hardly_open first.")
     return conn
+
+
+def get_har_path(session_id: str) -> Path | None:
+    """Return the on-disk HAR path for an open session, if known."""
+    with _lock:
+        sess = _sessions.get(session_id)
+        if sess and sess.get("har_path"):
+            path = Path(sess["har_path"])
+            return path if path.is_file() else None
+    # Fall back to meta after reopen / for closed sessions.
+    meta_path = cache_dir() / f"{session_id}.json"
+    if meta_path.is_file():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            path = Path(meta.get("har_path") or "")
+            return path if path.is_file() else None
+        except (OSError, json.JSONDecodeError, TypeError):
+            return None
+    return None
 
 
 def list_sessions() -> list[dict]:

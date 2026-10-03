@@ -13,3 +13,7 @@ build/
 *.db
 .DS_Store
 .env
+*.har
+*.HAR
+.mcp.json
+.cursor/

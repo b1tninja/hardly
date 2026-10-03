@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hardly"
-version = "0.1.0"
+version = "0.2.18"
 description = "HAR analysis MCP server — index, query, document, and probe APIs without burning tokens on raw captures"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -20,6 +20,10 @@ hardly = "hardly.cli:main"
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+]
+capture = [
+    # 1.49+: locator.aria_snapshot; 1.59+: mode="ai" (refs for agents)
+    "playwright>=1.49",
 ]
 
 [tool.hatch.build.targets.wheel]
