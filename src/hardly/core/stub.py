@@ -172,6 +172,21 @@ def _entry_step(conn: sqlite3.Connection, entry_id: int) -> dict[str, Any] | Non
             "referer",
         }
     }
+    # Authorization/API-key headers: keep the *scheme*, never the value.
+    for k in list(headers):
+        low = k.lower()
+        if low == "authorization":
+            shape = conn.execute(
+                "SELECT shape FROM value_shapes WHERE entry_id = ? AND lower(name) = 'authorization' LIMIT 1",
+                (entry_id,),
+            ).fetchone()
+            kind = shape["shape"] if shape else ""
+            interesting[k] = (
+                "Basic PLACEHOLDER_BASIC_CREDENTIALS" if kind == "basic_auth"
+                else "Bearer PLACEHOLDER_TOKEN"
+            )
+        elif low in {"api_key", "api-key", "apikey", "x-api-key", "x-auth-token", "x-access-token"}:
+            interesting[k] = f"PLACEHOLDER_{low.upper().replace('-', '_')}"
     method = row["method"]
     lines = [
         f"# entry_id={entry_id} {method} {row['path']}",

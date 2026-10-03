@@ -150,6 +150,8 @@ def detect_auth(conn: sqlite3.Connection, *, host: str | None = None) -> dict:
             OR LOWER(h.name) LIKE 'x-%xsrf%'
             OR LOWER(h.name) LIKE 'x-%api%'
             OR LOWER(h.name) LIKE 'x-%legfi%'
+            OR LOWER(h.name) IN ('api_key', 'api-key', 'apikey', 'auth-token', 'auth_token', 'access-token',
+                                 'access_token', 'token', 'secret', 'session-id', 'session_id', 'sessiontoken')
           )
         GROUP BY LOWER(h.name)
         ORDER BY cnt DESC

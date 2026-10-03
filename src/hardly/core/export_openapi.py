@@ -113,6 +113,8 @@ def export_openapi(
                 if parsed is not None:
                     bucket.append(parsed)
 
+        parameters = _path_parameters(path_key) + _query_parameters(conn, rows)
+        auth_scheme = _operation_auth_scheme(conn, rows)
         op: dict[str, Any] = {
             "summary": f"{ep['method']} {path_key}",
             "operationId": f"{method}_{ep['host'].replace('.', '_')}_{path_key.strip('/').replace('/', '_').replace('{', '').replace('}', '')}"[:80],
@@ -127,6 +129,11 @@ def export_openapi(
                     }
                 }
             op["responses"][str(code)] = resp_obj
+
+        if parameters:
+            op["parameters"] = parameters
+        if auth_scheme:
+            op["security"] = [{auth_scheme: []}]
 
         if samples_req and method in {"post", "put", "patch"}:
             op["requestBody"] = {
@@ -149,7 +156,8 @@ def export_openapi(
     }
     if security_schemes:
         doc["components"] = {"securitySchemes": security_schemes}
-        doc["security"] = security
+        # No global requirement: public operations (login, docs) must stay open.
+        # Operations that were called with credentials carry their own `security`.
 
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -182,19 +190,41 @@ def _security_from_auth(
         **(auth.get("custom_auth_headers") or {}),
     }
     schemes: dict[str, Any] = {}
-    if "authorization" in headers:
+    shapes = {
+        r["shape"]
+        for r in conn.execute(
+            "SELECT DISTINCT shape FROM value_shapes WHERE lower(name) = 'authorization'"
+        )
+    }
+    challenge_schemes: set[str] = set()
+    try:
+        from hardly.core.challenges import detect_challenges
+
+        for ch in detect_challenges(conn, host=host, limit=30)["auth_challenges"]:
+            challenge_schemes |= {s["scheme"].lower() for s in ch["schemes"]}
+    except Exception:  # noqa: BLE001
+        pass
+    if "basic_auth" in shapes or "basic" in challenge_schemes:
+        schemes["basicAuth"] = {"type": "http", "scheme": "basic", "description": "HTTP Basic (Authorization header or 401 challenge seen)."}
+    if "digest" in challenge_schemes:
+        schemes["digestAuth"] = {"type": "http", "scheme": "digest", "description": "HTTP Digest challenge seen (401 WWW-Authenticate: Digest)."}
+    if shapes & {"bearer_jwt", "bearer_token"} or "bearer" in challenge_schemes:
+        bearer: dict[str, Any] = {"type": "http", "scheme": "bearer", "description": "Bearer token in the Authorization header."}
+        if "bearer_jwt" in shapes:
+            bearer["bearerFormat"] = "JWT"
+        schemes["bearerAuth"] = bearer
+    if "authorization" in headers and not (set(schemes) & {"basicAuth", "digestAuth", "bearerAuth"}):
         schemes["bearerAuth"] = {
             "type": "http",
             "scheme": "bearer",
-            "bearerFormat": "JWT",
-            "description": "Authorization header seen in capture (often stripped by Chrome HAR).",
+            "description": "Authorization header seen in capture; scheme not determinable (value withheld).",
         }
     if "cookie" in headers or "set-cookie" in headers:
         schemes["cookieAuth"] = {
             "type": "apiKey",
             "in": "cookie",
-            "name": "session",
-            "description": "Session cookie — name is a placeholder; check hardly_cookies.",
+            "name": _session_cookie_name(conn),
+            "description": "Session cookie observed in capture.",
         }
     for name in sorted(headers):
         if name in {"authorization", "cookie", "set-cookie"}:
@@ -218,6 +248,78 @@ def _security_from_auth(
                 }
     security = [{name: []} for name in schemes][:4]
     return schemes, security
+
+
+_PATH_TYPE = {"id": "integer", "uuid": "string", "hex": "string", "token": "string"}
+
+
+def _path_parameters(path_key: str) -> list[dict[str, Any]]:
+    """Declare every ``{name}`` segment (OpenAPI 3 requires it)."""
+    import re as _re
+
+    out, seen = [], set()
+    for name in _re.findall(r"\{([^}/]+)\}", path_key):
+        if name in seen:
+            continue
+        seen.add(name)
+        schema: dict[str, Any] = {"type": _PATH_TYPE.get(name, "string")}
+        if name == "uuid":
+            schema["format"] = "uuid"
+        out.append({"name": name, "in": "path", "required": True, "schema": schema})
+    return out
+
+
+def _query_parameters(conn: sqlite3.Connection, rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
+    """Query parameter names seen on the sampled calls (values never exported)."""
+    names: dict[str, bool] = {}
+    for r in rows:
+        q = conn.execute("SELECT query_json FROM entries WHERE entry_id = ?", (r["entry_id"],)).fetchone()
+        try:
+            data = json.loads((q["query_json"] if q else None) or "{}")
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(data, dict):
+            for k, v in data.items():
+                vals = v if isinstance(v, list) else [v]
+                names[k] = names.get(k, True) and all(str(x).lstrip("-").isdigit() for x in vals)
+    return [
+        {"name": k, "in": "query", "required": False, "schema": {"type": "integer" if is_int else "string"}}
+        for k, is_int in sorted(names.items())
+    ]
+
+
+def _operation_auth_scheme(conn: sqlite3.Connection, rows: list[sqlite3.Row]) -> str | None:
+    """Security scheme for an operation that was called with an Authorization header."""
+    for r in rows:
+        has = conn.execute(
+            "SELECT 1 FROM headers WHERE entry_id = ? AND side = 'request' AND lower(name) = 'authorization'",
+            (r["entry_id"],),
+        ).fetchone()
+        if not has:
+            continue
+        shape = conn.execute(
+            "SELECT shape FROM value_shapes WHERE entry_id = ? AND lower(name) = 'authorization' LIMIT 1",
+            (r["entry_id"],),
+        ).fetchone()
+        kind = shape["shape"] if shape else ""
+        return {"basic_auth": "basicAuth"}.get(kind, "bearerAuth")
+    return None
+
+
+def _session_cookie_name(conn: sqlite3.Connection) -> str:
+    """First observed cookie that looks like the session (not a CSRF/tracker)."""
+    import re as _re
+
+    from hardly.core.cookies import cookie_timeline
+
+    try:
+        names = cookie_timeline(conn, host=None, limit=60).get("names_set") or []
+    except Exception:  # noqa: BLE001
+        names = []
+    for n in names:
+        if _re.search(r"session|sess|sid|auth|token|jwt", n, _re.I) and not _re.search(r"csrf|xsrf", n, _re.I):
+            return n
+    return "session"
 
 
 def _to_yaml(obj: Any, indent: int = 0) -> str:

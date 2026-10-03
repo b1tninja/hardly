@@ -143,3 +143,40 @@ def test_login_flow_ignores_echoed_passwords_and_models_http_challenges(tmp_path
     names = [f["name"] for f in out["identity_fields"]]
     assert "userAgent" not in names
     assert "hunter22" not in json.dumps(out) and token not in json.dumps(out)
+
+
+def test_openapi_and_stub_reflect_auth_scheme_and_parameters(tmp_path, monkeypatch):
+    from hardly.core.export_openapi import export_openapi
+    from hardly.core.stub import client_stub
+
+    token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJlLXZhbHVlLWhlcmU"
+    entries = [
+        _entry(1, "GET", "https://api.example.com/auth/login", body='{"ok":true}', ct="application/json"),
+        _entry(2, "GET", "https://api.example.com/items/42?status=available&page=2",
+               req_headers={"Authorization": f"Basic dTpw", "api_key": "special"}, body='{"id":42}', ct="application/json"),
+        _entry(3, "GET", "https://api.example.com/items/43?status=sold",
+               req_headers={"Authorization": f"Bearer {token}"}, body='{"id":43}', ct="application/json"),
+    ]
+    path = tmp_path / "o.har"
+    path.write_text(json.dumps({"log": {"version": "1.2", "creator": {"name": "t", "version": "1"}, "entries": entries}}))
+    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    info = sess.open_har(str(path), force=True)
+    conn = sess.require_conn(info["session_id"])
+    out = tmp_path / "o.json"
+    export_openapi(conn, out)
+    doc = json.loads(out.read_text())
+    op = doc["paths"]["/items/{id}"]["get"]
+    params = {(p["name"], p["in"]): p for p in op["parameters"]}
+    assert params[("id", "path")]["required"] is True and params[("id", "path")]["schema"]["type"] == "integer"
+    assert ("status", "query") in params and ("page", "query") in params
+    assert params[("page", "query")]["schema"]["type"] == "integer"
+    assert "security" not in doc                                  # public operations stay open
+    assert "security" not in doc["paths"]["/auth/login"]["get"]
+    assert op["security"] in ([{"basicAuth": []}], [{"bearerAuth": []}])
+    schemes = doc["components"]["securitySchemes"]
+    assert schemes["basicAuth"]["scheme"] == "basic" and schemes["bearerAuth"]["bearerFormat"] == "JWT"
+    stub = client_stub(conn, entry_ids=[1], output_path=tmp_path / "s.py")
+    text = (tmp_path / "s.py").read_text()
+    assert "Basic PLACEHOLDER_BASIC_CREDENTIALS" in text and "PLACEHOLDER_API_KEY" in text
+    assert "dTpw" not in text and "special" not in text and token not in text
+    compile(text, "s.py", "exec")
