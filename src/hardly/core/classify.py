@@ -167,6 +167,10 @@ def classify_response(
     if jsonl:
         return jsonl
 
+    wrapped = _try_double_json(stripped)
+    if wrapped:
+        return wrapped
+
     as_json = _try_json(stripped, mime_l)
     if as_json:
         return as_json
@@ -279,6 +283,10 @@ def summarize_content(
             body=row["preview_text"],
             size=row["size"],
         )
+        if info["kind"] == "json":
+            from hardly.index.query import _flag_double_encoded
+
+            _flag_double_encoded(conn, row["entry_id"], info)
         k = info["kind"]
         if kind and k != kind and info.get("subtype") != kind:
             continue
@@ -512,6 +520,28 @@ def _try_json(text: str, mime: str) -> dict[str, Any] | None:
         size=len(text),
         subtype=shape,
         hints=_json_shape_hints(data),
+        json_keys=_json_top_keys(data),
+    )
+
+
+def _try_double_json(text: str) -> dict[str, Any] | None:
+    """A JSON string whose content is itself a JSON object/array."""
+    if not text.startswith('"'):
+        return None
+    from hardly.core.json_unwrap import unwrap_double_encoded
+
+    data = unwrap_double_encoded(text)
+    if data is None:
+        return None
+    shape = "array" if isinstance(data, list) else "object"
+    return _pack(
+        "json",
+        confidence="high",
+        mime=None,
+        path=None,
+        size=len(text),
+        subtype=shape,
+        hints=["double_encoded_json", *_json_shape_hints(data)],
         json_keys=_json_top_keys(data),
     )
 

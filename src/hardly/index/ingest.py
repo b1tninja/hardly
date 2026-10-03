@@ -45,7 +45,7 @@ from hardly.index.schema import connect, init_db
 PREVIEW_CHARS = 8000
 # Bump when ingest output changes meaning (redaction, shapes, signals) so cached
 # indexes built by older versions are rebuilt instead of reused.
-INDEX_VERSION = 3
+INDEX_VERSION = 4
 # HTML portals often bury forms after scripts/CSS; keep more for hardly_forms.
 HTML_PREVIEW_CHARS = 64_000
 
@@ -163,6 +163,16 @@ def _store_body(
         return
     preview = None
     sha = None
+    double_encoded = False
+    if text is not None:
+        from hardly.core.json_unwrap import unwrap_double_encoded
+
+        inner = unwrap_double_encoded(text)
+        if inner is not None:
+            # Hash the wire bytes; preview/shapes use the unwrapped JSON.
+            sha = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
+            text = json.dumps(inner, ensure_ascii=False)
+            double_encoded = True
     if text is not None:
         limit = (
             HTML_PREVIEW_CHARS
@@ -171,8 +181,15 @@ def _store_body(
         )
         redacted = redact_body_text(text, max_chars=limit)
         preview = redacted["text"]
-        sha = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
+        if sha is None:
+            sha = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
         size = redacted["size"] or size
+    if double_encoded:
+        conn.execute(
+            "INSERT INTO body_signals (entry_id, kind, name) "
+            "VALUES (?, 'encoding', 'double-encoded-json')",
+            (entry_id,),
+        )
     if text is not None and side == "response" and mime and "html" in str(mime).lower() and len(text) > HTML_PREVIEW_CHARS:
         from hardly.core.grids import html_grid_signals
 

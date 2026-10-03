@@ -24,6 +24,25 @@ _FORBIDDEN = re.compile(
 )
 
 
+def _flag_double_encoded(conn: sqlite3.Connection, entry_id: int, content: dict) -> None:
+    """Add the double_encoded_json hint when ingest unwrapped this body."""
+    if content.get("kind") != "json":
+        return
+    hints = content.get("hints") or []
+    if "double_encoded_json" in hints:
+        return
+    try:
+        hit = conn.execute(
+            "SELECT 1 FROM body_signals WHERE entry_id = ? AND kind = 'encoding' "
+            "AND name = 'double-encoded-json' LIMIT 1",
+            (entry_id,),
+        ).fetchone()
+    except sqlite3.Error:
+        return
+    if hit:
+        content["hints"] = ["double_encoded_json", *hints][:12]
+
+
 def body_coverage(
     conn: sqlite3.Connection,
     *,
@@ -396,6 +415,7 @@ def search_entries(
             body=r["preview_text"],
             size=r["body_size"],
         )
+        _flag_double_encoded(conn, r["entry_id"], content)
         kind = (content.get("kind") or "").lower()
         subtype = (content.get("subtype") or "").lower()
         if want_kind and want_kind not in {kind, subtype}:
@@ -700,10 +720,17 @@ def list_js_routes(
                     "score": route["score"],
                     "samples": [],
                     "source_entry_ids": [],
+                    "body_keys": [],
+                    "method": None,
                 },
             )
             agg["count"] += route["count"]
             agg["score"] = max(agg["score"], route["score"])
+            for k in route.get("body_keys") or []:
+                if k not in agg["body_keys"] and len(agg["body_keys"]) < 12:
+                    agg["body_keys"].append(k)
+            if route.get("method") and not agg["method"]:
+                agg["method"] = route["method"]
             if row["entry_id"] not in agg["source_entry_ids"]:
                 if len(agg["source_entry_ids"]) < 8:
                     agg["source_entry_ids"].append(row["entry_id"])
@@ -887,6 +914,7 @@ def get_entry(
         body=resp_preview,
         size=resp_size,
     )
+    _flag_double_encoded(conn, entry_id, content)
 
     shapes: list[dict[str, Any]] = []
     try:
@@ -1042,9 +1070,16 @@ def endpoint_schema(
             ).fetchone()
             if b and b["preview_text"]:
                 try:
-                    bucket.append(json.loads(b["preview_text"]))
+                    parsed = json.loads(b["preview_text"])
                 except (json.JSONDecodeError, TypeError):
-                    pass
+                    continue
+                if isinstance(parsed, str):
+                    from hardly.core.json_unwrap import unwrap_double_encoded
+
+                    inner = unwrap_double_encoded(b["preview_text"])
+                    if inner is not None:
+                        parsed = inner
+                bucket.append(parsed)
     return {
         "method": method.upper(),
         "host": host.lower(),
