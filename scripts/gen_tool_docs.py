@@ -25,6 +25,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Quality and traffic", ("issues", "wall", "duplicates", "slow", "diff", "gates")),
     ("Client SDK output", ("stub", "recipe_plan", "curl", "export_md", "export_openapi", "export_postman", "export_brief", "sql")),
     ("Live probe", ("probe", "arcgis_explore", "crawl", "redirect_diag", "replay_check")),
+    ("Target catalog", ("catalog_list", "catalog_upsert", "catalog_verify")),
 )
 
 

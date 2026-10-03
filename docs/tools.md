@@ -282,6 +282,20 @@ Explain a redirect loop (ERR_TOO_MANY_RETRIES/REDIRECTS). LIVE GETs: requires co
 
 Live replay minimisation (needs confirm=true). Replays one entry (or an ordered flow of entry ids; earlier ids are prior steps, the last is the target) with a cookie jar, then removes one header / cookie / query param / body field / prior step at a time and reports which are REQUIRED vs OPTIONAL (names only, no bodies). Secrets only via overrides_json: {"headers":{},"cookies":{},"query":{},"body":{}}; missing ones are listed under needs_override. GET/HEAD only unless allow_unsafe=true. Hard stop on 429 / Retry-After / gate stop; captcha token fields are never sent. Budget-skipped items appear under not_tested.
 
+## Target catalog
+
+### `hardly_catalog_list(path, tag=None, group_json=None, role=None, status=None, target_id=None, summary=False)`
+
+List a content-neutral target catalog (JSON/YAML file), filtered. No network.
+
+### `hardly_catalog_upsert(path, target_json, merge=True, create=False)`
+
+Add or update one target in a catalog file (atomic write). No network.
+
+### `hardly_catalog_verify(path, confirm=False, tag=None, group_json=None, role=None, status=None, target_id=None, delay_s=1.0, max_requests=50, max_endpoints=None, recheck_after_s=None, force=False)`
+
+Politely verify catalog endpoints and write statuses back. LIVE GETs: requires confirm=true.
+
 ## Capture and other
 
 ### `hardly_capture_aria(capture_id='', selector='', mode='ai')`

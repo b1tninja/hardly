@@ -66,6 +66,14 @@ easy to call from tests and notebooks. Check `hardly capabilities` (or
    which endpoints, fields or auth behaviours moved.
 7. Mark live smoke tests so they are opt-in; default CI stays offline.
 
+## Many targets: the catalog
+
+To track many targets with several discovered URLs each, keep them in a
+`hardly.core.catalog` file and subclass `TargetAdapter` for your own discovery;
+`CatalogRunner` verifies politely and stops at gates. hardly stays
+content-neutral - your project defines tags, group keys and roles. See
+[catalog.md](catalog.md).
+
 ## Testing hardly itself
 
 ```bash

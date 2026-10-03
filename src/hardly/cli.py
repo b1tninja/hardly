@@ -538,6 +538,95 @@ def cmd_crawl(args: argparse.Namespace) -> int:
 
 
 
+def _kv_pairs(items: list[str] | None, what: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for item in items or []:
+        key, sep, val = item.partition("=")
+        if not sep or not key.strip():
+            raise ValueError(f"{what} must look like key=value: {item!r}")
+        out[key.strip()] = val.strip()
+    return out
+
+
+def _catalog_filters(args: argparse.Namespace) -> dict:
+    return {
+        "tag": args.tag or None,
+        "group": _kv_pairs(args.group, "--group") or None,
+        "role": args.role,
+        "status": args.status,
+    }
+
+
+def cmd_catalog(args: argparse.Namespace) -> int:
+    from hardly.core import catalog as C
+
+    act = args.catalog_action
+    try:
+        if act == "init":
+            if Path(args.path).exists() and not args.force:
+                _print({"error": "catalog file exists; pass --force to overwrite"})
+                return 1
+            C.save(C.Catalog(name=args.name), args.path)
+            _print({"created": str(args.path), "name": args.name, "version": C.CATALOG_VERSION})
+            return 0
+        cat = C.load(args.path)
+        if act == "add":
+            endpoints = []
+            for spec in args.endpoint or []:
+                # role=url[,kind]
+                role, sep, rest = spec.partition("=")
+                if not sep:
+                    raise ValueError(f"--endpoint must look like role=url[,kind]: {spec!r}")
+                url, kind = rest, ""
+                head, comma, tail = rest.rpartition(",")
+                if comma and tail in C.KINDS:
+                    url, kind = head, tail
+                endpoints.append({"role": role, "url": url, "kind": kind or None})
+            t = cat.upsert(
+                {"id": args.id, "name": args.name or "", "tags": args.tag or [],
+                 "groups": _kv_pairs(args.group, "--group"), "endpoints": endpoints},
+                merge=not args.replace,
+            )
+            C.save(cat, args.path)
+            _print({"saved": t.to_dict()})
+            return 0
+        if act == "list":
+            f = _catalog_filters(args)
+            if args.summary:
+                _print(cat.summary())
+            else:
+                _print({"rows": cat.table(**f), "count": len(cat.table(**f))})
+            return 0
+        if act == "show":
+            t = cat.get(args.id)
+            if t is None:
+                _print({"error": f"no target {args.id!r}"})
+                return 1
+            _print(t.to_dict())
+            return 0
+        if act == "export":
+            text = C.dumps(cat, args.format)
+            if args.output:
+                Path(args.output).write_text(text, encoding="utf-8", newline="\n")
+                _print({"written": str(args.output), "format": args.format})
+            else:
+                print(text, end="")
+            return 0
+        if act == "verify":
+            runner = C.CatalogRunner(
+                cat, path=args.path, confirm=args.yes, delay_s=args.delay,
+                max_requests=args.max_requests, max_endpoints=args.max_endpoints,
+                recheck_after_s=args.recheck_after, force=args.force,
+            )
+            out = runner.run(target_id=args.id, **_catalog_filters(args))
+            _print(out)
+            return 1 if "error" in out else 0
+    except (C.CatalogError, ValueError) as exc:
+        _print({"error": str(exc)})
+        return 1
+    return 1
+
+
 def cmd_replay_check(args: argparse.Namespace) -> int:
     from hardly.core.replay_check import replay_check
 
@@ -1702,6 +1791,51 @@ def build_parser() -> argparse.ArgumentParser:
     crawl_p.add_argument("--user-agent", default=None, help='Default is an honest hardly UA; "browser" or a custom string')
     crawl_p.add_argument("--yes", action="store_true", help="Confirm live requests")
     crawl_p.set_defaults(func=cmd_crawl)
+
+
+    cat_p = sub.add_parser("catalog", help="Content-neutral target catalog (init/add/list/show/verify/export)")
+    cat_sub = cat_p.add_subparsers(dest="catalog_action", required=True)
+
+    def _cat_filters(p: argparse.ArgumentParser) -> None:
+        p.add_argument("--tag", action="append", help="Require tag (repeatable)")
+        p.add_argument("--group", action="append", help="Require group key=value (repeatable)")
+        p.add_argument("--role", help="Endpoint role")
+        p.add_argument("--status", choices=["unverified", "verified", "blocked", "dead", "needs_browser"])
+
+    c = cat_sub.add_parser("init", help="Create an empty catalog file (.json, or .yaml with PyYAML)")
+    c.add_argument("path")
+    c.add_argument("--name", default="catalog")
+    c.add_argument("--force", action="store_true")
+    c = cat_sub.add_parser("add", help="Add or merge a target")
+    c.add_argument("path")
+    c.add_argument("--id", required=True)
+    c.add_argument("--name")
+    c.add_argument("--tag", action="append")
+    c.add_argument("--group", action="append", help="key=value (repeatable)")
+    c.add_argument("--endpoint", action="append", help="role=url[,kind] (repeatable)")
+    c.add_argument("--replace", action="store_true", help="Replace the target instead of merging")
+    c = cat_sub.add_parser("list", help="List endpoints (one row each), filtered")
+    c.add_argument("path")
+    _cat_filters(c)
+    c.add_argument("--summary", action="store_true", help="Counts by tag/group/role/status/gate/stack")
+    c = cat_sub.add_parser("show", help="Show one target")
+    c.add_argument("path")
+    c.add_argument("id")
+    c = cat_sub.add_parser("verify", help="Politely verify endpoints (live GETs; requires --yes)")
+    c.add_argument("path")
+    c.add_argument("--id", help="Only this target")
+    _cat_filters(c)
+    c.add_argument("--delay", type=float, default=1.0, help="Seconds between requests per host")
+    c.add_argument("--max-requests", type=int, default=100)
+    c.add_argument("--max-endpoints", type=int)
+    c.add_argument("--recheck-after", type=float, help="Re-verify endpoints older than N seconds")
+    c.add_argument("--force", action="store_true", help="Re-verify already-checked endpoints")
+    c.add_argument("--yes", action="store_true", help="Confirm live requests")
+    c = cat_sub.add_parser("export", help="Write the catalog as json, yaml or csv")
+    c.add_argument("path")
+    c.add_argument("--format", choices=["json", "yaml", "csv"], default="json")
+    c.add_argument("-o", "--output")
+    cat_p.set_defaults(func=cmd_catalog)
 
 
     rc_p = sub.add_parser(

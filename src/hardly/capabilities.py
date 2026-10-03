@@ -87,6 +87,7 @@ FEATURES = (
     "capture_url",
     "capture_recipe",
     "offline_xpath",
+    "catalog",
 )
 
 TOOLS = (
@@ -127,6 +128,9 @@ TOOLS = (
     "hardly_auth_patterns",
     "hardly_replay_check",
     "hardly_crawl",
+    "hardly_catalog_list",
+    "hardly_catalog_upsert",
+    "hardly_catalog_verify",
     "hardly_redirect_diag",
     "hardly_arcgis_explore",
     "hardly_arcgis",

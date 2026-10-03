@@ -1256,6 +1256,112 @@ def hardly_crawl(
 
 
 @mcp.tool
+def hardly_catalog_list(
+    path: str,
+    tag: str | None = None,
+    group_json: str | None = None,
+    role: str | None = None,
+    status: str | None = None,
+    target_id: str | None = None,
+    summary: bool = False,
+) -> str:
+    """List a content-neutral target catalog (JSON/YAML file), filtered. No network.
+
+    One row per endpoint: target, tags, groups, role, kind, status, redacted url, gate
+    classes, stack names. Filters: `tag` (comma-separated, all required), `group_json`
+    (JSON object of key->value), `role`, `status`, `target_id`. summary=true returns
+    counts by tag/group/role/status/gate class/stack instead. hardly assigns no meaning
+    to tags, group keys or roles - a downstream project defines them (docs/catalog.md).
+    """
+    from hardly.core import catalog as C
+
+    try:
+        group = json.loads(group_json) if group_json else None
+        if group is not None and not isinstance(group, dict):
+            raise ValueError("group_json must be a JSON object")
+        cat = C.load(path)
+        if summary:
+            return _ok(cat.summary())
+        rows = cat.table(
+            tag=[t for t in (tag or "").split(",") if t.strip()] or None,
+            group=group, role=role, status=status, target_id=target_id,
+        )
+        return _ok({"count": len(rows), "rows": rows})
+    except (C.CatalogError, ValueError) as exc:
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_catalog_upsert(path: str, target_json: str, merge: bool = True, create: bool = False) -> str:
+    """Add or update one target in a catalog file (atomic write). No network.
+
+    `target_json` is {id, name, tags[], groups{}, endpoints:[{role, url, kind?, status?,
+    gate_classes?, stack?, notes?, capture?:{recipe_ref, har_ref}}]}. URLs are redacted
+    (session ids / secret query values stripped) and validated (http(s), known kind and
+    status enums). merge=true unions tags, overlays groups and merges endpoints by
+    (role, url); merge=false replaces the target. create=true makes the file if missing.
+    """
+    from pathlib import Path
+
+    from hardly.core import catalog as C
+
+    try:
+        data = json.loads(target_json)
+        if not Path(path).exists() and create:
+            cat = C.Catalog()
+        else:
+            cat = C.load(path)
+        t = cat.upsert(data, merge=merge)
+        C.save(cat, path)
+        return _ok({"saved": t.to_dict(), "targets": len(cat.targets)})
+    except (C.CatalogError, ValueError) as exc:
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_catalog_verify(
+    path: str,
+    confirm: bool = False,
+    tag: str | None = None,
+    group_json: str | None = None,
+    role: str | None = None,
+    status: str | None = None,
+    target_id: str | None = None,
+    delay_s: float = 1.0,
+    max_requests: int = 50,
+    max_endpoints: int | None = None,
+    recheck_after_s: float | None = None,
+    force: bool = False,
+) -> str:
+    """Politely verify catalog endpoints and write statuses back. LIVE GETs: requires confirm=true.
+
+    Without confirm returns only the plan (endpoints and hosts). Per endpoint it runs one
+    robots-aware, honest-UA crawl fetch (hardly_crawl machinery), records status
+    (verified|blocked|dead|needs_browser), gate classes and stack names - never bodies or
+    tokens. Per-host delay, request budget, resumable (already-checked endpoints are
+    skipped unless force/recheck_after_s). Stops a host on any gate, rate limit or
+    environment block per docs/gate-policy.md; never evades or retries a challenge.
+    """
+    from hardly.core import catalog as C
+
+    try:
+        group = json.loads(group_json) if group_json else None
+        cat = C.load(path)
+        runner = C.CatalogRunner(
+            cat, path=path, confirm=confirm, delay_s=delay_s, max_requests=max_requests,
+            max_endpoints=max_endpoints, recheck_after_s=recheck_after_s, force=force,
+        )
+        return _ok(
+            runner.run(
+                tag=[t for t in (tag or "").split(",") if t.strip()] or None,
+                group=group, role=role, status=status, target_id=target_id,
+            )
+        )
+    except (C.CatalogError, ValueError) as exc:
+        return _err(exc)
+
+
+@mcp.tool
 def hardly_replay_check(
     session_id: str,
     entry_ids: list[int],
