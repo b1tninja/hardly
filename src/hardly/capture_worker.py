@@ -2,7 +2,7 @@
 
 Started by ``hardly.capture.start_capture`` as a subprocess so the browser
 survives after the CLI / MCP call returns. Controlled via sidecar files in
-``~/.cache/hardly/captures/active/``:
+``<tempdir>/hardly-<uid>/captures/active/``:
 
 - ``{id}.json`` — status
 - ``{id}.stop`` — request stop

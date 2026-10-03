@@ -49,7 +49,7 @@ def _entry(method, path, query=None, headers=None, post=None, mime="application/
 
 
 def _open(tmp_path, monkeypatch, entries):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     har = tmp_path / "t.har"
     har.write_text(json.dumps({"log": {"version": "1.2", "creator": {"name": "t", "version": "1"}, "entries": entries}}))
     info = sess.open_har(str(har), force=True)

@@ -36,21 +36,17 @@ One-pass evidence index (access, auth, stack, data, forms): findings with severi
 
 ## Sessions
 
-### `hardly_open(har_path, force=False, storage=None)`
+### `hardly_open(har_path, force=False, output_path='', overwrite=False)`
 
-Index a HAR file into a queryable session and return session_id plus summary counts. Start here for any existing HAR; never Read the raw HAR file. Reuses the cache when the file is unchanged. storage=disk|memory|auto (default from HARDLY_INDEX, else disk); memory writes nothing to disk. Example: hardly_open(har_path='/data/capture.har'), then hardly_brief(session_id).
-
-### `hardly_reopen(session_id, force=False)`
-
-Reattach a cached session after an MCP restart without needing the HAR path. Use when hardly_list_sessions shows open=false for your session_id; other tools also auto-reattach. Memory sessions are not cached: reopen the HAR instead. Example: hardly_reopen(session_id='S').
+Index a HAR file (or open a saved index) into a queryable session and return session_id plus summary counts. Start here for any HAR; never Read the raw HAR. Give output_path to save the index there; otherwise nothing is written. Opening the same path again returns the same session. Example: hardly_open(har_path='/data/capture.har'), then hardly_brief(session_id).
 
 ### `hardly_list_sessions()`
 
-List cached and open HAR sessions (session_id, har_path, open flag, storage=disk|memory). Use after an MCP restart or when you lost a session_id; then hardly_reopen if open=false. No arguments.
+List open HAR sessions (session_id, har_path, saved_to). Use when you lost a session_id. No arguments.
 
 ### `hardly_close(session_id)`
 
-Close an open session to free memory (a disk session's cache file stays, so hardly_reopen can restore it; a memory session is discarded). Example: hardly_close(session_id='S').
+Close an open session to free memory (the session is discarded; a file saved with output_path stays). Example: hardly_close(session_id='S').
 
 ### `hardly_summary(session_id)`
 
@@ -404,9 +400,9 @@ Launch a browser capture that records a HAR (needs the capture extra). headed=tr
 
 Status of one capture_id, or the latest running capture if omitted: state, HAR path, entry counts. Poll this while a person drives an interactive capture. Example: hardly_capture_status().
 
-### `hardly_capture_stop(capture_id='', open_session=True, force=False)`
+### `hardly_capture_stop(capture_id='', open_session=True, force=False, export_path='')`
 
-Stop a running capture, flush the HAR and optionally open it as a session. Call when the person says they are done (interactive) or your recipe is complete; then continue with hardly_brief(session_id). Omit capture_id to stop the latest running capture. Example: hardly_capture_stop(open_session=true).
+Stop a running capture, flush the HAR and optionally open it as a session. Call when the person says they are done (interactive) or your recipe is complete; then continue with hardly_brief(session_id). A capture started without har_path is ephemeral (memory only); export_path keeps its HAR. Example: hardly_capture_stop(open_session=true).
 
 ### `hardly_capture_url(capture_id='')`
 
@@ -416,6 +412,6 @@ Return the live capture tab's current URL and title. Cheap check of where a clic
 
 Headless one-shot API discovery: load a URL (optional recipe), stop, open a session and return a brief. Use when the page is scriptable and no person is needed; if the brief shows a wall or captcha, STOP and switch to interactive hardly_capture_start(headed=true, channel='chrome') with a person. Example: hardly_discover(url='https://example.com', wait_seconds=8).
 
-### `hardly_persist(session_id, path=None, overwrite=False)`
+### `hardly_export_har(session_id, output_path, overwrite=False)`
 
-Save a session's index as a compact SQLite file (for storage=memory sessions, which otherwise vanish on restart). Refuses to overwrite unless overwrite=true. Example: hardly_persist(session_id='S').
+Save a copy of the session's source HAR to output_path (atomic, never in place; refuses to overwrite unless overwrite=true). Use to keep a HAR you opened; an ephemeral capture's HAR is already deleted. Example: hardly_export_har(session_id='S', output_path='/data/keep.har').

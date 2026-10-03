@@ -25,7 +25,7 @@ def test_help_catalog_and_topic():
 
 
 def test_openapi_security_schemes(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     out = tmp_path / "openapi.json"
@@ -36,7 +36,7 @@ def test_openapi_security_schemes(tmp_path, monkeypatch):
 
 
 def test_recipe_notes_webforms(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = recipe_from_story(conn, host="portal.example.com")

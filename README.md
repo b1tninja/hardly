@@ -26,8 +26,9 @@ pip install -e ".[dev]"
 pip install -e ".[capture]" && playwright install chromium   # optional: record HARs
 ```
 
-Python 3.10+. Cache lives in `~/.cache/hardly/` (override with `HARDLY_CACHE_DIR`). Sensitive capture?
-`HARDLY_INDEX=memory` keeps the index in RAM and writes nothing to disk (`auto` = memory for small HARs).
+Python 3.10+. **Give an output path to save; otherwise nothing is written.** Everything lives in
+memory unless you pass `output_path` (`hardly open HAR -o index.db`). Python:
+`with open_session(har) as s: ...` ([integrating.md](docs/integrating.md)).
 
 ## 60-second quick start
 
@@ -104,7 +105,6 @@ python scripts/build_image.py       # builds hardly-mcp:latest (Windows: scripts
       "command": "docker",
       "args": ["run", "--rm", "-i",
                "-v", "/home/me/work:/workspace",
-               "-e", "HARDLY_CACHE_DIR=/workspace/.hardly-cache",
                "-e", "HARDLY_WORKSPACE=/workspace",
                "hardly-mcp:latest"]
     }

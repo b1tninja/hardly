@@ -40,7 +40,7 @@ Set-Content -Path $codeFile -Value $code -Encoding UTF8
     -v "${Workspace}:/workspace" `
     -v "${codeFile}:/tmp/smoke.py:ro" `
     -e HARDLY_WORKSPACE=/workspace `
-    -e HARDLY_CACHE_DIR=/workspace/.hardly-cache `
+    -e HARDLY_RUNTIME_DIR=/workspace/.hardly-cache `
     $Image /tmp/smoke.py
 if ($LASTEXITCODE -ne 0) { throw "smoke test failed" }
 

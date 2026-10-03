@@ -66,7 +66,7 @@ def test_redact_short_password_keys_and_form_bodies():
 
 
 def test_preferred_host_favors_html_portal(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     assert q.preferred_host(conn) == "portal.example.com"

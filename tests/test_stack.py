@@ -38,7 +38,7 @@ def _entry(url, *, status=200, resp_headers=None, req_headers=None, body="", mim
 
 @pytest.fixture
 def run(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
 
     def _run(entries, host=None):
         har = tmp_path / "t.har"
@@ -256,7 +256,7 @@ def test_plain_static_page_no_false_positives(run):
 
 
 def test_sample_har_expected_set(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     r = fingerprint(conn)

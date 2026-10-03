@@ -2,7 +2,7 @@
 
 Browser captures are heavy; dozens of agents launching Chromium at once starve
 each other and time out. This module caps concurrent browser captures with
-``fcntl`` file locks under ``<cache_dir>/slots/`` so separate processes (MCP
+``fcntl`` file locks under ``<runtime_dir>/slots/`` so separate processes (MCP
 server, CLI, capture workers) share one limit.
 
 - ``HARDLY_CAPTURE_SLOTS`` - max concurrent captures (default 4; ``0`` or
@@ -77,9 +77,9 @@ def default_timeout_s() -> float:
 
 
 def slots_dir() -> Path:
-    from hardly.session import cache_dir
+    from hardly.ephemeral import runtime_dir
 
-    path = cache_dir() / "slots"
+    path = runtime_dir() / "slots"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

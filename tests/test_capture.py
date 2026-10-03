@@ -8,7 +8,6 @@ from hardly.capture import (
     CaptureError,
     _persist_payload,
     active_dir,
-    default_har_path,
     get_capture,
     latest_running_id,
     list_captures,
@@ -18,12 +17,14 @@ from hardly.capture import (
 )
 
 
-def test_default_har_path_under_cache(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
-    path = default_har_path("portal.example.com")
-    assert path.parent == tmp_path / "captures"
-    assert "portal" in path.name
-    assert path.suffix == ".har"
+def test_ephemeral_har_path_is_private_temp(tmp_path, monkeypatch):
+    from hardly.ephemeral import discard, new_ephemeral_har
+
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
+    path = new_ephemeral_har("portal.example.com")
+    assert path.parent == tmp_path / "ephemeral"
+    assert "portal" in path.name and path.suffix == ".har"
+    assert discard(path) and not path.exists()
 
 
 def test_start_without_playwright_raises(monkeypatch):
@@ -51,7 +52,7 @@ def test_playwright_status_shape():
 
 
 def test_stop_latest_and_list(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     har = tmp_path / "fake.har"
     har.write_text(
         '{"log":{"version":"1.2","creator":{"name":"t","version":"0"},"entries":[]}}',
@@ -89,7 +90,7 @@ def test_stop_latest_and_list(tmp_path, monkeypatch):
 
 def test_discover_apis_uses_nested_session(tmp_path, monkeypatch):
     """discover_apis must read session_id from stop_capture's session object."""
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     # Force subprocess path so this test still covers the nested-session promotion.
     monkeypatch.setenv("HARDLY_CAPTURE_SUBPROCESS", "1")
     import hardly.core.brief as brief_mod
@@ -131,7 +132,7 @@ def test_discover_apis_uses_nested_session(tmp_path, monkeypatch):
 
 
 def test_discover_apis_prefers_inprocess(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     monkeypatch.delenv("HARDLY_CAPTURE_SUBPROCESS", raising=False)
     from hardly import capture as cap
 
@@ -163,7 +164,7 @@ def test_unknown_capture_id():
 
 
 def test_capture_rpc_requires_running(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     from hardly.capture import capture_rpc
 
     with pytest.raises(CaptureError, match="no running capture"):
@@ -177,7 +178,7 @@ def test_capture_rpc_requires_running(tmp_path, monkeypatch):
     reason="set HARDLY_LIVE_CAPTURE=1 to run live Playwright tests",
 )
 def test_headless_capture_elements(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     har = tmp_path / "example-els.har"
     from hardly.capture import active_dir, list_capture_elements, start_capture
 

@@ -127,7 +127,7 @@ def test_scan_session(tmp_path, monkeypatch):
                                entry(2, "https://t.example.com/b", "<html>" + LABEL_VALUE + "</html>")]}}
     p = tmp_path / "t.har"
     p.write_text(json.dumps(har))
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     info = sess.open_har(str(p), force=True)
     conn = sess.require_conn(info["session_id"])
 

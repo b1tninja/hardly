@@ -10,7 +10,7 @@ FIX = Path(__file__).parent / "fixtures" / "sample.har"
 
 
 def test_portal_story_annotates_sample(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     story = portal_story(conn, host="portal.example.com", limit=20)
@@ -29,7 +29,7 @@ def test_portal_story_annotates_sample(tmp_path, monkeypatch):
 
 
 def test_portal_story_no_related(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     story = portal_story(
@@ -40,7 +40,7 @@ def test_portal_story_no_related(tmp_path, monkeypatch):
 
 
 def test_client_stub_writes_file(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     out = tmp_path / "portal_client.py"
@@ -63,7 +63,7 @@ def test_client_stub_writes_file(tmp_path, monkeypatch):
 
 
 def test_client_stub_compiles_with_json_steps(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = client_stub(conn, host=None, output_path=tmp_path / "all.py")

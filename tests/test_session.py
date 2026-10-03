@@ -20,7 +20,6 @@ FIXTURE = Path(__file__).parent / "fixtures" / "sample.har"
 
 @pytest.fixture()
 def session_id(tmp_path, monkeypatch):
-    monkeypatch.setattr(sess, "cache_dir", lambda: tmp_path / "cache")
     result = sess.open_har(FIXTURE, force=True)
     assert "error" not in result
     return result["session_id"]
@@ -34,8 +33,7 @@ def test_open_summary(session_id):
     assert summary["api"] >= 3
 
 
-def test_open_har_marks_archive_mode(tmp_path, monkeypatch):
-    monkeypatch.setattr(sess, "cache_dir", lambda: tmp_path / "cache")
+def test_open_har_marks_archive_mode():
     result = sess.open_har(FIXTURE, force=True)
     assert result.get("mode") == "archive"
     assert "session_id" in result
@@ -138,48 +136,7 @@ def test_export_md_and_openapi(session_id, tmp_path):
     assert oa["paths"] >= 1
 
 
-def test_cache_reuse(session_id, tmp_path, monkeypatch):
-    monkeypatch.setattr(sess, "cache_dir", lambda: tmp_path / "cache")
+def test_reopen_is_idempotent(session_id):
     again = sess.open_har(FIXTURE, force=False)
-    assert again["cached"] is True
     assert again["session_id"] == session_id
-
-
-def test_stale_index_version_is_rebuilt(tmp_path, monkeypatch):
-    """A cache written by an older ingest (unredacted queries, old shapes) is rebuilt."""
-    import json as _json
-
-    monkeypatch.setattr(sess, "cache_dir", lambda: tmp_path / "cache")
-    info = sess.open_har(FIXTURE, force=True)
-    assert sess.open_har(FIXTURE).get("cached") is True
-    meta_path = tmp_path / "cache" / f"{info['session_id']}.json"
-    meta = _json.loads(meta_path.read_text())
-    assert meta["index_version"] >= 3
-    meta["index_version"] = 1
-    meta_path.write_text(_json.dumps(meta))
-    sess.close_session(info["session_id"])
-    assert sess.open_har(FIXTURE).get("cached") is False
-
-
-def test_previous_connection_is_closed_before_reingest(tmp_path, monkeypatch):
-    """Ingest deletes the db file; on Windows that fails while the old connection is open."""
-    import sqlite3
-
-    monkeypatch.setattr(sess, "cache_dir", lambda: tmp_path / "cache")
-    info = sess.open_har(FIXTURE, force=True)
-    old_conn = sess._sessions[info["session_id"]]["conn"]
-    seen = {}
-    real_ingest = sess.ingest_har
-
-    def checking_ingest(har_path, db_path):
-        try:
-            old_conn.execute("SELECT 1")
-            seen["closed"] = False
-        except sqlite3.ProgrammingError:
-            seen["closed"] = True
-        return real_ingest(har_path, db_path)
-
-    monkeypatch.setattr(sess, "ingest_har", checking_ingest)
-    sess.open_har(FIXTURE, force=True)
-    assert seen == {"closed": True}
-    sess.close_session(info["session_id"])
+    assert again["saved_to"] is None

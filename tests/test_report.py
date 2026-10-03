@@ -179,7 +179,7 @@ def test_mcp_tool(tmp_path, monkeypatch):
     path = tmp_path / "m.har"
     path.write_text(json.dumps({"log": {"version": "1.2", "creator": {"name": "t", "version": "1"},
                                         "entries": _entries()}}))
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     sid = sess.open_har(str(path), force=True)["session_id"]
     out = json.loads(server.hardly_report(sid, sections_json='["access","forms"]', detail="standard",
                                           output_path=str(tmp_path / "rep.md")))

@@ -10,25 +10,18 @@ from hardly.index import query as q
 FIX = Path(__file__).parent / "fixtures" / "sample.har"
 
 
-def test_reopen_after_close(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+def test_memory_session_is_gone_after_close():
     info = sess.open_har(str(FIX), force=True)
     sid = info["session_id"]
     sess.close_session(sid)
     assert sess.get_conn(sid) is None
-    # require_conn auto-reopens
-    conn = sess.require_conn(sid)
-    assert conn is not None
-    summary = q.summary(conn)
-    assert summary["entries"] >= 10
-    # explicit reopen is idempotent
-    again = sess.reopen_session(sid)
-    assert again["session_id"] == sid
-    assert "error" not in again
+    again = sess.open_har(str(FIX))
+    assert again["session_id"] == sid  # pure function of (input path)
+    assert q.summary(sess.require_conn(sid))["entries"] >= 10
 
 
 def test_search_header_name(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = q.search_entries(
@@ -38,7 +31,7 @@ def test_search_header_name(tmp_path, monkeypatch):
 
 
 def test_stats(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = traffic_stats(conn, host="portal.example.com")

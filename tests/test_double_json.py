@@ -66,7 +66,7 @@ def _har(tmp_path):
 
 def test_ingest_unwraps_and_schema(tmp_path, monkeypatch):
     assert INDEX_VERSION >= 4
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     info = sess.open_har(str(_har(tmp_path)), force=True)
     conn = sess.require_conn(info["session_id"])
 

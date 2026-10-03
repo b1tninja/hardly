@@ -57,7 +57,7 @@ def test_redirects_redacts_location(tmp_path, monkeypatch):
     ]}}
     path = tmp_path / "r.har"
     path.write_text(json.dumps(har))
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     info = sess.open_har(str(path), force=True)
     out = redirect_chains(sess.require_conn(info["session_id"]))
     blob = json.dumps(out)

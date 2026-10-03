@@ -12,7 +12,7 @@ FIX = Path(__file__).parent / "fixtures" / "sample.har"
 
 
 def test_trace_viewstate(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = trace_field(
@@ -28,7 +28,7 @@ def test_trace_viewstate(tmp_path, monkeypatch):
 
 
 def test_trace_session_cookie_value(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = trace_field(
@@ -42,7 +42,7 @@ def test_trace_session_cookie_value(tmp_path, monkeypatch):
 
 
 def test_locate_secrets(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = locate_secrets(conn)
@@ -58,7 +58,7 @@ def test_recommend_portal():
 
 
 def test_export_postman(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     out = tmp_path / "collection.json"

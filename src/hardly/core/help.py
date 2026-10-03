@@ -28,10 +28,9 @@ _CATEGORIES: tuple[dict[str, Any], ...] = (
         "tools": [
             "hardly_capabilities",
             "hardly_open",
-            "hardly_reopen",
             "hardly_list_sessions",
             "hardly_close",
-            "hardly_persist",
+            "hardly_export_har",
             "hardly_summary",
             "hardly_stats",
             "hardly_coverage",

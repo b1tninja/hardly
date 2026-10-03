@@ -156,7 +156,7 @@ def test_install_registers_route():
 
 
 def test_no_har_written_is_error(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     monkeypatch.setenv("HARDLY_CAPTURE_BUDGET", "30")
     monkeypatch.setattr(capture, "require_playwright", lambda **kw: {})
     monkeypatch.setattr(
@@ -219,7 +219,7 @@ def test_no_har_written_is_error(tmp_path, monkeypatch):
 
 
 def test_stop_capture_stopped_without_har_is_error(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     capture._persist_payload(
         "abc",
         {"capture_id": "abc", "status": "stopped", "har_path": str(tmp_path / "no.har")},
@@ -231,7 +231,7 @@ def test_stop_capture_stopped_without_har_is_error(tmp_path, monkeypatch):
 @pytest.mark.browser
 @pytest.mark.skipif(not capture.playwright_available(), reason="playwright not installed")
 def test_live_budget_and_noise(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     if not capture.playwright_status().get("ready"):
         pytest.skip("Playwright browser not ready")
     from hardly.local_site import serve

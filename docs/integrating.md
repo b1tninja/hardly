@@ -103,3 +103,28 @@ The checked-in `tests/fixtures/sample.har` is synthetic.
 3. Add a synthetic fixture and a test.
 4. If you add or change an MCP tool, update `capabilities.TOOLS` and run
    `python scripts/gen_tool_docs.py` (a test fails if `docs/tools.md` is stale).
+
+## Python API for downstream projects
+
+**Give an output path to save; otherwise nothing is written.**
+
+```python
+from hardly import open_session
+
+# In memory: nothing is written to disk.
+with open_session("capture.har") as s:
+    n = s.conn.execute("SELECT COUNT(*) FROM entries").fetchone()[0]
+
+# Also save the index (atomic; refused if the file exists unless overwrite=True) ...
+with open_session("capture.har", output_path="work/capture.idx") as s:
+    print(s.session_id, s.info["entries"], s.info["saved_to"])
+
+# ... and reopen it later without re-ingesting.
+with open_session("work/capture.idx") as s:
+    ...
+```
+
+`open_session(har_or_index, output_path=None, overwrite=False)` is idempotent (same input path = same
+session id and live session, no re-ingest), reference counted, and `s.close()` is safe to call twice;
+`contextlib.ExitStack` works. `s.conn` is read-only. Errors carry a stable `code`: `unknown_session`,
+`output_exists`, `output_error`, `index_outdated`, `har_not_found` (all subclasses of `SessionError`).

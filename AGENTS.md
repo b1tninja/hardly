@@ -16,7 +16,7 @@ Design overview: [docs/architecture.md](docs/architecture.md).
 | `src/hardly/cli.py` | argparse CLI (`hardly <command>`), mirrors most tools |
 | `src/hardly/core/` | Pure detectors and builders (one concern per module: `credentials`, `botwalls`, `grids`, `stub`, `report`, ...) |
 | `src/hardly/index/` | `ingest.py` (ijson stream to SQLite, `INDEX_VERSION`), `schema.py`, `query.py` |
-| `src/hardly/session.py` | Session cache, `open_har`, reopen after restart |
+| `src/hardly/session.py` | Public session API (`open_session`), dict layer for MCP/CLI |
 | `src/hardly/capture*.py` | Playwright capture (in-process and durable worker), recipes, aria refs |
 | `src/hardly/local_site.py` | Loopback synthetic site used by tests and soak |
 | `src/hardly/capabilities.py`, `resources.py` | Capability report; docs/skill bundled as MCP resources |
@@ -54,7 +54,7 @@ In a git worktree the editable install may point at another checkout. Run
 - **Tool docstrings are prompts**: first sentence is the point (<=160 chars), say when to use it and
   which sibling to prefer, include an `Example:` call. `tests/test_agent_onboarding.py` lints this.
 - **Index changes**: if ingest stores something new or changes meaning, bump `INDEX_VERSION` in
-  `index/ingest.py` so stale cached indexes rebuild.
+  `index/ingest.py` so stale index files rebuild.
 - **Tests** use synthetic fixtures with neutral names (`example.com`) and the loopback
   `hardly.local_site`. No private HARs, no network, no real credentials.
 - Docs: each file in `docs/` starts with a `> Purpose:` line. Relative links are checked by
@@ -73,7 +73,7 @@ In a git worktree the editable install may point at another checkout. Run
 - Add site-, organisation- or region-specific logic, vocabulary, URLs or recipes (callers pass
   keywords as arguments; downstream projects keep their own adapters).
 - Commit HAR files (`*.har` is gitignored; only `tests/fixtures/sample.har` is tracked).
-- Write scratch files, captures or reports in the repo root; use `$TMPDIR` or the cache dir.
+- Write scratch files, captures or reports in the repo root; use `$TMPDIR`.
 - Hand-edit `docs/tools.md` or `skills/hardly/references/*` (edit `docs/*` or docstrings, regenerate).
 - Load a raw HAR into a model's context; use `hardly_open`, `hardly_brief`, `hardly_endpoints`.
 
@@ -83,7 +83,7 @@ In a git worktree the editable install may point at another checkout. Run
 means **archive**; scriptable URL means **headless** (`hardly_discover`); a person, wall or MFA means
 **interactive** (ask the person, do not claim to see their screen). After any capture stop, continue
 in archive mode on the new `session_id`. If tools look missing, `hardly_capabilities` and restart the
-MCP server; after a restart `hardly_reopen(session_id)`. Full guidance: `hardly://cheatsheet`,
+MCP server; after a restart sessions are gone: repeat `hardly_open`. Full guidance: `hardly://cheatsheet`,
 `docs/cheatsheet.md`, `skills/hardly/SKILL.md` (`hardly skill install`).
 
 ## Subagent and worktree work

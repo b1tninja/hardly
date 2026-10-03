@@ -45,7 +45,7 @@ from hardly.index.schema import connect_ingest, connect_memory, init_db
 PREVIEW_CHARS = 8000
 # Bump when ingest output changes meaning (redaction, shapes, signals) so cached
 # indexes built by older versions are rebuilt instead of reused.
-INDEX_VERSION = 5
+INDEX_VERSION = 6
 # HTML portals often bury forms after scripts/CSS; keep more for hardly_forms.
 HTML_PREVIEW_CHARS = 64_000
 
@@ -406,6 +406,10 @@ def ingest_into(har_path: str | Path, conn: sqlite3.Connection) -> dict[str, Any
     conn.execute(
         "INSERT INTO meta (key, value) VALUES (?, ?)",
         ("har_mtime", str(stat.st_mtime)),
+    )
+    conn.execute(
+        "INSERT INTO meta (key, value) VALUES (?, ?)",
+        ("index_version", str(INDEX_VERSION)),
     )
 
     counts = {

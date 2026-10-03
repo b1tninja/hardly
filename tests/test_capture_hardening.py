@@ -19,7 +19,7 @@ class _Resp:
 
 
 def _fake_pw(monkeypatch, tmp_path, goto):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     monkeypatch.setattr(capture, "require_playwright", lambda **kw: {})
     monkeypatch.setattr(
         capture, "resolve_browser_executable", lambda **kw: {"executable": None, "source": "playwright"}
@@ -186,7 +186,7 @@ def test_slot_timeout_passthrough(monkeypatch):
 def test_slot_timeout_error_class(tmp_path, monkeypatch):
     if slots.fcntl is None:
         pytest.skip("no fcntl")
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     monkeypatch.setenv("HARDLY_CAPTURE_SLOTS", "1")
     held = slots.acquire_slot(0)
     try:
@@ -207,7 +207,7 @@ def test_slot_timeout_error_class(tmp_path, monkeypatch):
 def test_queue_depth_sees_concurrent_waiter(tmp_path, monkeypatch):
     if slots.fcntl is None:
         pytest.skip("no fcntl")
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     monkeypatch.setenv("HARDLY_CAPTURE_SLOTS", "1")
     held = slots.acquire_slot(0)
     results = {}
@@ -305,7 +305,7 @@ def test_queue_depth_remembers_peer_that_left_first(tmp_path, monkeypatch):
     """A peer that arrives after our first count and leaves before our timeout is still counted."""
     if slots.fcntl is None:
         pytest.skip("no fcntl")
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     monkeypatch.setenv("HARDLY_CAPTURE_SLOTS", "1")
     held = slots.acquire_slot(0)
     out = {}

@@ -39,7 +39,7 @@ def test_classify_value_shapes():
 
 
 def test_map_credentials_sample(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = map_credentials(
@@ -66,7 +66,7 @@ def test_map_credentials_sample(tmp_path, monkeypatch):
 
 
 def test_map_credentials_portal_session(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = map_credentials(
@@ -87,7 +87,7 @@ def test_map_credentials_portal_session(tmp_path, monkeypatch):
 
 
 def test_brief_includes_credentials(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     from hardly.core.brief import portal_brief
 
     info = sess.open_har(str(FIX), force=True)
@@ -103,7 +103,7 @@ def test_brief_includes_credentials(tmp_path, monkeypatch):
 
 
 def test_ingest_stores_value_shapes(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     n = conn.execute("SELECT COUNT(*) AS n FROM value_shapes").fetchone()["n"]
@@ -117,7 +117,7 @@ def test_ingest_stores_value_shapes(tmp_path, monkeypatch):
 
 
 def test_diff_includes_credentials(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     from hardly.core.diff import diff_sessions
 
     info = sess.open_har(str(FIX), force=True)
@@ -129,7 +129,7 @@ def test_diff_includes_credentials(tmp_path, monkeypatch):
 
 
 def test_entry_includes_shapes(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     from hardly.index import query as q
 
     info = sess.open_har(str(FIX), force=True)
@@ -166,7 +166,7 @@ def test_credentials_reports_named_token_forms(tmp_path, monkeypatch):
     }
     path = tmp_path / "f.har"
     path.write_text(json.dumps({"log": {"version": "1.2", "creator": {"name": "t", "version": "1"}, "entries": [entry]}}))
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     info = sess.open_har(str(path), force=True)
     out = map_credentials(sess.require_conn(info["session_id"]))
     forms = out["anti_forgery_forms"]

@@ -127,7 +127,7 @@ def test_bad_overrides_json_cli(tmp_path, monkeypatch, capsys):
     har.write_text(
         json.dumps({"log": {"version": "1.2", "creator": {"name": "t", "version": "1"}, "entries": [_entry("GET", "/x")]}})
     )
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     with pytest.raises(SystemExit) as exc:
         cli.main(["replay-check", str(har), "0", "--yes", "--overrides-json", str(tmp_path / "o.json")])
     out = capsys.readouterr().out

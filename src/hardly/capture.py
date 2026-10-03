@@ -5,7 +5,7 @@ Uses Playwright's built-in ``record_har_path``. The browser runs in a
 after the CLI / MCP call returns. Optional dependency:
 ``pip install -e ".[capture]"`` then ``playwright install chromium``.
 
-Control files under ``~/.cache/hardly/captures/active/``:
+Control files under ``<tempdir>/hardly-<uid>/captures/active/``:
 
 - ``{id}.json`` — status
 - ``{id}.stop`` — request stop
@@ -33,6 +33,14 @@ from hardly.core.browser_detect import (
 )
 from hardly.core.capture_errors import TRANSIENT_NAV, with_error_class
 from hardly.core.slots import SlotTimeoutError, acquire_slot, capture_slot
+from hardly.ephemeral import (
+    INTERACTIVE_WARNING,
+    KEEP_HINT,
+    is_ephemeral_path,
+    new_ephemeral_har,
+    secure_file,
+)
+from hardly.ephemeral import discard as discard_ephemeral
 from hardly.session import resolve_path
 
 _BANNER_JS = """
@@ -315,21 +323,43 @@ def require_playwright(*, need_browser: bool = True) -> dict[str, Any]:
 
 
 def active_dir() -> Path:
-    from hardly.session import cache_dir
+    from hardly.ephemeral import runtime_dir
 
-    path = cache_dir() / "captures" / "active"
+    path = runtime_dir() / "captures" / "active"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
-def default_har_path(label: str = "capture") -> Path:
-    from hardly.session import cache_dir
+KEEP_HINT_START = (
+    "No output path: the HAR is ephemeral (private temp file, ingested into memory and deleted "
+    "at stop). Pass har_path to keep it."
+)
 
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in label)[:40] or "capture"
-    path = cache_dir() / "captures" / f"{safe}-{stamp}.har"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    return path
+
+def _public_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Hide the temp path of an ephemeral capture from callers."""
+    if row.get("har_path") and is_ephemeral_path(row["har_path"]):
+        row = {**row, "har_path": None, "ephemeral": True}
+    return row
+
+
+def _require_output_for_no_session(har_path: Any, open_session: bool) -> None:
+    if not har_path and not open_session:
+        raise CaptureError(
+            "open_session=false needs an output path (har_path / -o): without one the HAR is "
+            "ephemeral and would be deleted with nothing to show for it."
+        )
+
+
+def _mark_ephemeral(out: dict[str, Any]) -> dict[str, Any]:
+    out["har_path"] = None
+    out["har_exists"] = False
+    out["ephemeral"] = True
+    out["keep_hint"] = KEEP_HINT
+    out.pop("trace_path", None)
+    nxt = out.get("next")
+    out["next"] = f"{nxt} {KEEP_HINT}" if nxt else KEEP_HINT
+    return out
 
 
 def default_channel() -> str:
@@ -492,14 +522,17 @@ def start_capture(
     require_playwright(need_browser=True)
 
     label_key = (label or _host_label(url) or "capture").strip()
-    target = pre_target if pre_target else default_har_path(label_key)
+    ephemeral = not pre_target
+    target = pre_target if pre_target else new_ephemeral_har(label_key)
     target.parent.mkdir(parents=True, exist_ok=True)
     try:
         slot_handle = acquire_slot(slot_timeout_s)
     except SlotTimeoutError as exc:
+        if ephemeral:
+            discard_ephemeral(target)
         raise _classified(CaptureError(str(exc))) from exc
     try:
-        return _start_capture_locked(
+        return _public_row(_start_capture_locked(
             slot_handle,
             url,
             target,
@@ -514,9 +547,11 @@ def start_capture(
             show_banner=show_banner,
             same_tab=same_tab,
             trace=trace,
-        )
+        ))
     except BaseException:
         slot_handle.release()
+        if ephemeral:
+            discard_ephemeral(target)
         raise
     finally:
         # The worker inherited the descriptor; our copy is no longer needed.
@@ -688,6 +723,9 @@ def _start_capture_locked(
             "or HARDLY_BROWSER_CHANNEL=chrome.",
         )
         row["channel_hint"] = "chrome"
+    if is_ephemeral_path(target):
+        next_bits.insert(0, INTERACTIVE_WARNING if headed else KEEP_HINT_START)
+        row["ephemeral"] = True
     row["next"] = " ".join(next_bits)
     return row
 
@@ -697,8 +735,35 @@ def stop_capture(
     *,
     open_session: bool = True,
     force: bool = False,
+    export_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Stop recording (latest running if id omitted), optionally open_har."""
+    """Stop recording (latest running if id omitted), optionally open_har.
+
+    An ephemeral capture (started with no output path) is ingested into a Memory session and its
+    temp file is deleted here. ``export_path`` first copies that HAR to the given path (kept).
+    """
+    cid0 = capture_id or latest_running_id()
+    row0 = _load_sidecar(cid0) if cid0 else None
+    eph_path = Path(str(row0.get("har_path"))) if row0 and row0.get("har_path") else None
+    eph = bool(eph_path and is_ephemeral_path(eph_path))
+    try:
+        result = _stop_capture_impl(
+            capture_id, open_session=open_session, force=force, _ephemeral=eph, export_path=export_path
+        )
+    finally:
+        if eph:
+            discard_ephemeral(eph_path)
+    return _mark_ephemeral(result) if eph and not result.get("exported_har") else result
+
+
+def _stop_capture_impl(
+    capture_id: str | None = None,
+    *,
+    open_session: bool = True,
+    force: bool = False,
+    _ephemeral: bool = False,
+    export_path: str | Path | None = None,
+) -> dict[str, Any]:
     cid = capture_id or latest_running_id()
     if not cid:
         raise CaptureError(
@@ -763,10 +828,23 @@ def stop_capture(
     if result.get("entry_count_hint") is None and har.is_file():
         result["entry_count_hint"] = _count_har_entries(har)
 
+    if _ephemeral and har.is_file():
+        secure_file(har)
+        if export_path:
+            from hardly.session import copy_atomic
+
+            dest = _precheck_output_path(export_path)
+            if dest is not None:
+                copy_atomic(har, dest)
+                result["exported_har"] = str(dest)
+                result["har_path"] = str(dest)
+                result["ephemeral"] = False
     if open_session and result.get("status") == "stopped" and har.is_file():
         from hardly import session as sess
 
-        opened = sess.open_har(str(har), force=force)
+        opened = sess.open_har(
+            str(har), force=force, **({"ephemeral": True} if _ephemeral else {})
+        )
         result["session"] = opened
         if isinstance(opened, dict) and opened.get("session_id"):
             result["session_id"] = opened["session_id"]
@@ -1227,7 +1305,7 @@ def list_captures(*, include_disk: bool = True) -> list[dict[str, Any]]:
         except (OSError, json.JSONDecodeError):
             continue
         if isinstance(payload, dict) and payload.get("capture_id"):
-            found.append(payload)
+            found.append(_public_row(payload))
     return sorted(found, key=lambda row: row.get("started_at") or 0, reverse=True)
 
 
@@ -1235,7 +1313,7 @@ def get_capture(capture_id: str) -> dict[str, Any]:
     row = _load_sidecar(capture_id)
     if not row:
         raise CaptureError(f"unknown capture_id {capture_id!r}")
-    return row
+    return _public_row(row)
 
 
 def latest_running_id() -> str | None:
@@ -1273,7 +1351,10 @@ def capture_interactive(
         trace=trace,
         slot_timeout_s=slot_timeout_s,
     )
-    print(f"Recording to {info['har_path']}")
+    if info.get("har_path"):
+        print(f"Recording to {info['har_path']}")
+    else:
+        print(INTERACTIVE_WARNING)
     print(f"capture_id={info['capture_id']}  status={info['status']}")
     if url:
         print(f"Opened {url}")
@@ -1295,7 +1376,15 @@ def capture_interactive(
         row = get_capture(info["capture_id"])
         if row["status"] in ("stopped", "error"):
             break
-    return stop_capture(info["capture_id"], open_session=True)
+    export_path = None
+    if not info.get("har_path"):
+        print(INTERACTIVE_WARNING)
+        try:
+            typed = input("Save the HAR to (path, blank = keep only the in-memory session): ")
+        except EOFError:
+            typed = ""
+        export_path = typed.strip() or None
+    return stop_capture(info["capture_id"], open_session=True, export_path=export_path)
 
 
 def capture_for(
@@ -1316,6 +1405,7 @@ def capture_for(
     slot_timeout_s: float | None = None,
     diagnose_redirects: bool = False,
 ) -> dict[str, Any]:
+    _require_output_for_no_session(har_path, open_session)
     # Headless one-shots prefer in-process capture (no subprocess stop race).
     if not headed and not (os.environ.get("HARDLY_CAPTURE_SUBPROCESS") or "").strip():
         return capture_headless(
@@ -1356,10 +1446,36 @@ def capture_for(
     return out
 
 
-def capture_headless(
+def capture_headless(url: str, har_path: str | Path | None = None, **kwargs: Any) -> dict[str, Any]:
+    """In-process headless capture. Without ``har_path`` the HAR is ephemeral (see below).
+
+    An explicit ``har_path`` is kept as-is. With none, the HAR is recorded to a private temp
+    file, ingested into a Memory session and deleted straight away; the result then carries
+    ``har_path: null, ephemeral: true``. Details of the options: ``_capture_headless_impl``.
+    """
+    if har_path:
+        out = _capture_headless_impl(url, har_path, **kwargs)
+        out.setdefault("ephemeral", False)
+        return out
+    if not kwargs.get("open_session", True):
+        raise CaptureError(
+            "open_session=false needs an output path (har_path / -o): without one the HAR is "
+            "ephemeral and would be deleted with nothing to show for it."
+        )
+    label = (kwargs.get("label") or _host_label(str(url or "")) or "capture").strip()
+    target = new_ephemeral_har(label)
+    try:
+        out = _capture_headless_impl(url, target, _ephemeral=True, **kwargs)
+    finally:
+        discard_ephemeral(target)
+    return _mark_ephemeral(out)
+
+
+def _capture_headless_impl(
     url: str,
     har_path: str | Path | None = None,
     *,
+    _ephemeral: bool = False,
     wait_seconds: float = 3,
     recipe: list[dict[str, Any]] | None = None,
     channel: str = "",
@@ -1396,7 +1512,7 @@ def capture_headless(
         raise CaptureError("capture_headless requires url")
 
     label_key = (label or _host_label(target_url) or "capture").strip()
-    target = pre_target if pre_target else default_har_path(label_key)
+    target = pre_target if pre_target else new_ephemeral_har(label_key)
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists():
         target.unlink()
@@ -1621,7 +1737,11 @@ def capture_headless(
     if open_session:
         from hardly import session as sess
 
-        opened = sess.open_har(str(target), force=True)
+        if _ephemeral:
+            secure_file(target)
+        opened = sess.open_har(
+            str(target), force=True, **({"ephemeral": True} if _ephemeral else {})
+        )
         out["session"] = opened
         if isinstance(opened, dict) and opened.get("session_id"):
             out["session_id"] = opened["session_id"]
@@ -2495,6 +2615,7 @@ def discover_apis(
     target = str(url or "").strip()
     if not target:
         raise CaptureError("discover_apis requires url")
+    _require_output_for_no_session(har_path, open_session)
 
     use_subprocess = (os.environ.get("HARDLY_CAPTURE_SUBPROCESS") or "").strip() in {
         "1",

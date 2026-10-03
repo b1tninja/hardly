@@ -48,7 +48,7 @@ def test_live_target_ids_unique():
     reason="set HARDLY_LIVE_CAPTURE=1 to run live Playwright soak",
 )
 def test_live_soak_example_and_aspnet(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     status = playwright_status()
     if not status.get("ready"):
         pytest.skip(status.get("hint") or "Playwright browsers missing")
@@ -88,7 +88,7 @@ def test_live_soak_example_and_aspnet(tmp_path, monkeypatch):
     reason="set HARDLY_LIVE_CAPTURE=1 to run live Playwright soak",
 )
 def test_capture_headless_writes_har(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     if not playwright_status().get("ready"):
         pytest.skip("Playwright browsers missing")
 
@@ -111,7 +111,7 @@ def test_capture_headless_writes_har(tmp_path, monkeypatch):
 @pytest.mark.skipif(not playwright_available(), reason="playwright not installed")
 def test_local_synthetic_soak(tmp_path, monkeypatch):
     """Loopback targets need a browser but no network."""
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     if not playwright_status().get("ready"):
         pytest.skip("Playwright browser not ready")
 
@@ -129,7 +129,7 @@ def test_local_synthetic_soak(tmp_path, monkeypatch):
 @pytest.mark.skipif(not playwright_available(), reason="playwright not installed")
 def test_local_challenges_captured(tmp_path, monkeypatch):
     """Capture the synthetic challenge pages in a real browser, then detect."""
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     if not playwright_status().get("ready"):
         pytest.skip("Playwright browser not ready")
 
@@ -159,7 +159,7 @@ def test_local_challenges_captured(tmp_path, monkeypatch):
 @pytest.mark.skipif(not playwright_available(), reason="playwright not installed")
 def test_find_click_navigates_to_search_form(tmp_path, monkeypatch):
     """Landing -> services (link) -> lookup (JS button) -> real search form."""
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     if not playwright_status().get("ready"):
         pytest.skip("Playwright browser not ready")
 
@@ -186,7 +186,7 @@ def test_find_click_navigates_to_search_form(tmp_path, monkeypatch):
 @pytest.mark.skipif(not playwright_available(), reason="playwright not installed")
 def test_find_click_survives_real_world_traps(tmp_path, monkeypatch):
     """Utility forms are not the goal; hidden and new-tab links fall back to href."""
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     if not playwright_status().get("ready"):
         pytest.skip("Playwright browser not ready")
 
@@ -214,7 +214,7 @@ def test_find_click_survives_real_world_traps(tmp_path, monkeypatch):
 @pytest.mark.browser
 @pytest.mark.skipif(not playwright_available(), reason="playwright not installed")
 def test_find_click_recovers_from_error_page_and_skips_feedback(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     if not playwright_status().get("ready"):
         pytest.skip("Playwright browser not ready")
 
@@ -238,7 +238,7 @@ def test_find_click_recovers_from_error_page_and_skips_feedback(tmp_path, monkey
 
 
 def _find_click_on(tmp_path, monkeypatch, start_path, keywords, max_hops=4):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     from hardly.capture import capture_headless
     from hardly.local_site import serve
 

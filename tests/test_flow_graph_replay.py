@@ -44,7 +44,7 @@ def _entry(base, method, path, req_headers, status, hdrs, body, query=None):
 
 @pytest.fixture()
 def flow(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     with local_site.serve() as base:
         s, h, login_body = _get(base, "/login")
         cookie = h["Set-Cookie"]

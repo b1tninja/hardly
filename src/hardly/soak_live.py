@@ -26,9 +26,9 @@ from hardly.live_targets import LiveTarget, catalog_summary, list_targets
 
 
 def _ensure_cache() -> Path:
-    if not (os.environ.get("HARDLY_CACHE_DIR") or "").strip():
-        os.environ["HARDLY_CACHE_DIR"] = tempfile.mkdtemp(prefix="hardly-live-soak-")
-    return Path(os.environ["HARDLY_CACHE_DIR"])
+    if not (os.environ.get("HARDLY_RUNTIME_DIR") or "").strip():
+        os.environ["HARDLY_RUNTIME_DIR"] = tempfile.mkdtemp(prefix="hardly-live-soak-")
+    return Path(os.environ["HARDLY_RUNTIME_DIR"])
 
 
 _LOCAL: dict[str, Any] = {}

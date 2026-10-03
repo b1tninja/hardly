@@ -16,7 +16,7 @@ import time
 import traceback
 from pathlib import Path
 
-os.environ.setdefault("HARDLY_CACHE_DIR", str(Path(tempfile.mkdtemp(prefix="hardly-soak-"))))
+os.environ.setdefault("HARDLY_RUNTIME_DIR", str(Path(tempfile.mkdtemp(prefix="hardly-soak-"))))
 
 from hardly import session as sess
 from hardly.core.brief import portal_brief
@@ -252,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
     if not paths:
         print("no HARs matched (pass globs, or set HARDLY_SOAK_GLOB)")
         return 2
-    print("cache", os.environ["HARDLY_CACHE_DIR"])
+    print("cache", os.environ["HARDLY_RUNTIME_DIR"])
     print("help categories", len(tool_help()["categories"]))
     print("modes", [m["id"] for m in list_modes()["modes"]])
     results = []

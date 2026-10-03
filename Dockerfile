@@ -6,7 +6,7 @@ LABEL org.opencontainers.image.source="https://github.com/b1tninja/hardly" \
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    HARDLY_CACHE_DIR=/workspace/.hardly-cache \
+    HARDLY_RUNTIME_DIR=/workspace/.hardly-cache \
     HARDLY_WORKSPACE=/workspace
 
 WORKDIR /app

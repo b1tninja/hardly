@@ -12,7 +12,7 @@ FIX = Path(__file__).parent / "fixtures" / "sample.har"
 
 
 def test_tree_js_children(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     # the search-pages .js script is entry 8
@@ -25,7 +25,7 @@ def test_tree_js_children(tmp_path, monkeypatch):
 
 
 def test_params_dynamic_page(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = param_variance(
@@ -40,7 +40,7 @@ def test_params_dynamic_page(tmp_path, monkeypatch):
 
 
 def test_graphql_detect(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     result = detect_graphql(conn, host="api.example.com")
@@ -49,7 +49,7 @@ def test_graphql_detect(tmp_path, monkeypatch):
 
 
 def test_export_brief_md(tmp_path, monkeypatch):
-    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
     out = tmp_path / "brief.md"

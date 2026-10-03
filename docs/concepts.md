@@ -9,9 +9,8 @@ tokens and still misses structure. hardly streams the file once into SQLite
 (`ijson`, constant memory), then answers small questions against the index.
 
 - **Session** — one indexed HAR, identified by `session_id`. `hardly_open`
-  creates it; `hardly_reopen(session_id)` reattaches after an MCP restart (other
-  tools also reattach from the cache automatically). The cache directory is
-  `HARDLY_CACHE_DIR` (default under the user cache dir).
+  creates it, in memory by default (nothing on disk). After a restart or
+  `hardly_close` the id is gone: repeat `hardly_open`.
 - **Entry** — one request/response pair, addressed by `entry_id`.
 - **Noise filter** — static assets, trackers, `OPTIONS` and non-API MIME types
   are flagged `is_noise` and hidden by default from endpoint/story views.
