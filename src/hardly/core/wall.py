@@ -2,21 +2,8 @@
 
 from __future__ import annotations
 
-import re
 import sqlite3
 from typing import Any
-
-_SIGNALS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("akamai", re.compile(r"akamai|edgesuite|_abck|ak_bmsc|bm_sz", re.I)),
-    ("cloudflare", re.compile(r"cloudflare|cf-ray|cf_clearance|attention required", re.I)),
-    ("imperva", re.compile(r"imperva|incapsula|_incap_ses|visid_incap", re.I)),
-    ("datadome", re.compile(r"datadome|dd_cookie", re.I)),
-    ("perimeterx", re.compile(r"perimeterx|_px\d|px-captcha", re.I)),
-    ("recaptcha", re.compile(r"recaptcha|g-recaptcha|hcaptcha", re.I)),
-    ("access_denied", re.compile(r"access denied|request blocked|bot detection", re.I)),
-    ("captcha", re.compile(r"\bcaptcha\b|challenge-platform", re.I)),
-)
-
 
 def detect_walls(
     conn: sqlite3.Connection,
@@ -24,74 +11,64 @@ def detect_walls(
     host: str | None = None,
     limit: int = 30,
 ) -> dict[str, Any]:
-    """Scan statuses, headers, and body previews for bot-wall signals."""
-    clauses = ["e.is_noise = 0"]
+    """Report entries that were actually blocked or challenged, plus the products seen.
+
+    A CDN/WAF header on a normal 200 response is *protection present*, not a
+    wall: it is listed under ``protection`` but does not create a ``hit``. Hits
+    need a block/challenge status or wording, backed by a named product or an
+    explicit block page.
+    """
+    from hardly.core.botwalls import detect_bot_protection
+
+    har_path = None
+    try:
+        row = conn.execute("SELECT value FROM meta WHERE key = 'har_path'").fetchone()
+        har_path = row["value"] if row else None
+    except sqlite3.Error:
+        pass
+    prot = detect_bot_protection(conn, har_path=har_path, host=host, limit=30)
+
+    clauses = ["1 = 1"]
     params: list[Any] = []
     if host:
         clauses.append("e.host = ?")
         params.append(host.lower())
     where = " AND ".join(clauses)
+    rows = {
+        int(r["entry_id"]): r
+        for r in conn.execute(
+            f"""
+            SELECT e.entry_id, e.method, e.host, e.path, e.status, e.mime
+            FROM entries e WHERE {where} ORDER BY e.entry_id
+            """,
+            params,
+        )
+    }
 
     hits: list[dict[str, Any]] = []
     seen: set[int] = set()
-
-    # Status-based: 403/429 often walls
-    for row in conn.execute(
-        f"""
-        SELECT entry_id, method, host, path, status, mime
-        FROM entries e
-        WHERE {where} AND status IN (403, 429, 503)
-        ORDER BY entry_id ASC
-        LIMIT 40
-        """,
-        params,
-    ):
-        _add(
-            hits,
-            seen,
-            row,
-            kinds=["http_block"],
-            detail=f"status {row['status']}",
-        )
-
-    # Header names / values (redacted still has names; set-cookie names lost —
-    # scan value_redacted for non-cookie headers and header names)
-    for row in conn.execute(
-        f"""
-        SELECT e.entry_id, e.method, e.host, e.path, e.status, e.mime,
-               h.name AS header_name, h.value_redacted
-        FROM entries e
-        JOIN headers h ON h.entry_id = e.entry_id
-        WHERE {where}
-        ORDER BY e.entry_id ASC
-        LIMIT 2000
-        """,
-        params,
-    ):
-        blob = f"{row['header_name']} {row['value_redacted'] or ''}"
-        kinds = _match_kinds(blob)
-        if kinds:
-            _add(hits, seen, row, kinds=kinds, detail=f"header {row['header_name']}")
-
-    # Body previews
-    for row in conn.execute(
-        f"""
-        SELECT e.entry_id, e.method, e.host, e.path, e.status, e.mime,
-               b.preview_text
-        FROM entries e
-        JOIN bodies b ON b.entry_id = e.entry_id AND b.side = 'response'
-        WHERE {where} AND b.preview_text IS NOT NULL
-        ORDER BY e.entry_id ASC
-        LIMIT 400
-        """,
-        params,
-    ):
-        text = row["preview_text"] or ""
-        # Keep scan cheap — first 4k already previewed
-        kinds = _match_kinds(text[:4000])
-        if kinds:
-            _add(hits, seen, row, kinds=kinds, detail="response body")
-
+    # Entries a named product reports as blocked/challenged.
+    for vendor in prot["vendors"]:
+        if vendor["state"] not in {"blocked", "challenged"}:
+            continue
+        ids = list(vendor.get("blocked_entry_ids") or [])
+        for slot in vendor.get("evidence") or []:
+            if slot["kind"] == "challenge_page":
+                ids += slot["entry_ids"]
+        for eid in ids:
+            if eid in rows:
+                _add(hits, seen, rows[eid], kinds=[vendor["id"]], detail=f"{vendor['state']} ({vendor['name']})")
+    # Plain block statuses count only with corroboration; otherwise they are
+    # ordinary auth/rate errors and are reported separately.
+    status_only: list[dict[str, Any]] = []
+    for eid, r in rows.items():
+        if int(r["status"] or 0) in (403, 429, 503) and eid not in seen:
+            if any(v["state"] in {"blocked", "challenged"} for v in prot["vendors"]):
+                _add(hits, seen, r, kinds=["http_block"], detail=f"status {r['status']}")
+            elif len(status_only) < 10:
+                status_only.append(
+                    {"entry_id": eid, "path": r["path"], "status": r["status"], "host": r["host"]}
+                )
     hits = hits[: min(limit, 60)]
     by_kind: dict[str, int] = {}
     for h in hits:
@@ -103,19 +80,20 @@ def detect_walls(
         "hit_count": len(hits),
         "by_kind": by_kind,
         "hits": hits,
+        "blocking": prot["blocking"],
+        "protection": [
+            {k: v[k] for k in ("id", "name", "category", "confidence", "state")}
+            for v in prot["vendors"]
+        ],
+        "status_only": status_only,
+        "recommendation": prot["recommendation"],
         "next": (
             "Bot walls need headed Chrome capture (channel=chrome), not urllib. "
             "Use hardly_capture_start; then continue in archive mode on the saved HAR."
+            if hits
+            else "No wall observed; protection fingerprints (if any) are informational."
         ),
     }
-
-
-def _match_kinds(text: str) -> list[str]:
-    found = []
-    for name, pattern in _SIGNALS:
-        if pattern.search(text):
-            found.append(name)
-    return found
 
 
 def _add(

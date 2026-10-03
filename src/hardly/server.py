@@ -1482,7 +1482,14 @@ def hardly_wall(
     host: str | None = None,
     limit: int = 30,
 ) -> str:
-    """Detect bot walls / challenges (Akamai, Cloudflare, captcha, 403/429)."""
+    """Report bot walls actually hit, plus the bot-protection products seen.
+
+    Identifies Cloudflare, Akamai, Imperva, DataDome, HUMAN/PerimeterX, Kasada,
+    F5, AWS WAF, Vercel, Anubis, reCAPTCHA/hCaptcha/Turnstile/Arkose and more,
+    with a state per product (blocked / challenged / clearance_seen / present).
+    A CDN header on a normal page is informational, not a wall. Never solves or
+    evades; a block means re-capture interactively with a person.
+    """
     try:
         conn = sess.require_conn(session_id)
     except KeyError as exc:

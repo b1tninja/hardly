@@ -108,3 +108,27 @@ def test_generic_suppressed_when_product_explains_it(tmp_path, monkeypatch):
     ])
     ids = [v["id"] for v in detect_bot_protection(conn, har_path=har)["vendors"]]
     assert ids == ["akamai"]
+
+
+def test_wall_ignores_cdn_header_on_ok_page_but_reports_real_blocks(tmp_path, monkeypatch):
+    from hardly.core.wall import detect_walls
+
+    conn, _ = _open(tmp_path, monkeypatch, [
+        _entry(1, "https://ok.example.com/", resp_headers={"Server": "cloudflare", "CF-RAY": "x-LAX"}),
+        _entry(2, "https://ok.example.com/api/me", status=403, body='{"error":"forbidden"}', ct="application/json"),
+    ])
+    out = detect_walls(conn)
+    assert out["hit_count"] == 0 and out["hits"] == []          # CDN header + plain 403 are not a wall
+    assert [p["id"] for p in out["protection"]] == ["cloudflare"]
+    assert out["protection"][0]["state"] == "present"
+    assert out["status_only"] and out["status_only"][0]["status"] == 403
+    assert "informational" in out["next"]
+
+    (tmp_path / "b").mkdir()
+    conn, _ = _open(tmp_path / "b", monkeypatch, [
+        _entry(1, "https://blocked.example.com/", status=403,
+               resp_headers={"Server": "cloudflare", "cf-mitigated": "challenge"},
+               body="<title>Just a moment...</title>"),
+    ])
+    out = detect_walls(conn)
+    assert out["hit_count"] == 1 and out["blocking"] == ["cloudflare"]

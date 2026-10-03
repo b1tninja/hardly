@@ -192,7 +192,7 @@ Capture-quality issues: empty bodies, 4xx/5xx, redirects without Location.
 
 ### `hardly_wall(session_id, host=None, limit=30)`
 
-Detect bot walls / challenges (Akamai, Cloudflare, captcha, 403/429).
+Report bot walls actually hit, plus the bot-protection products seen.
 
 ### `hardly_duplicates(session_id, host=None, exclude_noise=True, min_count=2, limit=30)`
 

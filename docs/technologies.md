@@ -162,14 +162,33 @@ data arrives separately as JSON.
 headers, JSON keys, columns). `hardly_schema` infers a JSON schema for an
 endpoint; `hardly_export_openapi` embeds schemas and `securitySchemes`.
 
-## Bot walls and capture quality
+## Bot walls, WAFs and captchas
 
-`hardly_wall` detects Akamai, Cloudflare, Imperva/Incapsula, DataDome,
-PerimeterX, reCAPTCHA/hCaptcha and generic access-denied/captcha pages
-(challenge cookies, scripts, 403/429). `hardly_coverage` / `hardly_issues`
-report empty or truncated bodies, errors and redirects. Respect the site's
-terms; a wall means switch to interactive capture with a person, not to
-evasion.
+`hardly_wall` (CLI `hardly wall`) identifies the bot-protection product(s) in
+use from wire-level evidence — cookie *names*, response headers, request URLs
+and script sources, and challenge-page wording — and reports a **state** for
+each: `blocked`, `challenged`, `clearance_seen` (a clearance cookie such as
+`cf_clearance` was issued), or `present` (fingerprints only). The catalog
+(`hardly.core.botwalls`) covers:
+
+- **CDN/WAF:** Cloudflare, Imperva/Incapsula, AWS WAF, Sucuri, Vercel Security
+  Checkpoint, Reblaze, DDoS-Guard, Fastly Signal Sciences.
+- **Bot managers:** Akamai, DataDome, HUMAN/PerimeterX, Kasada, F5/Shape,
+  Radware/ShieldSquare, Netacea.
+- **Captcha / proof of work:** reCAPTCHA, hCaptcha, Cloudflare Turnstile, Arkose
+  Labs, GeeTest, Friendly Captcha, MTCaptcha, Anubis.
+- **Other:** Queue-it waiting rooms, Google's "unusual traffic" page, and a
+  generic "unidentified block page" fallback (suppressed when a named product
+  already explains the block).
+
+A CDN or WAF header on an ordinary 200 response is *protection present*, not a
+wall: it appears under `protection` and creates no `hit`. Plain 403/429 without
+corroboration are listed as `status_only` (usually auth or rate errors).
+Cookie values and tokens are never reported. hardly does not solve or evade
+any of these; a block means re-capturing interactively with a person.
+
+`hardly_coverage` / `hardly_issues` report empty or truncated bodies, errors
+and redirects. Respect the site's terms.
 
 ## Not done (by design)
 
