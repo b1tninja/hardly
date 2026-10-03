@@ -458,16 +458,21 @@ def stop_capture(
         else:
             (active_dir() / f"{cid}.stop").write_text("stop\n", encoding="utf-8")
             deadline = time.time() + 120
-            while time.time() < deadline:
-                row = _load_sidecar(cid) or {}
-                if row.get("status") in ("stopped", "error"):
-                    break
-                if pid and not _pid_alive(int(pid)):
-                    break
-                time.sleep(0.25)
+            try:
+                while time.time() < deadline:
+                    row = _load_sidecar(cid) or {}
+                    if row.get("status") in ("stopped", "error"):
+                        break
+                    if pid and not _pid_alive(int(pid)):
+                        break
+                    time.sleep(0.25)
+            except KeyboardInterrupt:
+                # Windows process-group quirks (and IDE stop) can interrupt the
+                # wait; still finalize from the sidecar / HAR on disk.
+                row = _load_sidecar(cid) or row
             result = dict(row)
             if result.get("status") not in ("stopped", "error"):
-                if pid:
+                if pid and _pid_alive(int(pid)):
                     try:
                         os.kill(int(pid), 9)
                     except OSError:
@@ -927,6 +932,20 @@ def capture_for(
     same_tab: bool = True,
     trace: bool | None = None,
 ) -> dict[str, Any]:
+    # Headless one-shots prefer in-process capture (no subprocess stop race).
+    if not headed and not (os.environ.get("HARDLY_CAPTURE_SUBPROCESS") or "").strip():
+        return capture_headless(
+            url,
+            har_path,
+            wait_seconds=wait_seconds,
+            recipe=None,
+            channel=channel,
+            url_filter=url_filter,
+            omit_content=omit_content,
+            label=label,
+            open_session=open_session,
+            same_tab=same_tab,
+        )
     info = start_capture(
         url,
         har_path,
@@ -944,6 +963,207 @@ def capture_for(
         stop_capture(info["capture_id"], open_session=False)
         raise
     return stop_capture(info["capture_id"], open_session=open_session)
+
+
+def capture_headless(
+    url: str,
+    har_path: str | Path | None = None,
+    *,
+    wait_seconds: float = 3,
+    recipe: list[dict[str, Any]] | None = None,
+    channel: str = "",
+    url_filter: str = "",
+    omit_content: bool = False,
+    label: str = "",
+    open_session: bool = True,
+    same_tab: bool = True,
+    brief: bool = False,
+) -> dict[str, Any]:
+    """In-process headless HAR capture for soak / unit tests.
+
+    Unlike ``start_capture`` (subprocess worker for interactive MCP use), this
+    runs Playwright in the current process, flushes the HAR on context close,
+    and returns immediately — no ``.stop`` sidecar race.
+    """
+    require_playwright(need_browser=True)
+    target_url = str(url or "").strip()
+    if not target_url:
+        raise CaptureError("capture_headless requires url")
+
+    label_key = (label or _host_label(target_url) or "capture").strip()
+    target = resolve_path(har_path) if har_path else default_har_path(label_key)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists():
+        target.unlink()
+
+    use_channel = (channel or default_channel()).strip()
+    body_sidecar: list[dict[str, Any]] = []
+    recipe_result: dict[str, Any] | None = None
+    started_at = time.time()
+
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        launch_kwargs: dict[str, Any] = {"headless": True}
+        if use_channel:
+            launch_kwargs["channel"] = use_channel
+        context_kwargs: dict[str, Any] = {
+            "record_har_path": str(target),
+            "record_har_mode": "full",
+            "record_har_content": "omit" if omit_content else "embed",
+            "viewport": {"width": 1280, "height": 900},
+            "ignore_https_errors": True,
+        }
+        if url_filter:
+            context_kwargs["record_har_url_filter"] = url_filter
+
+        browser = playwright.chromium.launch(**launch_kwargs)
+        try:
+            context = browser.new_context(**context_kwargs)
+            if same_tab:
+                context.add_init_script(_SAME_TAB_JS)
+            if not omit_content:
+                from hardly.core.har_bodies import interesting_mime, shape_body
+
+                def on_response(response: Any) -> None:
+                    try:
+                        mime = (response.headers or {}).get("content-type") or ""
+                        if not interesting_mime(mime):
+                            return
+                        text = response.text()
+                        if not text:
+                            return
+                        body_sidecar.append(
+                            {
+                                "method": response.request.method,
+                                "url": response.url,
+                                "status": response.status,
+                                "mime": mime,
+                                "text": shape_body(text),
+                            }
+                        )
+                    except Exception:  # noqa: BLE001
+                        return
+
+                context.on("response", on_response)
+
+            page = context.new_page()
+            page.goto(target_url, wait_until="domcontentloaded", timeout=60_000)
+            if recipe:
+                recipe_result = _run_inprocess_recipe(page, recipe)
+            settle_ms = int(max(0.0, float(wait_seconds)) * 1000)
+            if settle_ms:
+                page.wait_for_timeout(min(settle_ms, 60_000))
+            context.close()  # flushes HAR
+        finally:
+            browser.close()
+
+    bodies_filled = 0
+    if body_sidecar and target.is_file():
+        from hardly.core.har_bodies import merge_bodies_into_har
+
+        stats = merge_bodies_into_har(target, body_sidecar)
+        bodies_filled = int(stats.get("filled") or 0)
+
+    out: dict[str, Any] = {
+        "status": "stopped" if target.is_file() else "error",
+        "mode": "archive",
+        "capture_mode": "headless",
+        "har_path": str(target),
+        "har_exists": target.is_file(),
+        "har_bytes": target.stat().st_size if target.is_file() else 0,
+        "url": target_url,
+        "headed": False,
+        "channel": use_channel or None,
+        "label": label_key,
+        "started_at": started_at,
+        "stopped_at": time.time(),
+        "entry_count_hint": _count_har_entries(target) if target.is_file() else None,
+        "bodies_filled": bodies_filled,
+        "discover": {
+            "url": target_url,
+            "recipe_steps": len(recipe or []),
+            "wait_seconds": float(wait_seconds),
+            "recipe": recipe_result,
+            "inprocess": True,
+        },
+    }
+    if out["status"] != "stopped":
+        out["error"] = "HAR was not written"
+        return out
+
+    if open_session:
+        from hardly import session as sess
+
+        opened = sess.open_har(str(target), force=True)
+        out["session"] = opened
+        if isinstance(opened, dict) and opened.get("session_id"):
+            out["session_id"] = opened["session_id"]
+            if brief:
+                try:
+                    from hardly.core.brief import portal_brief
+                    from hardly.session import require_conn
+
+                    out["brief"] = portal_brief(require_conn(str(out["session_id"])))
+                except Exception as exc:  # noqa: BLE001
+                    out["brief_error"] = str(exc)
+    out["next"] = _next_steps(out)
+    return out
+
+
+def _run_inprocess_recipe(page: Any, steps: list[dict[str, Any]]) -> dict[str, Any]:
+    """Minimal recipe runner for in-process headless capture (goto/wait/click/fill)."""
+    results: list[dict[str, Any]] = []
+    for raw in steps:
+        if not isinstance(raw, dict):
+            results.append({"ok": False, "error": "step must be an object"})
+            continue
+        op = str(raw.get("op") or "").strip().lower()
+        step_out: dict[str, Any] = {"op": op, "ok": True}
+        try:
+            if op == "wait":
+                ms = min(max(int(raw.get("ms") or 1000), 0), 30_000)
+                page.wait_for_timeout(ms)
+                step_out["result"] = {"waited_ms": ms}
+            elif op == "goto":
+                dest = str(raw.get("url") or "").strip()
+                if not dest:
+                    raise CaptureError("goto requires url")
+                page.goto(dest, wait_until="domcontentloaded", timeout=60_000)
+                step_out["result"] = {"url": page.url}
+            elif op == "click":
+                css = str(raw.get("css") or raw.get("selector") or "").strip()
+                if not css:
+                    raise CaptureError("click requires css")
+                page.locator(css).first.click(timeout=int(raw.get("timeout_ms") or 10_000))
+                page.wait_for_timeout(300)
+                step_out["result"] = {"url": page.url}
+            elif op == "fill":
+                css = str(raw.get("css") or raw.get("selector") or "").strip()
+                if not css:
+                    raise CaptureError("fill requires css")
+                page.locator(css).first.fill(
+                    str(raw.get("value") or ""),
+                    timeout=int(raw.get("timeout_ms") or 10_000),
+                )
+                step_out["result"] = {"url": page.url}
+            elif op == "press":
+                page.keyboard.press(str(raw.get("key") or "Enter"))
+                step_out["result"] = {"url": page.url}
+            elif op in {"note", "elements", "url", "aria", "screenshot"}:
+                step_out["result"] = {"skipped": op, "note": "in-process soak recipe"}
+            else:
+                step_out["ok"] = False
+                step_out["error"] = f"unsupported in-process op {op!r}"
+        except Exception as exc:  # noqa: BLE001
+            step_out["ok"] = False
+            step_out["error"] = str(exc)
+        results.append(step_out)
+    return {
+        "steps": results,
+        "ok": all(s.get("ok") for s in results),
+        "step_count": len(results),
+    }
 
 
 def discover_apis(
@@ -966,10 +1186,88 @@ def discover_apis(
     For agent-driven API discovery without asking a person to click. If the
     page walls the headless browser, switch to interactive mode
     (``hardly_capture_start(headed=true, channel=chrome)``).
+
+    Default path is in-process (``capture_headless``) so soak/tests and one-shot
+    discover do not depend on the subprocess ``.stop`` sidecar. Set
+    ``HARDLY_CAPTURE_SUBPROCESS=1`` to force the durable worker (needed only when
+    you will drive the tab after start with aria/click RPCs).
     """
     target = str(url or "").strip()
     if not target:
         raise CaptureError("discover_apis requires url")
+
+    use_subprocess = (os.environ.get("HARDLY_CAPTURE_SUBPROCESS") or "").strip() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    # Recipes that need live aria refs / RPC must use the subprocess worker.
+    recipe_needs_rpc = bool(
+        recipe
+        and any(
+            str((step or {}).get("op") or "").lower()
+            in {"aria", "elements", "screenshot", "ref"}
+            or (step or {}).get("ref")
+            for step in recipe
+            if isinstance(step, dict)
+        )
+    )
+    if not use_subprocess and not recipe_needs_rpc:
+        out = capture_headless(
+            target,
+            har_path,
+            wait_seconds=wait_seconds,
+            recipe=recipe,
+            channel=channel,
+            url_filter=url_filter,
+            omit_content=omit_content,
+            label=label,
+            open_session=open_session,
+            same_tab=same_tab,
+            brief=brief,
+        )
+        session_id = out.get("session_id")
+        if brief and session_id and open_session and "brief" in out:
+            brief_out = out.get("brief") or {}
+            walls = brief_out.get("walls") if isinstance(brief_out, dict) else None
+            wall_hits = 0
+            if isinstance(walls, dict):
+                wall_hits = int(
+                    walls.get("hit_count")
+                    or len(walls.get("sample") or walls.get("hits") or [])
+                    or 0
+                )
+            elif isinstance(walls, list):
+                wall_hits = len(walls)
+            cred = (brief_out.get("credentials") if isinstance(brief_out, dict) else None) or {}
+            auth_thin = not (
+                cred.get("session_cookies")
+                or cred.get("shapes_by_kind")
+                or cred.get("password_field_count")
+            )
+            if wall_hits or (isinstance(brief_out, dict) and brief_out.get("error")):
+                out["next"] = (
+                    f"Mode=archive (session_id={session_id}). Brief looks empty "
+                    "or walled — switch to interactive: "
+                    "hardly_capture_start(headed=true, channel='chrome') and "
+                    "ASK THE PERSON to click."
+                )
+                out["suggest_mode"] = "interactive"
+            elif auth_thin and brief_out.get("host"):
+                out["next"] = (
+                    f"Mode=archive (session_id={session_id}). Little auth/"
+                    "session material — try interactive capture or a richer "
+                    "recipe; else hardly_endpoints / hardly_credentials."
+                )
+                out["suggest_mode"] = "interactive"
+            else:
+                out["next"] = (
+                    f"Mode=archive (session_id={session_id}). Drill with "
+                    "hardly_credentials / hardly_endpoints / hardly_correlate; "
+                    "if traffic looks thin, retry interactive with channel=chrome."
+                )
+        return out
 
     info = start_capture(
         target,

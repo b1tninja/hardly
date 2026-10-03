@@ -275,6 +275,24 @@ pytest
 #   set HARDLY_LIVE_CAPTURE=1
 ```
 
+### Live soak (public demos, no private HARs)
+
+Headless Chromium captures known public sites on the fly — ASP.NET VIEWSTATE,
+HTML forms, login pages, SPAs — then asserts analysis signals. HARs land under
+the cache dir and are never committed.
+
+```bash
+pip install -e ".[capture]"
+playwright install chromium
+hardly soak-live --list
+hardly soak-live --ids example,wyobiz,httpbin-form,the-internet-login
+# or: python -m hardly.soak_live
+HARDLY_LIVE_CAPTURE=1 pytest tests/test_live_soak.py -q
+```
+
+Catalog: `hardly.live_targets` (`wyobiz` = ASP.NET WebForms, etc.).
+Archive soak against local HARs remains `python scripts/soak.py`.
+
 ## Security
 
 HAR files often contain live passwords and session tokens. hardly redacts by

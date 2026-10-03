@@ -90,6 +90,8 @@ def test_stop_latest_and_list(tmp_path, monkeypatch):
 def test_discover_apis_uses_nested_session(tmp_path, monkeypatch):
     """discover_apis must read session_id from stop_capture's session object."""
     monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    # Force subprocess path so this test still covers the nested-session promotion.
+    monkeypatch.setenv("HARDLY_CAPTURE_SUBPROCESS", "1")
     from hardly import capture as cap
     import hardly.core.brief as brief_mod
 
@@ -126,6 +128,33 @@ def test_discover_apis_uses_nested_session(tmp_path, monkeypatch):
     assert out["mode"] == "archive"
     assert out.get("brief", {}).get("host") == "example.com"
     assert "session_id=sess-discover" in out["next"]
+
+
+def test_discover_apis_prefers_inprocess(tmp_path, monkeypatch):
+    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.delenv("HARDLY_CAPTURE_SUBPROCESS", raising=False)
+    from hardly import capture as cap
+
+    called: dict = {}
+
+    def fake_headless(url, har_path=None, **kwargs):
+        called["url"] = url
+        called["kwargs"] = kwargs
+        return {
+            "status": "stopped",
+            "mode": "archive",
+            "capture_mode": "headless",
+            "session_id": "sess-inproc",
+            "brief": {"host": "example.com", "walls": {"hit_count": 0}},
+            "discover": {"inprocess": True},
+            "next": "Mode=archive",
+        }
+
+    monkeypatch.setattr(cap, "capture_headless", fake_headless)
+    out = cap.discover_apis("https://example.com/", wait_seconds=0, brief=True)
+    assert called["url"] == "https://example.com/"
+    assert out["session_id"] == "sess-inproc"
+    assert out.get("discover", {}).get("inprocess") is True
 
 
 def test_unknown_capture_id():

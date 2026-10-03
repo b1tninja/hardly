@@ -91,4 +91,10 @@ expecting a HAR path.
 - Capture writes full request/response bodies into the HAR — treat like any
   other secret capture.
 - Live Playwright tests require `HARDLY_LIVE_CAPTURE=1`; default CI stays offline.
+- Prefer **live soak** over private HAR fixtures when checking stacks:
+  `hardly soak-live --list`, then `hardly soak-live` (or
+  `python -m hardly.soak_live`). Catalog in `hardly.live_targets` — ASP.NET
+  VIEWSTATE (wyobiz), HTML forms, login password fields, SPA, GraphQL UI.
+  Headless one-shots use in-process `capture_headless` (set
+  `HARDLY_CAPTURE_SUBPROCESS=1` only when you need the durable worker + aria RPC).
 - In interactive mode, ask the person — do not claim you can see their screen.

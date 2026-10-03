@@ -731,6 +731,22 @@ def cmd_modes(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_soak_live(args: argparse.Namespace) -> int:
+    """Headless soak against public tech demos (captures HARs on the fly)."""
+    from hardly.soak_live import main as soak_main
+
+    argv: list[str] = []
+    if getattr(args, "list", False):
+        argv.append("--list")
+    if getattr(args, "ids", "") or "":
+        argv.extend(["--ids", args.ids])
+    if getattr(args, "fail_soft", False):
+        argv.append("--fail-soft")
+    if getattr(args, "json", False):
+        argv.append("--json")
+    return soak_main(argv)
+
+
 def cmd_help(args: argparse.Namespace) -> int:
     from hardly.core.help import tool_help
 
@@ -1098,6 +1114,32 @@ def build_parser() -> argparse.ArgumentParser:
     modes_p.add_argument("--har", default="", help="Existing HAR path hint")
     modes_p.add_argument("--url", default="", help="Target URL hint")
     modes_p.set_defaults(func=cmd_modes)
+
+    soak_live_p = sub.add_parser(
+        "soak-live",
+        help="Headless soak: capture public tech demos on the fly (needs [capture])",
+    )
+    soak_live_p.add_argument(
+        "--ids",
+        default="",
+        help="Comma-separated target ids (default: all); use --list",
+    )
+    soak_live_p.add_argument(
+        "--list",
+        action="store_true",
+        help="Print the public target catalog and exit",
+    )
+    soak_live_p.add_argument(
+        "--fail-soft",
+        action="store_true",
+        help="Treat soft targets (GraphQL UI, Swagger) as hard failures",
+    )
+    soak_live_p.add_argument(
+        "--json",
+        action="store_true",
+        help="Print full JSON summary only",
+    )
+    soak_live_p.set_defaults(func=cmd_soak_live)
 
     help_p = sub.add_parser(
         "help-tools",
