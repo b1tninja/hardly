@@ -217,7 +217,7 @@ jobs:
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl -fsS "https://pypi.org/pypi/hardly/$VERSION/json" > /dev/null; then exit 0; fi
             sleep 20
           done
