@@ -13,7 +13,7 @@ Do these once, before the first tag. Nothing here uses stored API tokens.
 - [ ] **Attestations.** Repository must allow Actions to write attestations (public repos: available by default; private repos need a plan that supports artifact attestations).
 - [ ] **GHCR.** After the first image push, open the package `hardly` under the owner's Packages, link it to the repository, and set visibility to public if desired.
 - [ ] **MCP Registry namespace.** `io.github.b1tninja/*` is authenticated by GitHub OIDC from this repository; nothing to register, but the first `publish-mcp` run must succeed once. `README.md` carries the required `mcp-name: io.github.b1tninja/hardly` line, which PyPI shows in the project description.
-- [ ] **License (owner decision).** TODO: there is no LICENSE file and no `license` field in `pyproject.toml`. Choose a license, add `LICENSE`, then set `license = "<SPDX id>"` and `license-files = ["LICENSE"]`. The build does not fail without it, but PyPI shows no license until it is set.
+- [x] **License:** MPL-2.0 (`LICENSE`, `NOTICE.md` for generated output); set in `pyproject.toml`. Revisit before the first release if you prefer another license.
 - [ ] **Default branch.** Workflows assume `master`. Change the `branches:` filters if the default branch is renamed.
 - [ ] Optional: pin actions to commit SHAs (`pinact run`, or accept Dependabot's weekly grouped updates). Workflows currently use major tags.
 

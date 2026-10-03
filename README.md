@@ -168,3 +168,7 @@ in [CHANGELOG.md](CHANGELOG.md).
 HAR files often contain live passwords and session tokens. hardly redacts by default, but treat
 captures as secrets: do not commit or share them, and rotate credentials if one leaked. Use hardly
 only on targets you are authorised to access. See [SECURITY.md](SECURITY.md).
+
+## License
+
+MPL-2.0. Generated output (stubs, OpenAPI, reports) is not covered; see [NOTICE.md](NOTICE.md).
