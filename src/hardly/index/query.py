@@ -154,22 +154,46 @@ def _host_apex(host: str) -> str:
     return (host or "").lower()
 
 
+# Tile / analytics / payment / captcha CDNs — never seed preferred_host from these.
+_CDN_SEED_RE = re.compile(
+    r"(?i)(^|\.)("
+    r"arcgis|arcgisonline|googleapis|gstatic|ggpht|stripe|stripecdn|"
+    r"cloudflare|akamai|walkme|clarity\.ms|linkedin|facebook|fbcdn|"
+    r"googletagmanager|google-analytics|siteimproveanalytics|"
+    r"doubleclick|hotjar|segment\.|sentry\.|newrelic|nr-data|"
+    r"fontawesome|bootstrapcdn|jsdelivr|unpkg|cdnjs|"
+    r"hcaptcha|recaptcha|google\.com|gstatic\.com"
+    r")(\.|$)"
+)
+
+
 def preferred_host(conn: sqlite3.Connection) -> str | None:
     """Pick the host that best represents the guest portal, not a payment iframe.
 
-    Seed from the busiest non-noise host, then stay on that apex domain.
-    Prefer an HTML document host on that apex (app.*) over a pure API sibling
-    and over third-party HTML (Stripe / Google Pay / captcha).
+    Seed from the busiest non-CDN host (API volume), then stay on that apex.
+    Prefer an HTML document host on that apex over a pure API sibling and over
+    third-party HTML (Stripe / Google Pay / captcha).
     """
-    seed = conn.execute(
+    candidates = conn.execute(
         """
         SELECT host, COUNT(*) AS c FROM entries
         WHERE is_noise = 0
-        GROUP BY host ORDER BY c DESC LIMIT 1
+        GROUP BY host
+        ORDER BY c DESC
         """
-    ).fetchone()
-    if not seed:
+    ).fetchall()
+    if not candidates:
         return None
+
+    seed = None
+    for row in candidates:
+        if _CDN_SEED_RE.search(row["host"] or ""):
+            continue
+        seed = row
+        break
+    if seed is None:
+        seed = candidates[0]
+
     apex = _host_apex(seed["host"])
     rows = conn.execute(
         """
@@ -206,10 +230,20 @@ def preferred_host(conn: sqlite3.Connection) -> str | None:
         return seed["host"]
 
     def score(row: sqlite3.Row) -> tuple:
-        return (row["html_cnt"], row["formish_cnt"], row["api_cnt"])
+        # Prefer real HTML shells; never let a CDN sibling win via api_cnt alone.
+        cdn_penalty = 0 if not _CDN_SEED_RE.search(row["host"] or "") else -1000
+        return (
+            cdn_penalty + (row["html_cnt"] or 0),
+            row["formish_cnt"] or 0,
+            row["api_cnt"] or 0,
+        )
 
-    with_html = [r for r in rows if (r["html_cnt"] or 0) > 0]
-    pick = max(with_html or rows, key=score)
+    with_html = [
+        r
+        for r in rows
+        if (r["html_cnt"] or 0) > 0 and not _CDN_SEED_RE.search(r["host"] or "")
+    ]
+    pick = max(with_html or [r for r in rows if not _CDN_SEED_RE.search(r["host"] or "")] or rows, key=score)
     return pick["host"]
 
 

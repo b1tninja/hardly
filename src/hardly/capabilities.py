@@ -58,6 +58,7 @@ FEATURES = (
     "openapi_security",
     "cli_parity",
     "preferred_host",
+    "preferred_host_cdn_skip",
     "related_hosts",
     "export_postman",
     "export_brief",

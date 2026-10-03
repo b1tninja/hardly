@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hardly"
-version = "0.2.25"
+version = "0.2.26"
 description = "HAR analysis MCP/CLI — archive, headless, or interactive modes to index and query captures without burning tokens on raw files"
 readme = "README.md"
 requires-python = ">=3.10"

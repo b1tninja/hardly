@@ -233,8 +233,9 @@ hardly serve
 
 Cache: `~/.cache/hardly/` (override with `HARDLY_CACHE_DIR`).
 
-Maintainer soak against local HARs (paths edited in the script):  
-`python scripts/soak.py`
+Maintainer soak against local HARs (edit `HARS` in the script):  
+`python scripts/soak.py` — opens each capture, runs brief/credentials/walls,
+and fails if soak JSON appears to contain secret values.
 
 ## Library
 

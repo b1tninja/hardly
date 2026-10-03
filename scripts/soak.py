@@ -15,9 +15,11 @@ os.environ.setdefault("HARDLY_CACHE_DIR", str(Path(tempfile.mkdtemp(prefix="hard
 from hardly import session as sess
 from hardly.core.brief import portal_brief
 from hardly.core.correlate import correlate_tokens
+from hardly.core.credentials import map_credentials
 from hardly.core.graphql import detect_graphql
 from hardly.core.help import tool_help
 from hardly.core.issues import find_issues
+from hardly.core.modes import list_modes, pick_mode
 from hardly.core.pages import list_pages
 from hardly.core.stats import traffic_stats
 from hardly.core.story import portal_story
@@ -29,7 +31,15 @@ HARS = [
     Path(r"D:\code\jason\recordersdocumentindex.saccounty.gov.har"),
     Path(r"D:\code\i-doxs\secure8.i-doxs.net2.har"),
     Path(r"D:\code\jason\app.jobtread.com.har"),
+    Path(r"D:\code\jason\aca-prod.accela.com.har"),
+    Path(r"D:\code\payhoa\app.payhoa.com.har"),
+    Path(r"D:\code\jason\assessorparcelviewer.saccounty.gov.har"),
 ]
+
+# Patterns that must never appear in soak JSON (values from fixtures / live HARs).
+_LEAK_RE = __import__("re").compile(
+    r"(?i)(password\"\s*:\s*\"[^\*\"]{3,}|Bearer [A-Za-z0-9\-._~+/]+=*|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})"
+)
 
 
 def run_one(path: Path) -> dict:
@@ -157,7 +167,35 @@ def run_one(path: Path) -> dict:
         )
         out["aspnet_pages"] = asp
 
-        out["ok"] = True
+        t1 = time.perf_counter()
+        cred = map_credentials(
+            conn, har_path=sess.get_har_path(sid), host=host, limit=30
+        )
+        out["cred_s"] = round(time.perf_counter() - t1, 2)
+        out["cred_passwords"] = cred.get("password_field_count")
+        out["cred_identity"] = cred.get("identity_field_count")
+        out["cred_session_cookies"] = (cred.get("session_cookies") or [])[:8]
+        out["cred_shapes"] = cred.get("shapes_by_kind")
+        out["cred_oauth"] = bool((cred.get("oauth") or {}).get("likely"))
+        out["cred_flow"] = (cred.get("login_flow") or {}).get("confidence")
+        out["brief_cred"] = (brief.get("credentials") or {}).get("password_field_count")
+        out["shapes_index"] = conn.execute(
+            "SELECT COUNT(*) AS n FROM value_shapes"
+        ).fetchone()["n"]
+
+        mode = pick_mode(har_path=str(path))
+        out["mode"] = mode.get("mode")
+        out["modes_catalog"] = len(list_modes()["modes"])
+
+        blob = json.dumps(out, default=str)
+        leak = _LEAK_RE.search(blob)
+        out["leak_check"] = "fail" if leak else "ok"
+        if leak:
+            out["leak_sample"] = leak.group(0)[:40]
+            out["ok"] = False
+            out["error"] = "possible secret value in soak output"
+        else:
+            out["ok"] = True
         out["total_s"] = round(time.perf_counter() - t0, 2)
     except Exception as exc:  # noqa: BLE001
         out["ok"] = False
@@ -170,6 +208,7 @@ def run_one(path: Path) -> dict:
 def main() -> int:
     print("cache", os.environ["HARDLY_CACHE_DIR"])
     print("help categories", len(tool_help()["categories"]))
+    print("modes", [m["id"] for m in list_modes()["modes"]])
     results = []
     for path in HARS:
         if not path.is_file():
