@@ -7,7 +7,7 @@ import re
 import sqlite3
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl, unquote_plus, urlparse
+from urllib.parse import parse_qsl, unquote, unquote_plus, urlparse
 
 import ijson
 
@@ -32,6 +32,12 @@ _TOKENISH_NAME = re.compile(
     r"session|state|challenge|authenticity)",
     re.I,
 )
+_BORING_X_HEADERS = {
+    "x-requested-with",
+    "x-forwarded-for",
+    "x-forwarded-proto",
+    "x-client-data",
+}
 _UUID = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     re.I,
@@ -88,6 +94,8 @@ def correlate_tokens(
                     "to_path": item["path"],
                     "to_where": loc,
                     "name_hint": name_hint or prod.get("name_hint"),
+                    "from_name_hint": prod.get("name_hint"),
+                    "to_name_hint": name_hint,
                     "value_kind": _value_kind(value),
                     "value_length": len(value),
                 }
@@ -247,6 +255,9 @@ def _extract_produce(resp: dict) -> list[tuple[str, str, str | None]]:
             cookie_name, cookie_val = value.split(";", 1)[0].split("=", 1)
             if _keep_value(cookie_val):
                 found.append(("set-cookie", cookie_val, cookie_name.strip()))
+            decoded = unquote(cookie_val)
+            if decoded != cookie_val and _keep_value(decoded):
+                found.append(("set-cookie", decoded, cookie_name.strip()))
         elif name == "location" and value:
             # path ids in redirects
             for part in urlparse(value).path.strip("/").split("/"):
@@ -289,7 +300,11 @@ def _extract_consume(
                 cname, cval = part.split("=", 1)
                 if _keep_value(cval.strip()):
                     found.append(("cookie", cval.strip(), cname.strip()))
-        elif name in {"x-csrf-token", "x-xsrf-token", "x-request-verification-token"}:
+        elif (
+            name in {"x-csrf-token", "x-xsrf-token", "x-request-verification-token"}
+            or (name.startswith("x-") and name not in _BORING_X_HEADERS)
+            or _TOKENISH_NAME.search(name)
+        ) and name not in {"cookie", "set-cookie", "authorization"}:
             if _keep_value(value):
                 found.append(("header", value, name))
         elif name == "authorization" and _keep_value(value):
