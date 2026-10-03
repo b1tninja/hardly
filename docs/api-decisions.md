@@ -42,16 +42,22 @@ task?* The result is frozen by `tests/api_surface.json` and `tests/cli_surface.j
 
 Each candidate scheme renamed or merged the same capabilities. Respondents saw only the tool names
 (randomised order) and a task description, and chose a tool; about 2000 answers were scored across
-two model tiers, four runs per scheme.
+two model tiers.
 
-| Scheme (names only) | Tool-choice accuracy |
-|---|---|
-| Current names (97 tools) | 73% |
-| A | 78% |
-| D (58 tools) | 81% |
-| B | 84% |
-| C | 88% |
-| Final scheme (71 tools) | 88% |
+| Scheme (names only) | Tools | Tool-choice accuracy |
+|---|---|---|
+| Current names | 97 | 73% |
+| A (light renames) | 97 | 78% |
+| D (first hybrid) | 58 | 82% |
+| B (noun-first) | 97 | 84% |
+| C (verb-first) | 97 | 88% |
+| D2 (second hybrid, tested) | 70 | 88% |
+
+The shipped surface (71 tools) is D2 plus three name changes made after its last test: forms and UI
+labels are separate tools again, the gate tool says bot protection, and the timed browser capture
+says discover. Those three were chosen from the per-scenario results and were **not re-measured**.
+Runs per scheme: 4 for A, B, C and the current names; 8 for D and D2. Differences of a few points
+between B, C and D2 are within noise; all four beat the current names by 11 points or more.
 
 With a one-line description beside each name, every scheme reached about 100%: names matter most
 for the first guess, descriptions repair the rest. Lessons that shaped the final scheme:
@@ -63,8 +69,8 @@ for the first guess, descriptions repair the rest. Lessons that shaped the final
   merges whose name carries the subject (`auth_report`, `gate_bot_protection`, `page_ui`).
 - **Live tools must be marked in the name.** With `send_`/`write_`/`browser_` first, live-action
   tasks were answered correctly 98% of the time (current names 64%).
-- **Random catalogue order costs ten points** versus alphabetical order, so a name cannot lean on
-  its neighbours: each carries its own subject and kind.
+- **Catalogue order effects were inconsistent** (random order lowered D by ten points but raised B
+  by nine), so no name should rely on its alphabetical neighbours.
 - **Orientation tools were confused in every scheme** (56-79%). The fix was distinct output kinds
   in the names, not better synonyms.
 - Words that appear in task texts (`target`, `url`, `paging`, `summary`, `goal`) leak the answer and
