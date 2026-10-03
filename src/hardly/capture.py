@@ -489,7 +489,10 @@ def stop_capture(
     if open_session and result.get("status") == "stopped" and har.is_file():
         from hardly import session as sess
 
-        result["session"] = sess.open_har(str(har), force=force)
+        opened = sess.open_har(str(har), force=force)
+        result["session"] = opened
+        if isinstance(opened, dict) and opened.get("session_id"):
+            result["session_id"] = opened["session_id"]
     # After stop, analysis is always archive mode (query the HAR on disk).
     if result.get("status") == "stopped":
         result["mode"] = "archive"
@@ -996,35 +999,60 @@ def discover_apis(
         raise
 
     out = stop_capture(cid, open_session=open_session)
-    out["mode"] = "headless"
+    # Capture was headless; analysis continues in archive mode (set by stop).
+    out["capture_mode"] = "headless"
+    out["mode"] = out.get("mode") or "archive"
     out["discover"] = {
         "url": target,
         "recipe_steps": len(recipe or []),
         "wait_seconds": float(wait_seconds),
         "recipe": recipe_result,
     }
-    session_id = out.get("session_id")
+    session = out.get("session") if isinstance(out.get("session"), dict) else {}
+    session_id = out.get("session_id") or session.get("session_id")
+    if session_id:
+        out["session_id"] = session_id
     if brief and session_id and open_session:
         try:
             from hardly.core.brief import portal_brief
             from hardly.session import require_conn
 
             conn = require_conn(str(session_id))
-            out["brief"] = portal_brief(conn)
-            out["next"] = (
-                "Headless discover finished. Drill with hardly_endpoints / "
-                "hardly_content / hardly_correlate; if brief shows a wall or "
-                "empty bodies, retry interactive with channel=chrome."
-            )
+            brief_out = portal_brief(conn)
+            out["brief"] = brief_out
+            walls = (brief_out or {}).get("walls") if isinstance(brief_out, dict) else None
+            wall_hits = 0
+            if isinstance(walls, dict):
+                wall_hits = int(
+                    walls.get("hit_count")
+                    or len(walls.get("sample") or walls.get("hits") or [])
+                    or 0
+                )
+            elif isinstance(walls, list):
+                wall_hits = len(walls)
+            if wall_hits or (isinstance(brief_out, dict) and brief_out.get("error")):
+                out["next"] = (
+                    f"Mode=archive (session_id={session_id}). Brief looks empty "
+                    "or walled — retry interactive: "
+                    "hardly_capture_start(headed=true, channel='chrome') and "
+                    "ask the person to click."
+                )
+            else:
+                out["next"] = (
+                    f"Mode=archive (session_id={session_id}). Drill with "
+                    "hardly_endpoints / hardly_content / hardly_correlate; "
+                    "if traffic looks thin, retry interactive with channel=chrome."
+                )
         except Exception as exc:  # noqa: BLE001
             out["brief_error"] = str(exc)
             out["next"] = (
-                "Session opened; call hardly_brief / hardly_endpoints next."
+                f"Mode=archive (session_id={session_id}). "
+                "Call hardly_brief / hardly_endpoints next."
             )
     else:
         out["next"] = (
-            "Headless capture stopped. Open the HAR or use session_id with "
-            "hardly_brief / hardly_endpoints."
+            "Headless capture stopped. Mode=archive — hardly_open the HAR "
+            "or use session_id with hardly_brief / hardly_endpoints."
         )
     return out
 

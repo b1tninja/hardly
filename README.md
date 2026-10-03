@@ -132,9 +132,10 @@ hardly capture discover https://example.com --channel chrome --wait 8
 ```
 
 MCP: `hardly_discover(url, channel="chrome")` loads headless, optional
-`recipe_json`, stops, opens a session, and returns a brief. Or loop with
+`recipe_json`, stops, opens a session (`session_id` + `brief`), then leaves
+you in **archive** mode for drill-down. Or loop with
 `hardly_capture_start(headed=false)` → aria → click/fill refs → stop.
-If the page walls headless Chrome, switch to **interactive**.
+If the brief shows a wall or empty bodies, switch to **interactive**.
 
 ### Interactive — person drives the browser
 

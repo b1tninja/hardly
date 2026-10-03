@@ -34,6 +34,14 @@ def test_open_summary(session_id):
     assert summary["api"] >= 3
 
 
+def test_open_har_marks_archive_mode(tmp_path, monkeypatch):
+    monkeypatch.setattr(sess, "cache_dir", lambda: tmp_path / "cache")
+    result = sess.open_har(FIXTURE, force=True)
+    assert result.get("mode") == "archive"
+    assert "session_id" in result
+    assert "archive" in (result.get("next") or "").lower()
+
+
 def test_endpoints_template(session_id):
     conn = sess.require_conn(session_id)
     eps = q.list_endpoints(conn, host="api.example.com", exclude_noise=True)

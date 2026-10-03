@@ -77,6 +77,7 @@ def test_stop_latest_and_list(tmp_path, monkeypatch):
     result = stop_capture(None, open_session=False)
     assert result["capture_id"] == "abc123"
     assert result["status"] == "stopped"
+    assert result["mode"] == "archive"
     assert result["har_exists"] is True
     assert "next" in result
     assert any(c["capture_id"] == "abc123" for c in list_captures())
@@ -84,6 +85,47 @@ def test_stop_latest_and_list(tmp_path, monkeypatch):
     sidecar = active_dir() / "abc123.json"
     assert sidecar.is_file()
     assert json.loads(sidecar.read_text(encoding="utf-8"))["status"] == "stopped"
+
+
+def test_discover_apis_uses_nested_session(tmp_path, monkeypatch):
+    """discover_apis must read session_id from stop_capture's session object."""
+    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    from hardly import capture as cap
+    import hardly.core.brief as brief_mod
+
+    def fake_start(url, har_path=None, **kwargs):
+        return {"capture_id": "disc1", "status": "running", "url": url}
+
+    def fake_stop(capture_id=None, open_session=True, force=False):
+        # Nested session only — reproduces the pre-0.2.21 bug shape.
+        return {
+            "capture_id": capture_id or "disc1",
+            "status": "stopped",
+            "mode": "archive",
+            "har_path": str(tmp_path / "d.har"),
+            "session": {
+                "session_id": "sess-discover",
+                "mode": "archive",
+                "entries": 1,
+            },
+            "next": "Mode=archive",
+        }
+
+    monkeypatch.setattr(cap, "start_capture", fake_start)
+    monkeypatch.setattr(cap, "stop_capture", fake_stop)
+    monkeypatch.setattr(
+        brief_mod,
+        "portal_brief",
+        lambda conn: {"host": "example.com", "walls": {"hit_count": 0}},
+    )
+    monkeypatch.setattr("hardly.session.require_conn", lambda sid: object())
+
+    out = cap.discover_apis("https://example.com", wait_seconds=0, brief=True)
+    assert out["session_id"] == "sess-discover"
+    assert out["capture_mode"] == "headless"
+    assert out["mode"] == "archive"
+    assert out.get("brief", {}).get("host") == "example.com"
+    assert "session_id=sess-discover" in out["next"]
 
 
 def test_unknown_capture_id():

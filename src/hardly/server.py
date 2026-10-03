@@ -508,10 +508,12 @@ def hardly_discover(
 ) -> str:
     """Headless mode: load URL, optional recipe, stop, open session, brief.
 
-    Agent-driven API discovery — no person needed. ``recipe_json`` is a JSON
-    list of steps (goto/wait/aria/click/fill/…) or empty for a plain load+wait.
-    If the page walls headless Chrome, switch to interactive:
-    hardly_capture_start(headed=true, channel=chrome) and ask the person.
+    Agent-driven API discovery — no person needed. Returns ``session_id``,
+    ``brief``, ``capture_mode=headless``, and ``mode=archive`` for drill-down.
+    ``recipe_json`` is a JSON list of steps (goto/wait/aria/click/fill/…) or
+    empty for a plain load+wait. If the brief shows a wall, switch to
+    interactive: hardly_capture_start(headed=true, channel=chrome) and ask
+    the person.
     """
     try:
         from hardly.capture import CaptureError, discover_apis
