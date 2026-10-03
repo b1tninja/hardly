@@ -75,10 +75,16 @@ Prefer MCP/CLI helpers over reading the HAR:
 5. Missing detail URL: `hardly_routes` + `handler_functions`, then
    `hardly_tree(entry_id=…)` / `hardly_around(entry_id=…)`. GraphQL:
    `hardly_graphql`. Param drift: `hardly_params`
+5a. Data-heavy pages: `hardly_grids` (grid libraries, JSON envelopes, paging
+   params) and `hardly_data_attrs` (HTML `data-*` keys, endpoint URLs, embedded
+   JSON, framework hints)
 5b. Landing page, no search form yet: `hardly_find_search(keywords=[...])`
    ranks links (generic signals + your domain terms) and returns a `next_step` click for the next headless hop
 6. Client sketch: `hardly_stub`; next capture: `hardly_recipe_plan`
-7. After a capture: `hardly_wall` (Akamai/CF), `hardly_issues` /
+7. After a capture: `hardly_wall` (identifies the WAF/bot-manager/captcha product
+   and whether it blocked; CDN headers alone are informational),
+   `hardly_challenges` (HTTP auth challenges, throttling, captcha widgets),
+   `hardly_issues` /
    `hardly_coverage` if bodies look empty; `hardly_slow` /
    `hardly_duplicates` for odd traffic; `hardly_pages` for pageref groups;
    `hardly_diff` vs an earlier session (includes credentials delta)
