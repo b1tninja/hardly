@@ -218,12 +218,14 @@ def acquire_slot(timeout_s: float | None = None) -> SlotHandle:
                 # Publish our marker *before* counting so two simultaneous
                 # waiters each see the other (counting first made both see 0).
                 marker = _write_marker(directory)
-                queue_depth = len([m for m in _live_markers(directory) if m != marker])
+            # Keep the highest depth seen while polling: a peer that times out
+            # first removes its marker, so a single count at our own timeout
+            # can read 0 even though it was waiting alongside us.
+            queue_depth = max(
+                queue_depth,
+                len([m for m in _live_markers(directory) if m != marker]),
+            )
             if waited >= timeout:
-                queue_depth = max(
-                    queue_depth,
-                    len([m for m in _live_markers(directory) if m != marker]),
-                )
                 raise SlotTimeoutError(
                     f"waited {waited:.0f}s for a capture slot; "
                     f"{limit} running, {queue_depth} others waiting "

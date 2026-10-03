@@ -299,3 +299,29 @@ def test_unsupported_step_keys_inprocess():
 def test_unsupported_step_keys_worker_allows_text():
     assert capture._unsupported_step_keys("click", {"op": "click", "text": "x"}, inprocess=False) == ""
     assert "bogus" in capture._unsupported_step_keys("click", {"op": "click", "bogus": 1}, inprocess=False)
+
+
+def test_queue_depth_remembers_peer_that_left_first(tmp_path, monkeypatch):
+    """A peer that arrives after our first count and leaves before our timeout is still counted."""
+    if slots.fcntl is None:
+        pytest.skip("no fcntl")
+    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    monkeypatch.setenv("HARDLY_CAPTURE_SLOTS", "1")
+    held = slots.acquire_slot(0)
+    out = {}
+
+    def waiter():
+        try:
+            slots.acquire_slot(1.2)
+        except slots.SlotTimeoutError as exc:
+            out["msg"] = str(exc)
+
+    t = threading.Thread(target=waiter)
+    t.start()
+    time.sleep(0.3)  # our first count (0) is done
+    peer = slots._write_marker(slots.slots_dir())
+    time.sleep(0.5)  # we poll while the peer is present
+    peer.unlink()  # the peer gives up before we do
+    t.join()
+    held.release()
+    assert "1 others waiting" in out["msg"], out
