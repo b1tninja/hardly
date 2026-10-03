@@ -148,6 +148,14 @@ Classify query/body fields as static, dynamic, or sensitive across samples.
 
 Rank links likely to lead to a search/lookup page.
 
+### `hardly_stack(session_id, host=None, limit=30)`
+
+Fingerprint web/front-end frameworks, CMS/site builders, GIS stacks and UI toolkits.
+
+### `hardly_tables(session_id, entry_id=None, host=None)`
+
+List HTML data tables: headers, row/column counts, masked first row.
+
 ## Credentials and auth
 
 ### `hardly_credentials(session_id, host=None, limit=40)`

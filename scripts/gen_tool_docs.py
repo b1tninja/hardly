@@ -19,7 +19,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Orientation", ("modes", "mode", "capabilities", "help", "recommend")),
     ("Sessions", ("open", "reopen", "list_sessions", "close", "summary", "stats", "coverage")),
     ("Endpoints and content", ("hosts", "endpoints", "content", "search", "entry", "compare_entries", "flow", "schema", "pages", "grids", "data_attrs", "arcgis")),
-    ("HTML, forms and labels", ("brief", "story", "forms", "ui", "outline", "routes", "around", "tree", "params", "find_search")),
+    ("HTML, forms and labels", ("brief", "story", "forms", "ui", "outline", "routes", "around", "tree", "params", "find_search", "stack", "tables")),
     ("Credentials and auth", ("credentials", "auth", "challenges", "correlate", "trace", "cookies", "secrets", "redirects")),
     ("APIs", ("graphql",)),
     ("Quality and traffic", ("issues", "wall", "duplicates", "slow", "diff")),

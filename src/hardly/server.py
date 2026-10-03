@@ -1260,6 +1260,56 @@ def hardly_replay_check(
 
 
 @mcp.tool
+def hardly_stack(
+    session_id: str,
+    host: str | None = None,
+    limit: int = 30,
+) -> str:
+    """Fingerprint web/front-end frameworks, CMS/site builders, GIS stacks and UI toolkits.
+
+    Reads response/request header names, cookie names, URL paths and HTML/JS
+    body previews. Each technology has a category, confidence, evidence
+    (kind + marker label, never values), entry_ids and a one-sentence SDK
+    implication (e.g. carry all WebForms hidden fields, echo XSRF cookie into
+    a header, Blazor needs a browser, ArcGIS query params). Also flags the
+    double-encoded-json data convention. CDN/WAF products: use hardly_wall.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.stack import fingerprint
+
+    return _ok(fingerprint(conn, host=host, limit=min(limit, 60)))
+
+
+
+@mcp.tool
+def hardly_tables(
+    session_id: str,
+    entry_id: int | None = None,
+    host: str | None = None,
+) -> str:
+    """List HTML data tables: headers, row/column counts, masked first row.
+
+    For each table that looks like a data grid (th / thead / bold first row,
+    >=2 columns, >=1 data row; handles nested tables, colspan and ASP.NET
+    GridView pagers) returns caption, headers, column_count, row_count,
+    first_row_masked (values replaced by shapes: 9 digit, a/A letter),
+    column_kinds (integer|date|money|text|empty over ALL rows),
+    has_pager_hint and entry_id. Two-column definition-style tables come back
+    as kind=label_value with their labels only. Cell values are never returned.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.tables import scan_session
+
+    return _ok(scan_session(conn, host=host, entry_id=entry_id))
+
+
+@mcp.tool
 def hardly_grids(
     session_id: str,
     host: str | None = None,

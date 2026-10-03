@@ -124,6 +124,45 @@ the rest are `optional`. Secrets are supplied only through overrides
 tests captcha/challenge token fields, and halts on 429, `Retry-After` or a gate
 stop. Output is names and findings only.
 
+## Technology fingerprint (`hardly_stack`)
+
+`hardly stack` / `hardly_stack` scores framework tells from cookie *names*,
+header names, URL paths and HTML/JS previews, and attaches a one-line SDK
+implication to each: server frameworks (ASP.NET WebForms and antiforgery,
+Blazor Server/WASM, Laravel, Django, Rails, Express, Spring/servlet, PHP, JSF),
+front ends (Next.js, Nuxt, React, Vue, AngularJS, Angular, Inertia, Salesforce
+Aura), CMS and site builders (AEM, WordPress, Drupal, SharePoint, Wix,
+Squarespace, Webflow, GoDaddy), UI toolkits (Telerik/Kendo, DevExpress), GIS
+(ArcGIS REST and web apps, Leaflet, OpenLayers, Mapbox/MapLibre GL, OGC WMS/WFS,
+slippy tiles), API docs (Swagger/OpenAPI), and data conventions (double-encoded
+JSON). Confidence is high/medium/low from weighted evidence; evidence lists
+marker labels only, never cookie or token values. CDN/WAF products are reported
+by `hardly_wall`.
+
+## Data tables, double-encoded JSON, exports and route body keys
+
+`hardly_tables` finds HTML data tables by structure (header row from `<th>`,
+`<thead>` or an all-bold first row; at least two columns and one data row).
+Nested layout tables, `colspan` and ASP.NET GridView pager rows are handled; a
+pager sets `has_pager_hint`. Output is header names, column/row counts, a first
+row **masked to shapes** (digits `9`, letters `a`/`A`, 24 chars max) and a
+per-column kind guessed from all rows. Two-column label/value tables are
+`kind: label_value` with their labels. Cell contents are never returned.
+
+Some servers return a JSON *string* whose content is JSON. At ingest the string
+is peeled (up to 3 layers), the stored preview is the unwrapped JSON, and a
+`body_signals` row (`encoding` / `double-encoded-json`) is recorded;
+`hardly_content` / `hardly_entry` report `kind: json` with hint
+`double_encoded_json` and `hardly_schema` infers on the unwrapped value.
+
+`hardly_grids` also lists `export_links`: links, forms and requests whose path
+or query indicates a built-in export (`csv|xlsx|xls|json|xml|pdf|tsv`). An export
+returns the whole result set in one response, so prefer it to paging.
+
+`hardly_routes` lists, per route, the `method` (when visible) and up to 12
+`body_keys` — object-literal key names found near the call (`$http.post`,
+`axios.*`, `fetch`, `$.ajax`, `xhr.send`). Names only, never values.
+
 ## HTML data attributes
 
 `hardly_data_attrs` (CLI `hardly data-attrs`) applies the MDN

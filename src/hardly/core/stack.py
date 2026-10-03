@@ -567,6 +567,7 @@ def fingerprint(
             resp_body[eid] = r["preview_text"]
         else:
             other_body.setdefault(eid, []).append(r["preview_text"])
+    double_encoded_ids: list[int] = []
     if _table_exists(conn, "body_signals"):
         try:
             for r in conn.execute("SELECT * FROM body_signals"):
@@ -574,6 +575,10 @@ def fingerprint(
                 eid = d.get("entry_id")
                 if eid is None or int(eid) not in ids:
                     continue
+                # Ingest unwraps double-encoded JSON, so the preview no longer shows it;
+                # the ingest-time signal is the evidence.
+                if d.get("kind") == "encoding" and d.get("name") == "double-encoded-json":
+                    double_encoded_ids.append(int(eid))
                 txt = " ".join(
                     str(v) for k, v in d.items() if k != "entry_id" and isinstance(v, str)
                 )
@@ -592,6 +597,8 @@ def fingerprint(
         pass
 
     acc = _Acc()
+    for eid in double_encoded_ids:
+        acc.hit("double-encoded-json", "body", "JSON string containing JSON (ingest signal)", 3, eid)
     for r in rows:
         eid = int(r["entry_id"])
         q = f"?{r['query_raw']}" if r["query_raw"] else ""

@@ -552,6 +552,30 @@ def cmd_replay_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_stack(args: argparse.Namespace) -> int:
+    from hardly.core.stack import fingerprint
+
+    result = sess.open_har(args.har)
+    if "error" in result:
+        _print(result)
+        return 1
+    conn = sess.require_conn(result["session_id"])
+    _print(fingerprint(conn, host=args.host, limit=args.limit))
+    return 0
+
+
+def cmd_tables(args: argparse.Namespace) -> int:
+    from hardly.core.tables import scan_session
+
+    result = sess.open_har(args.har)
+    if "error" in result:
+        _print(result)
+        return 1
+    conn = sess.require_conn(result["session_id"])
+    _print(scan_session(conn, host=args.host, entry_id=args.entry_id))
+    return 0
+
+
 def cmd_recipe_plan(args: argparse.Namespace) -> int:
     from hardly.core.recipe_plan import recipe_from_story
 
@@ -1602,6 +1626,25 @@ def build_parser() -> argparse.ArgumentParser:
     rc_p.add_argument("--delay", type=float, default=0.5)
     rc_p.add_argument("--allow-unsafe", action="store_true", help="Allow POST/PUT/PATCH/DELETE")
     rc_p.set_defaults(func=cmd_replay_check)
+
+    stack_p = sub.add_parser(
+    "stack",
+    help="Fingerprint frameworks / CMS / GIS / UI toolkits and SDK implications",
+    )
+    stack_p.add_argument("har")
+    stack_p.add_argument("--host")
+    stack_p.add_argument("--limit", type=int, default=30)
+    stack_p.set_defaults(func=cmd_stack)
+
+
+    tables_p = sub.add_parser(
+        "tables",
+        help="HTML data tables: headers, counts, masked first row (no values)",
+    )
+    tables_p.add_argument("har")
+    tables_p.add_argument("--host")
+    tables_p.add_argument("--entry-id", type=int, dest="entry_id")
+    tables_p.set_defaults(func=cmd_tables)
 
     grids_p = sub.add_parser(
         "grids",
