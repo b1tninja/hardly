@@ -58,6 +58,21 @@ SENSITIVE_JSON_KEYS = frozenset(
 # or "pinned" are not redacted.
 EXACT_SENSITIVE_KEYS = frozenset({"pwd", "pass", "pw", "pin", "otp", "ssn", "cvv", "cvc", "mfa", "code2fa"})
 
+# Words that are secret only when they are the entire key.
+_WHOLE_KEY_ONLY = frozenset({"auth", "credentials", "session", "cookie"})
+
+# Query/path parameters whose values must not be echoed in URLs we report.
+URL_SECRET_PARAMS = frozenset(
+    {
+        "code", "state", "nonce", "session_state", "id_token", "access_token",
+        "refresh_token", "token", "ticket", "sig", "signature", "sid", "sessionid",
+        "jsessionid", "phpsessid", "key", "apikey", "api_key", "auth", "password",
+        "pwd", "secret", "client_secret", "assertion", "samlresponse", "samlrequest",
+        "relaystate", "code_verifier", "otp", "verifier", "oauth_token",
+    }
+)
+_PATH_PARAM_RE = re.compile(r"(;(?:jsessionid|sid|phpsessid|sessionid)=)[^/?#;&\"'\s<>]+", re.I)
+
 JWT_RE = re.compile(
     r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"
 )
@@ -119,7 +134,13 @@ def is_sensitive_key(key: str) -> bool:
     if tail.startswith(("txt", "tb")) and tail[3:] in EXACT_SENSITIVE_KEYS | {"password", "passwd"}:
         return True
     for s in SENSITIVE_JSON_KEYS:
-        if s.replace("_", "") in k or k == s.replace("_", ""):
+        t = s.replace("_", "")
+        if t in _WHOLE_KEY_ONLY:
+            # Too generic as a substring: "authenticatorSelection",
+            # "allowCredentials", "sessionCount"... are not secrets.
+            if k == t:
+                return True
+        elif t in k:
             return True
     # also match keys that end with Token/Key/Secret/Password
     lower = key.lower()
@@ -129,10 +150,44 @@ def is_sensitive_key(key: str) -> bool:
     )
 
 
+def redact_url(url: str) -> str:
+    """Hide secret-bearing query values and ``;jsessionid=`` style path params.
+
+    Parameter *names* are kept so URLs stay useful for analysis.
+    """
+    if not url:
+        return url
+    out = _PATH_PARAM_RE.sub(lambda m: m.group(1) + REDACTED, url)
+    if "?" not in out and "#" not in out:
+        return out
+    from urllib.parse import parse_qsl, urlsplit, urlunsplit
+
+    parts = urlsplit(out)
+
+    def scrub(qs: str) -> str:
+        if not qs or "=" not in qs:
+            return qs
+        pieces = []
+        for chunk in qs.split("&"):
+            name, sep, val = chunk.partition("=")
+            lowered = name.lower().replace("-", "_")
+            bare = lowered.replace("_", "")
+            if sep and (
+                lowered in URL_SECRET_PARAMS or bare in URL_SECRET_PARAMS or is_sensitive_key(name)
+            ):
+                pieces.append(f"{name}={REDACTED}")
+            else:
+                pieces.append(chunk)
+        return "&".join(pieces)
+
+    fragment = scrub(parts.fragment) if "=" in parts.fragment else parts.fragment
+    return urlunsplit(parts._replace(query=scrub(parts.query), fragment=fragment))
+
+
 def redact_string(value: str) -> str:
     if not value:
         return value
-    out = JWT_RE.sub(REDACTED, value)
+    out = _PATH_PARAM_RE.sub(lambda m: m.group(1) + REDACTED, JWT_RE.sub(REDACTED, value))
     # Only redact long hex if it looks like a secret (not in URLs as path ids alone)
     if len(value) >= 32 and LONG_HEX_RE.fullmatch(value.strip()):
         return REDACTED

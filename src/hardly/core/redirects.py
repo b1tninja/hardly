@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sqlite3
 from typing import Any
+
+from hardly.core.redact import redact_url
 from urllib.parse import urljoin, urlparse
 
 
@@ -48,7 +50,7 @@ def redirect_chains(
                 after_id=row["entry_id"],
             )
             target = {
-                "url": abs_url,
+                "url": redact_url(abs_url),
                 "host": parsed.netloc.lower(),
                 "path": parsed.path or "/",
                 "follow_entry_id": hop_entry,
@@ -59,7 +61,7 @@ def redirect_chains(
                 "method": row["method"],
                 "status": row["status"],
                 "path": row["path"],
-                "location": location,
+                "location": redact_url(location) if location else location,
                 "target": target,
                 "started_datetime": row["started_datetime"],
             }

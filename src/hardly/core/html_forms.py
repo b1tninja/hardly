@@ -11,7 +11,7 @@ from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urljoin
 
-from hardly.core.redact import REDACTED, is_sensitive_key, redact_string
+from hardly.core.redact import REDACTED, is_sensitive_key, redact_string, redact_url
 
 _MAX_VALUE_CHARS = 80
 _MAX_OPTIONS = 30
@@ -318,7 +318,7 @@ class _FormParser(HTMLParser):
             ):
                 action = urljoin(self.base_url, action)
             self._form = {
-                "action": action,
+                "action": redact_url(action),
                 "method": (ad.get("method") or "get").upper(),
                 "id": ad.get("id") or "",
                 "name": ad.get("name") or "",
@@ -629,6 +629,7 @@ def _shape_link(
     resolved = raw
     if base_url and not raw.startswith(("http://", "https://", "//", "#")):
         resolved = urljoin(base_url, raw)
+    resolved, raw = redact_url(resolved), redact_url(raw)
     return {
         "tag": tag,
         "href": _shape_value("href", resolved) or "",
