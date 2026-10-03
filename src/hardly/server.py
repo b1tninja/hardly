@@ -1296,6 +1296,27 @@ def hardly_replay_check(
 
 
 @mcp.tool
+def hardly_auth_patterns(session_id: str, host: str | None = None, kinds_json: str | None = None) -> str:
+    """Detect generic auth patterns: bearer/refresh JSON login, OIDC/PKCE, SAML POST, double-submit CSRF, signed-request headers.
+
+    Names, shapes, lengths and entry ids only - never values. `kinds_json` is an
+    optional JSON list restricting the detectors.
+    """
+    path = sess.get_har_path(session_id)
+    if path is None:
+        return _err(KeyError(session_id))
+    kinds = None
+    if kinds_json:
+        try:
+            kinds = [str(k) for k in json.loads(kinds_json)]
+        except (json.JSONDecodeError, TypeError) as exc:
+            return _err(exc)
+    from hardly.core.auth_patterns import detect_auth_patterns
+
+    return _ok(detect_auth_patterns(path, host=host, kinds=kinds))
+
+
+@mcp.tool
 def hardly_stack(
     session_id: str,
     host: str | None = None,

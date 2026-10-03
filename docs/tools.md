@@ -156,6 +156,10 @@ Fingerprint web/front-end frameworks, CMS/site builders, GIS stacks and UI toolk
 
 List HTML data tables: headers, row/column counts, masked first row.
 
+### `hardly_auth_patterns(session_id, host=None, kinds_json=None)`
+
+Detect generic auth patterns: bearer/refresh JSON login, OIDC/PKCE, SAML POST, double-submit CSRF, signed-request headers.
+
 ## Credentials and auth
 
 ### `hardly_credentials(session_id, host=None, limit=40)`

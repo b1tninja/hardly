@@ -574,6 +574,13 @@ def cmd_stack(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_auth_patterns(args: argparse.Namespace) -> int:
+    from hardly.core.auth_patterns import detect_auth_patterns
+
+    _print(detect_auth_patterns(args.har, host=args.host, kinds=args.kind or None))
+    return 0
+
+
 def cmd_tables(args: argparse.Namespace) -> int:
     from hardly.core.tables import scan_session
 
@@ -1692,6 +1699,15 @@ def build_parser() -> argparse.ArgumentParser:
     stack_p.add_argument("--limit", type=int, default=30)
     stack_p.set_defaults(func=cmd_stack)
 
+
+    ap_p = sub.add_parser(
+        "auth-patterns",
+        help="Detect bearer/refresh login, OIDC/PKCE, SAML POST, double-submit CSRF, signed requests",
+    )
+    ap_p.add_argument("har")
+    ap_p.add_argument("--host")
+    ap_p.add_argument("--kind", action="append", help="Restrict to a detector (repeatable)")
+    ap_p.set_defaults(func=cmd_auth_patterns)
 
     tables_p = sub.add_parser(
         "tables",
