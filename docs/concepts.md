@@ -1,5 +1,7 @@
 # Concepts
 
+> Purpose: The mental model: sessions, the SQLite index, redaction, pagination and the three modes.
+
 ## Why an index
 
 A browser HAR is often tens of megabytes. Reading it into a model wastes

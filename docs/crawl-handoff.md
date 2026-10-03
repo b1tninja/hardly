@@ -1,5 +1,7 @@
 # Crawl strategies and pitfalls — handoff
 
+> Purpose: Crawl strategy, budgets and a catalogue of traps hit during live testing, for anyone exploring a site with hardly.
+
 For anyone (human or agent) using hardly to explore a site and build a client
 SDK. It records the strategies that worked and the traps that cost us time
 during live testing on 2026-10-03 (about 40 public sites: practice logins, test

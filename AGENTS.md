@@ -1,135 +1,96 @@
-# hardly
+# hardly: contributor and agent guide
 
-HAR analysis CLI and MCP server. Index a capture into SQLite once, then query
-with small, redacted, paginated tools — so agents need hardly any of the raw
-file.
+hardly is a generic, content-neutral HAR analysis CLI and FastMCP server: index a capture into
+SQLite once, then query it with small, redacted, paginated tools. What is in and out of scope is
+defined in [docs/scope.md](docs/scope.md); `tests/test_neutrality.py` enforces it (no site, domain
+or organisation terms in `src`, `docs`, `skills`, `tests`, `scripts`). Read the scope doc first.
 
-Human setup (venv, Docker, Cursor MCP): **[README.md](README.md)**.
-Deeper docs: **[docs/](docs/README.md)** (concepts, SDK workflow, capture,
-technologies, integrating). After changing an MCP tool run
-`python scripts/gen_tool_docs.py`.
+Human setup: [README.md](README.md). Docs index: [docs/README.md](docs/README.md).
+Design overview: [docs/architecture.md](docs/architecture.md).
 
-hardly is a generic, content-neutral helper: technology detectors and resource
-kinds only — no site-specific logic. Downstream SDK projects use hardly and
-keep their own recipes, fixtures and vocabularies.
+## Repo map
+
+| Path | What lives there |
+|------|------------------|
+| `src/hardly/server.py` | FastMCP server: `hardly_*` tools, prompts, resources, instructions |
+| `src/hardly/cli.py` | argparse CLI (`hardly <command>`), mirrors most tools |
+| `src/hardly/core/` | Pure detectors and builders (one concern per module: `credentials`, `botwalls`, `grids`, `stub`, `report`, ...) |
+| `src/hardly/index/` | `ingest.py` (ijson stream to SQLite, `INDEX_VERSION`), `schema.py`, `query.py` |
+| `src/hardly/session.py` | Session cache, `open_har`, reopen after restart |
+| `src/hardly/capture*.py` | Playwright capture (in-process and durable worker), recipes, aria refs |
+| `src/hardly/local_site.py` | Loopback synthetic site used by tests and soak |
+| `src/hardly/capabilities.py`, `resources.py` | Capability report; docs/skill bundled as MCP resources |
+| `docs/` | Human docs; `tools.md` is generated |
+| `skills/hardly/` | Agent Skill; `references/*.md` are generated copies of `docs/` |
+| `scripts/` | `gen_tool_docs.py`, soak scripts, image build |
+| `tests/` | pytest suite; `tests/fixtures/sample.har` is synthetic |
 
 ## Commands
 
 ```bash
-python -m venv .venv
-.venv\Scripts\activate
-pip install -e ".[dev]"
-pytest
+python -m venv .venv && source .venv/bin/activate    # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"                              # add ".[capture]" + `playwright install chromium` for capture
+pytest -q                                            # offline; live Playwright tests need HARDLY_LIVE_CAPTURE=1
+ruff check .                                         # lint (config in pyproject.toml)
+python scripts/gen_tool_docs.py                      # regenerate docs/tools.md + skills/hardly/references
+python scripts/gen_tool_docs.py --check              # exit 1 if stale
 ```
 
-```bash
-hardly modes                              # pick archive / headless / interactive
-hardly summary path/to/capture.har
-hardly endpoints path/to/capture.har --host api.example.com
-hardly content path/to/capture.har --host portal.example.com
-hardly outline path/to/capture.har 12 --format markdown
-hardly export-md path/to/capture.har -o API.md --host api.example.com
-hardly capture doctor
-hardly capture discover https://example.com --channel chrome
-hardly capture https://example.com -o capture.har   # interactive; needs [capture]
-hardly serve
-```
+In a git worktree the editable install may point at another checkout. Run
+`PYTHONPATH=src python -m pytest -q` so the tests import your worktree's code.
+`test_queue_depth_sees_concurrent_waiter` is occasionally flaky; rerun before investigating.
 
-Docker deploy for Cursor: `powershell -File scripts\deploy-docker.ps1` (see
-README). Headed capture needs the **local venv** MCP entry (not Docker).
+## Conventions
 
-## First use
+- **New detector** = a `core/<name>.py` module + a test + wiring in `server.py` (tool with a
+  docstring), `cli.py`, `capabilities.py` and the `GROUPS` table in `scripts/gen_tool_docs.py`,
+  then regenerate docs. Prefer extending an existing tool or a `hardly_report` section over adding
+  a tool.
+- **Names and shapes, never secret values.** Output may include header/cookie/field names, value
+  shapes (jwt, hex, base64) and lengths; never values. Redact URLs with `core/redact.py`.
+- **Live tools are confirm-gated.** Anything that sends traffic needs `confirm=true` (CLI `--yes`)
+  and returns only a plan without it. Mark them `LIVE` in the docstring.
+- **Evidence by default, prose behind `explain=true`.** Report facts read from the HAR or a probe.
+- **Tool docstrings are prompts**: first sentence is the point (<=160 chars), say when to use it and
+  which sibling to prefer, include an `Example:` call. `tests/test_agent_onboarding.py` lints this.
+- **Index changes**: if ingest stores something new or changes meaning, bump `INDEX_VERSION` in
+  `index/ingest.py` so stale cached indexes rebuild.
+- **Tests** use synthetic fixtures with neutral names (`example.com`) and the loopback
+  `hardly.local_site`. No private HARs, no network, no real credentials.
+- Docs: each file in `docs/` starts with a `> Purpose:` line. Relative links are checked by
+  `tests/test_docs_links.py`.
 
-- `hardly_start(goal, har_path, url)` returns an ordered plan plus environment
-  state; read resource `hardly://cheatsheet` (or `docs/cheatsheet.md`).
-- MCP prompts: `reverse_engineer_api`, `build_client_sdk`,
-  `diagnose_blocked_capture`, `verify_client` (plus `analyze_har`,
-  `discover_apis`, `capture_portal`, `document_api`, `find_auth_flow`).
-- MCP resources: `hardly://docs/<concepts|sdk-workflow|capture|gate-policy|tools|reporting|catalog|crawl-handoff>`.
-- Agent Skill: `skills/hardly/SKILL.md`; `hardly skill install [--dest DIR]`
-  (default `~/.claude/skills/hardly`) / `hardly skill print`. Its
-  `references/*.md` are copies of `docs/`; `python scripts/gen_tool_docs.py`
-  refreshes them and `docs/tools.md`.
-- Tool docstrings are prompts: first sentence = the point (<=160 chars), say when
-  to use it and which sibling to prefer, include an `Example:` call, mark live
-  tools `LIVE` and confirm-gated. `tests/test_agent_onboarding.py` lints this.
+## Safety rules
 
-## Three modes (pick one first)
+- Do not build or document evasion of captchas, bot walls, rate limits or access controls. Gates are
+  classified and reported (`docs/gate-policy.md`); the answer is to stop, ask the person, or re-run
+  from another environment.
+- Only probe, crawl or capture targets the user is authorised to access. Crawl is robots-aware and polite.
+- Capture and HAR files contain live secrets: never print bodies wholesale, never commit them.
 
-Call `hardly_modes` / `hardly_mode` (or `hardly modes` / `hardly help-tools archive`):
+## Do not
 
-| Mode | Entry | Prompt |
-|------|--------|--------|
-| **archive** | `hardly_open` → brief / endpoints | `analyze_har` |
-| **headless** | `hardly_discover(url)` (or start headed=false + aria) | `discover_apis` |
-| **interactive** | start headed=true channel=chrome → **ASK PERSON** → stop | `capture_portal` |
+- Add site-, organisation- or region-specific logic, vocabulary, URLs or recipes (callers pass
+  keywords as arguments; downstream projects keep their own adapters).
+- Commit HAR files (`*.har` is gitignored; only `tests/fixtures/sample.har` is tracked).
+- Write scratch files, captures or reports in the repo root; use `$TMPDIR` or the cache dir.
+- Hand-edit `docs/tools.md` or `skills/hardly/references/*` (edit `docs/*` or docstrings, regenerate).
+- Load a raw HAR into a model's context; use `hardly_open`, `hardly_brief`, `hardly_endpoints`.
 
-Rule: HAR path → archive. Scriptable URL → headless. Person / wall / MFA → interactive.
-After any capture stop, continue in **archive** mode on the new `session_id`.
+## Agent workflow in brief
 
-## Agent workflow (after a session exists)
+`hardly_start(goal, har_path, url)` returns an ordered plan. Pick a mode (`hardly_modes`): HAR path
+means **archive**; scriptable URL means **headless** (`hardly_discover`); a person, wall or MFA means
+**interactive** (ask the person, do not claim to see their screen). After any capture stop, continue
+in archive mode on the new `session_id`. If tools look missing, `hardly_capabilities` and restart the
+MCP server; after a restart `hardly_reopen(session_id)`. Full guidance: `hardly://cheatsheet`,
+`docs/cheatsheet.md`, `skills/hardly/SKILL.md` (`hardly skill install`).
 
-Prefer MCP/CLI helpers over reading the HAR:
+## Subagent and worktree work
 
-0. `hardly_capabilities` if tools look missing (stale MCP) -> restart server;
-   `hardly_help("modes"|"portal")` / `hardly_recommend` to pick tools
-1. `hardly_open` / `hardly summary` -> counts. After MCP restart,
-   `hardly_reopen(session_id)` (other tools also auto-reattach from cache)
-2. `hardly_hosts` -> use `preferred_host` (apex HTML), not payment/CDN hosts;
-   `hardly_endpoints` / `hardly_content` for API surface and payload kinds
-3. HTML portals: `hardly_brief` first (includes a credentials summary +
-   cookie flags), then `hardly_story` / `hardly_forms` / `hardly_ui` /
-   `hardly_outline`. `hardly_forms` labels cover div label/value pairs,
-   th/td, dt/dd, bold-cell tables, and `span.base` rows — prefer
-   those over scraping bodies. Live tab: `hardly_capture_aria` for
-   Playwright accessibility YAML + `refs[]`
-4. Credentials / login: `hardly_credentials` for the full map (password +
-   username/email pairing, session cookies + HttpOnly/Secure/SameSite flags,
-   CSRF, OAuth params, jwt/hex/base64 *shapes*, login_flow — never values).
-   Then `hardly_correlate` / `hardly_trace` / `hardly_cookies` /
-   `hardly_secrets`; `hardly_redirects` for 3xx. Unsure? `hardly_recommend("…")`
-5. Missing detail URL: `hardly_routes` + `handler_functions`, then
-   `hardly_tree(entry_id=…)` / `hardly_around(entry_id=…)`. GraphQL:
-   `hardly_graphql`. Param drift: `hardly_params`
-5a. Data-heavy pages: `hardly_grids` (grid libraries, JSON envelopes, paging
-   params) and `hardly_data_attrs` (HTML `data-*` keys, endpoint URLs, embedded
-   JSON, framework hints)
-5b. Landing page, no search form yet: `hardly_find_search(keywords=[...])`
-   ranks links (generic signals + your domain terms) and returns a `next_step` click for the next headless hop
-6. Client sketch: `hardly_stub`; next capture: `hardly_recipe_plan`
-7. After a capture: `hardly_wall` (identifies the WAF/bot-manager/captcha product
-   and whether it blocked; CDN headers alone are informational),
-   `hardly_challenges` (HTTP auth challenges, throttling, captcha widgets),
-   `hardly_issues` /
-   `hardly_coverage` if bodies look empty; `hardly_slow` /
-   `hardly_duplicates` for odd traffic; `hardly_pages` for pageref groups;
-   `hardly_diff` vs an earlier session (includes credentials delta)
-8. `hardly_entry` / `hardly_schema` / export — only for needed details
-
-Optional dep for capture: `pip install -e ".[capture]"` +
-`playwright install chromium` (or `HARDLY_BROWSER_CHANNEL=chrome`). hardly stays content-neutral (technology helpers and generic
-resource kinds only; no site-specific logic). Do not use Cursor's IDE browser
-expecting a HAR path.
-
-## Boundaries
-
-- Do **not** load giant HAR bodies into the model. Use summary/endpoints (and
-  paginated entry tools) instead of `Read` on the capture.
-- Do **not** commit captured HARs. `*.har` is gitignored; treat captures as
-  secrets. The checked-in `tests/fixtures/sample.har` is synthetic.
-- Live probe (`hardly_probe`) requires explicit confirm; secrets only via
-  overrides.
-- Capture writes full request/response bodies into the HAR — treat like any
-  other secret capture.
-- Live Playwright tests require `HARDLY_LIVE_CAPTURE=1`; default CI stays offline.
-- Prefer **live soak** over private HAR fixtures when checking stacks:
-  `hardly soak-live --list`, then `hardly soak-live` (or
-  `python -m hardly.soak_live`). Catalog in `hardly.live_targets` — ASP.NET
-  VIEWSTATE (local-webforms), HTML forms, login password fields, SPA, GraphQL
-  (`countries-gql` recipe `fetch`), JSON/OpenAPI. Optional
-  `--write-fixtures DIR` for small redacted snippets (not full HARs).
-  Headless one-shots use in-process `capture_headless` (set
-  `HARDLY_CAPTURE_SUBPROCESS=1` only when you need the durable worker + aria RPC).
-  In-process recipes support `goto` / `wait` / `click` / `fill` / `fetch` /
-  `evaluate`.
-- In interactive mode, ask the person — do not claim you can see their screen.
+Each subagent works in its own worktree on its own branch and owns a disjoint set of files. Before
+handing back: full suite green (with `PYTHONPATH=src`), `ruff check .`, `gen_tool_docs.py` run if
+tools or docstrings changed, neutrality test green, one commit per coherent change. The integrator
+merges branches one at a time, reruns the suite after each merge, and resolves `docs/tools.md` and
+`skills/hardly/references/` conflicts by regenerating them, never by hand. Worktrees live under
+`.claude/worktrees/` (gitignored).

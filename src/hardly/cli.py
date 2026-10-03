@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from hardly import session as sess
 from hardly.core.auth import detect_auth

@@ -1,5 +1,7 @@
 # From capture to client SDK
 
+> Purpose: A repeatable path from a captured session to a client SDK, step by step.
+
 A repeatable path from "I can drive the site in a browser" to "I have a client
 library". Commands are shown as CLI; every step is also an MCP tool
 (`hardly_<name>`). Replace placeholders with your own host and paths.
@@ -67,7 +69,7 @@ hardly redirects a.har     # 3xx chains
 Typical findings that drive SDK design: which cookie is the session, whether a
 CSRF/verification token must be scraped from a prior page, whether auth is a
 form post, a token endpoint, or an OAuth redirect dance, and which hidden
-fields must be echoed back (see [technologies.md](technologies.md)).
+fields must be echoed back (see `docs/technologies.md`).
 
 ## 6. Generate a starting point
 
@@ -109,7 +111,7 @@ never bodies or values.
 - Re-capture periodically and run `hardly diff old.har new.har` to see changed
   endpoints and credentials behaviour.
 - Keep small, hand-redacted response snippets as unit-test fixtures; do not
-  commit HARs. See [integrating.md](integrating.md).
+  commit HARs. See `docs/integrating.md`.
 
 ## Stub helpers
 

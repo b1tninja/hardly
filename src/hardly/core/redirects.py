@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import sqlite3
 from typing import Any
+from urllib.parse import urljoin, urlparse
 
 from hardly.core.explain import finish
-
 from hardly.core.redact import redact_url
-from urllib.parse import urljoin, urlparse
 
 
 def _redirect_chains(

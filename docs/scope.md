@@ -1,5 +1,7 @@
 # Scope: what belongs in hardly
 
+> Purpose: What belongs in hardly and what stays in downstream projects, with the checklist for any change.
+
 hardly is a **generic, content-neutral** toolkit for reading and capturing HAR files and turning
 what they show into facts a client SDK needs: endpoints, forms and labels, data/media kinds, and how
 credentials and authentication are handled. It is also an MCP server so agents can do this safely.

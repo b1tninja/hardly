@@ -28,9 +28,7 @@ def _num(value: Any) -> float | int | None:
 
 from hardly.core.filters import is_noise
 from hardly.core.redact import (
-    BASE64_RE,
     JWT_RE,
-    LONG_HEX_RE,
     classify_value_shape,
     is_sensitive_header,
     is_sensitive_key,

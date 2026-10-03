@@ -12,7 +12,7 @@ import importlib.util
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.parse import parse_qs, quote, unquote
+from urllib.parse import parse_qs, quote
 
 import pytest
 

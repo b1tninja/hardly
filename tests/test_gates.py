@@ -7,7 +7,6 @@ from hardly.core.botwalls import detect_bot_protection
 from hardly.core.challenges import detect_challenges
 from hardly.core.gates import POLICY, classify_gates, classify_response
 from hardly.core.wall import detect_walls
-
 from tests.test_botwalls import _entry, _open
 
 

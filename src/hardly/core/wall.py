@@ -7,6 +7,7 @@ from typing import Any
 
 from hardly.core.explain import finish
 
+
 def detect_walls(
     conn: sqlite3.Connection,
     *,

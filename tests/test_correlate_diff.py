@@ -7,8 +7,8 @@ from hardly.core.brief import portal_brief
 from hardly.core.cookies import cookie_timeline
 from hardly.core.correlate import correlate_tokens
 from hardly.core.diff import diff_sessions
-from hardly.core.recipe_plan import recipe_from_story
 from hardly.core.issues import find_issues
+from hardly.core.recipe_plan import recipe_from_story
 from hardly.core.redirects import redirect_chains
 
 FIX = Path(__file__).parent / "fixtures" / "sample.har"

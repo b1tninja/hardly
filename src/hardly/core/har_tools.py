@@ -14,10 +14,11 @@ import json
 import os
 import re
 import tempfile
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any
 from urllib.parse import urlparse
 
 import ijson
@@ -31,7 +32,6 @@ from hardly.core.redact import (
     redact_form,
     redact_url,
 )
-
 
 # --------------------------------------------------------------------------- io
 

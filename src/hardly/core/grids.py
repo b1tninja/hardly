@@ -14,10 +14,9 @@ import re
 import sqlite3
 from collections import Counter
 from typing import Any
-
-from hardly.core.explain import finish
 from urllib.parse import parse_qsl
 
+from hardly.core.explain import finish
 from hardly.core.previews import is_truncated, preview_warnings
 
 # --- HTML grid libraries: (name, regex on markup/scripts) -------------------

@@ -1,5 +1,7 @@
 # Target catalog
 
+> Purpose: How to track many targets with several endpoints each, subclass `TargetAdapter`, and run polite batch verification.
+
 A **catalog** is a versioned JSON (or YAML, if PyYAML is installed) file listing
 *targets*, each with the *endpoints* you have discovered for it. It is generic
 machinery: hardly assigns no meaning to tags, group keys or roles. A downstream

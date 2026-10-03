@@ -22,10 +22,11 @@ import json
 import os
 import tempfile
 import time
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterable, Iterator
+from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from hardly.core.redact import redact_string, redact_url
@@ -113,7 +114,7 @@ class Endpoint:
         return d
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Endpoint":
+    def from_dict(cls, data: dict[str, Any]) -> Endpoint:
         if not isinstance(data, dict):
             raise CatalogError("endpoint must be an object")
         cap = data.get("capture") or {}
@@ -150,7 +151,7 @@ class Target:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Target":
+    def from_dict(cls, data: dict[str, Any]) -> Target:
         if not isinstance(data, dict):
             raise CatalogError("target must be an object")
         groups = data.get("groups") or {}
@@ -198,7 +199,7 @@ class Catalog:
         return {"name": self.name, "version": self.version, "targets": [t.to_dict() for t in self.targets]}
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any], *, validate: bool = True) -> "Catalog":
+    def from_dict(cls, data: dict[str, Any], *, validate: bool = True) -> Catalog:
         if not isinstance(data, dict):
             raise CatalogError("catalog must be an object")
         version = data.get("version", CATALOG_VERSION)
@@ -281,7 +282,7 @@ class Catalog:
         self.raise_if_invalid()
         return result
 
-    def merge(self, other: "Catalog") -> None:
+    def merge(self, other: Catalog) -> None:
         for t in other.targets:
             self.upsert(t)
 

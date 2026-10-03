@@ -2,8 +2,8 @@
 
 import pytest
 
-from hardly.core.capture_errors import classify_capture_error
 from hardly.core import recipe_policy
+from hardly.core.capture_errors import classify_capture_error
 
 
 @pytest.mark.parametrize(

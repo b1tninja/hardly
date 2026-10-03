@@ -19,7 +19,6 @@ from hardly.core.page_nav import (
 )
 from hardly.core.search_nav import page_candidates, search_form_reached
 
-
 # --- offline -----------------------------------------------------------------
 
 

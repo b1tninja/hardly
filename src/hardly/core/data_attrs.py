@@ -18,10 +18,9 @@ import re
 from collections import Counter, defaultdict
 from html.parser import HTMLParser
 from typing import Any
-
-from hardly.core.explain import finish
 from urllib.parse import urljoin, urlparse
 
+from hardly.core.explain import finish
 from hardly.core.previews import is_truncated, preview_warnings
 
 _DATA = re.compile(r"^data-([a-z][a-z0-9\-_.:]*)$")

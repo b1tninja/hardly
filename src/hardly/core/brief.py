@@ -9,9 +9,9 @@ from typing import Any
 from hardly.core.classify import summarize_content
 from hardly.core.cookies import cookie_timeline
 from hardly.core.correlate import correlate_tokens
+from hardly.core.gates import summarize_gates
 from hardly.core.issues import find_issues
 from hardly.core.story import portal_story
-from hardly.core.gates import summarize_gates
 from hardly.core.wall import detect_walls
 from hardly.index import query as q
 

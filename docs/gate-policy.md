@@ -1,5 +1,7 @@
 # Gate policy
 
+> Purpose: What to do at each kind of gate (bot wall, challenge, environment block): accept, stop, or re-run elsewhere.
+
 A *gate* is anything between a client and content that needs a decision by a
 person. hardly separates **"the site refused us"** from **"our sandbox refused
 us"**, classifies each gate, never goes past one, and prints the class in the

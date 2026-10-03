@@ -14,12 +14,11 @@ import re
 import time
 import urllib.robotparser
 from typing import Any
-
-from hardly.core.explain import finish
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 import httpx
 
+from hardly.core.explain import finish
 from hardly.core.grids import html_grid_signals
 from hardly.core.redact import REDACTED, redact_url
 from hardly.core.search_nav import page_candidates, score_link, search_form_reached

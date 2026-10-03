@@ -1,5 +1,7 @@
 # One-pass report
 
+> Purpose: How the one-pass `hardly_report` evidence index works: sections, severity, detail levels and `explain`.
+
 `hardly report <har>` (MCP: `hardly_report`) runs the existing detectors once and
 returns an **evidence index**: a flat list of findings that say *what was seen
 and where*, never what to do about it. It contains no detection logic of its own;

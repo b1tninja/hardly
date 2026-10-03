@@ -9,7 +9,6 @@ from hardly.core import report as R
 from hardly.core.explain import SEVERITIES
 from hardly.core.gates import classify_gates
 from hardly.core.stack import fingerprint
-
 from tests.test_botwalls import _entry, _open
 
 SECRET = "SUPERSECRETVALUE9"

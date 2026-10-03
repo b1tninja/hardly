@@ -181,7 +181,7 @@ def diff_contracts(base: dict, fresh: dict, *, host: str | None = None) -> dict:
     for key in sorted(set(bops) & set(fops)):
         ep = f"{key[0]} {key[1]}"
         bo, fo = bops[key], fops[key]
-        bs, fs = set((bo.get("responses") or {})), set((fo.get("responses") or {}))
+        bs, fs = set(bo.get("responses") or {}), set(fo.get("responses") or {})
         if bs != fs:
             status_changes.append({"endpoint": ep, "added": sorted(fs - bs), "removed": sorted(bs - fs)})
         bb, fb = _body_schemas(bo), _body_schemas(fo)

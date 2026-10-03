@@ -209,7 +209,7 @@ def redact_url(url: str) -> str:
     out = _PATH_PARAM_RE.sub(lambda m: m.group(1) + REDACTED, url)
     if "?" not in out and "#" not in out:
         return out
-    from urllib.parse import parse_qsl, urlsplit, urlunsplit
+    from urllib.parse import urlsplit, urlunsplit
 
     parts = urlsplit(out)
 

@@ -1,5 +1,7 @@
 # Candidate authentication test targets
 
+> Purpose: Research notes on candidate public authentication test targets for the soak catalog.
+
 Research notes for growing hardly's soak catalog (`hardly.live_targets`) and
 unit-test fixtures. Everything here is a *generic technology demo*; hardly
 never encodes site-specific logic for any of them.

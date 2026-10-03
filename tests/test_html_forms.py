@@ -2,10 +2,10 @@
 
 from pathlib import Path
 
+from hardly import session as sess
 from hardly.core.html_forms import extract_html_structure
 from hardly.core.redact import REDACTED
 from hardly.index import query as q
-from hardly import session as sess
 
 FIX = Path(__file__).parent / "fixtures" / "sample.har"
 

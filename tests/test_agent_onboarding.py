@@ -6,8 +6,6 @@ import asyncio
 import inspect
 import json
 import re
-import subprocess
-import sys
 from pathlib import Path
 
 from hardly import cli, resources, server

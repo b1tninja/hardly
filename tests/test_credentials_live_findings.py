@@ -153,7 +153,7 @@ def test_openapi_and_stub_reflect_auth_scheme_and_parameters(tmp_path, monkeypat
     entries = [
         _entry(1, "GET", "https://api.example.com/auth/login", body='{"ok":true}', ct="application/json"),
         _entry(2, "GET", "https://api.example.com/items/42?status=available&page=2",
-               req_headers={"Authorization": f"Basic dTpw", "api_key": "special"}, body='{"id":42}', ct="application/json"),
+               req_headers={"Authorization": "Basic dTpw", "api_key": "special"}, body='{"id":42}', ct="application/json"),
         _entry(3, "GET", "https://api.example.com/items/43?status=sold",
                req_headers={"Authorization": f"Bearer {token}"}, body='{"id":43}', ct="application/json"),
     ]

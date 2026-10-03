@@ -8,7 +8,6 @@ from typing import Any
 from fastmcp import FastMCP
 
 from hardly import session as sess
-from hardly.session import resolve_path
 from hardly.core.auth import detect_auth
 from hardly.core.curl import entry_to_curl
 from hardly.core.export_md import export_markdown
@@ -16,6 +15,7 @@ from hardly.core.export_openapi import export_openapi
 from hardly.core.flows import get_flow
 from hardly.core.probe import probe_entry
 from hardly.index import query as q
+from hardly.session import resolve_path
 
 INSTRUCTIONS = """\
 hardly analyzes HAR files (recorded browser traffic) and can record them, so you \

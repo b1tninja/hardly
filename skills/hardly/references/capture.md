@@ -1,5 +1,7 @@
 # Capturing HARs
 
+> Purpose: How to record HARs: bring your own, headless discovery, interactive capture, recipes, env vars and containers.
+
 You can bring your own HAR (browser DevTools "Save all as HAR with content" or
 any proxy export) and use [archive mode](concepts.md#three-modes) directly.
 hardly can also record one with Playwright. Capture is optional:

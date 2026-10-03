@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
+from hardly import session as sess
 from hardly.core.story import portal_story
 from hardly.core.stub import client_stub
-from hardly import session as sess
 
 FIX = Path(__file__).parent / "fixtures" / "sample.har"
 

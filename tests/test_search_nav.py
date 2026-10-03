@@ -133,7 +133,8 @@ def test_keyword_vouches_by_field_name_not_action_url():
 
 
 def test_one_box_search_accepted_only_after_deliberate_navigation():
-    from hardly.core.search_nav import has_search_term, search_form_reached as reached
+    from hardly.core.search_nav import has_search_term
+    from hardly.core.search_nav import search_form_reached as reached
 
     box = extract_html_structure('<form action="/x"><input type="text" name="query"><input type="submit"></form>')
     assert reached(box) is None

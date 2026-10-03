@@ -6,14 +6,14 @@ import json
 import re
 import sqlite3
 from pathlib import Path
-from urllib.parse import parse_qsl, urlparse
 from typing import Any
+from urllib.parse import parse_qsl, urlparse
 
-from hardly.core.explain import finish
 import ijson
 
 from hardly.core.auth import AUTH_PATH_RE, detect_auth
 from hardly.core.cookies import cookie_timeline
+from hardly.core.explain import finish
 from hardly.core.filters import is_noise
 from hardly.core.redact import (
     classify_value_shape,
@@ -496,7 +496,7 @@ def _shapes_from_har(
                     if len(out) >= limit:
                         return out
             # Request/response body shapes for JWT/hex/base64 (discard text).
-            from hardly.core.redact import BASE64_RE, JWT_RE, LONG_HEX_RE
+            from hardly.core.redact import JWT_RE
 
             for side, blob in (
                 ("request", (req.get("postData") or {}).get("text")),

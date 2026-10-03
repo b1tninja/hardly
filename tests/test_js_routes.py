@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
+from hardly import session as sess
 from hardly.core.js_routes import extract_js_routes
 from hardly.index import query as q
-from hardly import session as sess
 
 FIX = Path(__file__).parent / "fixtures" / "sample.har"
 

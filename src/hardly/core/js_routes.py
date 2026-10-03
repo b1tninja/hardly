@@ -45,7 +45,7 @@ _INTERESTING = re.compile(
 _STRING_LIT = re.compile(r"'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"")
 
 
-def _safe_sample(js: str, m: "re.Match[str]", raw: str) -> str:
+def _safe_sample(js: str, m: re.Match[str], raw: str) -> str:
     """The call head up to and including the route literal: no payload values.
 
     Starts after the last statement boundary and blanks every string literal

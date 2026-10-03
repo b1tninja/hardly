@@ -92,8 +92,8 @@ def test_discover_apis_uses_nested_session(tmp_path, monkeypatch):
     monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
     # Force subprocess path so this test still covers the nested-session promotion.
     monkeypatch.setenv("HARDLY_CAPTURE_SUBPROCESS", "1")
-    from hardly import capture as cap
     import hardly.core.brief as brief_mod
+    from hardly import capture as cap
 
     def fake_start(url, har_path=None, **kwargs):
         return {"capture_id": "disc1", "status": "running", "url": url}

@@ -1,5 +1,7 @@
 # Technology support
 
+> Purpose: What hardly detects per technology (by wire-level signature, not by site) and what it does not.
+
 hardly recognises technologies by their wire-level signatures, not by site.
 This page lists what it detects and what it deliberately does not do.
 

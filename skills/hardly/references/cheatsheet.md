@@ -1,5 +1,7 @@
 # hardly cheatsheet
 
+> Purpose: One-page quick reference: modes, first calls, and the tools you reach for most.
+
 Content-neutral HAR analysis. Never Read a raw HAR; index it and query it.
 
 ## First call

@@ -9,6 +9,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from test_stub_compile import _delta, _entry, _har
 
 from hardly import session as sess
 from hardly.core.ajax_delta import delta_hidden, parse_delta, summarize_delta
@@ -16,8 +17,6 @@ from hardly.core.grids import count_rows, iter_pages, paging_params
 from hardly.core.pagination import detect_pagination, find_next, iter_follow
 from hardly.core.retry import backoff_delay, retry_after_seconds
 from hardly.core.stub import client_stub
-
-from test_stub_compile import _delta, _entry, _har
 
 ORIG = "https://runtime.test"
 VS1 = "VS-1-aGVsbG8tdmlld3N0YXRlLWJsb2I9PQ=="

@@ -47,12 +47,12 @@ def _resolve_url(url: str) -> str:
 
 def run_target(target: LiveTarget) -> dict[str, Any]:
     """Capture one target headlessly and evaluate expected analysis signals."""
+    from hardly import session as sess
     from hardly.capture import capture_headless, playwright_status
     from hardly.core.classify import summarize_content
     from hardly.core.credentials import map_credentials
     from hardly.core.graphql import detect_graphql
     from hardly.index import query as q
-    from hardly import session as sess
 
     t0 = time.perf_counter()
     url = _resolve_url(target.url)

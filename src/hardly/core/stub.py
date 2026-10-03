@@ -16,17 +16,17 @@ import sqlite3
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl
 
 from hardly.core.ajax_delta import delta_hidden, parse_delta
 from hardly.core.grids import paging_helper_source, paging_params
 from hardly.core.pagination import find_next, iter_follow
+from hardly.core.redact import classify_value_shape, is_sensitive_key
 from hardly.core.retry import (
     RETRY_STATUSES,
     backoff_delay,
     retry_after_seconds,
 )
-from hardly.core.redact import classify_value_shape, is_sensitive_key
 from hardly.core.story import portal_story
 
 _MAX_CODE_CHARS = 60_000

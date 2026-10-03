@@ -10,9 +10,9 @@ import json
 import socket
 import threading
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Iterator
 
 _WEBFORMS = """<!doctype html><html><head><title>Widget directory</title></head><body>
 <form method="post" action="./directory.aspx" id="form1">

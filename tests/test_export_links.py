@@ -98,8 +98,8 @@ def test_form_hidden_format_fields_and_sources_and_truncation(tmp_path, monkeypa
     assert by[("/files/data.json", "link")]["formats"] == ["json"]
     assert "SECRETID" not in json.dumps(rep)
     assert rep["warnings"] and rep["truncated_previews"] == 1
-    from hardly.core.tables import scan_session as tables_scan
     from hardly.core.data_attrs import scan_session as attrs_scan
+    from hardly.core.tables import scan_session as tables_scan
 
     assert tables_scan(conn)["warnings"]
     assert detect_grids(conn)["warnings"]

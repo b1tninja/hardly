@@ -1,5 +1,7 @@
 # Using hardly from another project
 
+> Purpose: How to use hardly from another project via MCP, CLI or Python, plus fixtures and soak testing.
+
 hardly is meant to sit *under* SDKs and adapters: it explores a site and
 documents its wire behaviour; your project turns that into a library. Keep the
 boundary clean:
@@ -17,7 +19,7 @@ never imports or names downstream projects.
 ## Three ways in
 
 **MCP (agents).** Run `hardly serve` (stdio). Configure in your editor; see the
-[README](../README.md#cursor-mcp). Agents start with `hardly_modes`, then
+[README](../README.md#mcp-setup-cursor-and-others). Agents start with `hardly_modes`, then
 `hardly_open`. Prompts: `analyze_har`, `discover_apis`, `capture_portal`.
 Tools: [tools.md](tools.md).
 
