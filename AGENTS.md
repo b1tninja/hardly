@@ -54,15 +54,15 @@ Prefer MCP/CLI helpers over reading the HAR:
    `hardly_reopen(session_id)` (other tools also auto-reattach from cache)
 2. `hardly_hosts` -> use `preferred_host` (apex HTML), not payment/CDN hosts;
    `hardly_endpoints` / `hardly_content` for API surface and payload kinds
-3. HTML portals: `hardly_brief` first, then `hardly_story` / `hardly_forms` /
-   `hardly_ui` / `hardly_outline` (markdown/tree/aria from HAR bodies — do not
-   parse raw HTML in the model). Live tab: `hardly_capture_aria` for Playwright
+3. HTML portals: `hardly_brief` first (includes a credentials summary +
+   cookie flags), then `hardly_story` / `hardly_forms` / `hardly_ui` /
+   `hardly_outline`. Live tab: `hardly_capture_aria` for Playwright
    accessibility YAML + `refs[]`
-4. Credentials / login: `hardly_credentials` (password fields, session
-   cookies, CSRF names, jwt/hex/base64 *shapes*, hypothesized login_flow —
-   never values). Then `hardly_correlate` / `hardly_trace` /
-   `hardly_cookies` / `hardly_secrets`; `hardly_redirects` for 3xx. Unsure?
-   `hardly_recommend("…")`
+4. Credentials / login: `hardly_credentials` for the full map (password +
+   username/email pairing, session cookies + HttpOnly/Secure/SameSite flags,
+   CSRF, OAuth params, jwt/hex/base64 *shapes*, login_flow — never values).
+   Then `hardly_correlate` / `hardly_trace` / `hardly_cookies` /
+   `hardly_secrets`; `hardly_redirects` for 3xx. Unsure? `hardly_recommend("…")`
 5. Missing detail URL: `hardly_routes` + `handler_functions`, then
    `hardly_tree(entry_id=…)` / `hardly_around(entry_id=…)`. GraphQL:
    `hardly_graphql`. Param drift: `hardly_params`

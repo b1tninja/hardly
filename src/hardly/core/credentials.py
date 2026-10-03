@@ -27,6 +27,16 @@ _PASSWORD_NAME_RE = re.compile(
     r"password|passwd|\bpwd\b|\bpw\b|passcode|passphrase|secret",
     re.I,
 )
+_USER_NAME_RE = re.compile(
+    r"user(name)?|e[-_]?mail|login|account|userid|user_?id|identifier|phone|mobile",
+    re.I,
+)
+_OAUTH_PARAM_RE = re.compile(
+    r"^(code|state|redirect_uri|client_id|client_secret|scope|grant_type|"
+    r"refresh_token|access_token|id_token|nonce|code_challenge|"
+    r"code_verifier|response_type)$",
+    re.I,
+)
 _SESSION_COOKIE_RE = re.compile(
     r"session|sessid|jsession|asp\.?net|auth|token|sid$|^sid$|ssid|"
     r"jwt|remember|login|secure|csrf|xsrf|requestverification",
@@ -69,11 +79,21 @@ def map_credentials(
         ):
             password_fields.append({**qs, "kind": "query_param"})
 
+    identity_fields = _identity_fields(
+        conn,
+        host=host,
+        secrets_hits=secrets.get("hits") or [],
+        password_fields=password_fields,
+        limit=limit,
+    )
+    oauth = _oauth_signals(conn, host=host, query_secrets=query_secrets, limit=limit)
+
     session_cookies = sorted(
         {
             n
             for n in (cookies.get("names_set") or []) + (cookies.get("names_sent") or [])
             if _SESSION_COOKIE_RE.search(n)
+            and "(redacted" not in n.lower()
         },
         key=str.lower,
     )
@@ -99,9 +119,11 @@ def map_credentials(
         conn,
         host=host,
         password_fields=password_fields,
+        identity_fields=identity_fields,
         auth=auth,
         session_cookies=session_cookies,
         shapes=shapes,
+        oauth=oauth,
     )
 
     by_shape: dict[str, int] = {}
@@ -112,12 +134,17 @@ def map_credentials(
         "host": host,
         "password_fields": password_fields[:limit],
         "password_field_count": len(password_fields),
+        "identity_fields": identity_fields[:limit],
+        "identity_field_count": len(identity_fields),
         "login_paths": (auth.get("auth_path_entries") or [])[:20],
         "token_responses": (auth.get("token_response_entries") or [])[:20],
         "auth_headers": auth.get("auth_related_headers") or {},
         "custom_auth_headers": auth.get("custom_auth_headers") or {},
         "session_cookies": session_cookies,
+        "cookie_flags": (cookies.get("flags") or [])[:limit],
+        "cookie_flags_by": cookies.get("by_flag") or {},
         "csrf_names": csrf_names,
+        "oauth": oauth,
         "query_secrets": query_secrets[:limit],
         "shapes": shapes[:limit],
         "shapes_by_kind": by_shape,
@@ -420,14 +447,194 @@ def _cookie_pairs(header_value: str) -> list[tuple[str, str]]:
     return pairs
 
 
+def _identity_fields(
+    conn: sqlite3.Connection,
+    *,
+    host: str | None,
+    secrets_hits: list[dict[str, Any]],
+    password_fields: list[dict[str, Any]],
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Username/email/login field names, preferably paired with password entries."""
+    pwd_ids = {h["entry_id"] for h in password_fields}
+    out: list[dict[str, Any]] = []
+    seen: set[tuple[Any, ...]] = set()
+
+    for h in secrets_hits:
+        name = str(h.get("name") or "")
+        if not name or not _USER_NAME_RE.search(name):
+            continue
+        if _PASSWORD_NAME_RE.search(name):
+            continue
+        key = (h["entry_id"], name.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(
+            {
+                **{k: h[k] for k in ("entry_id", "method", "path", "side", "kind") if k in h},
+                "name": name,
+                "paired_with_password": h["entry_id"] in pwd_ids,
+            }
+        )
+
+    # Form / JSON field names on the same entries as passwords.
+    for eid in sorted(pwd_ids)[:40]:
+        row = conn.execute(
+            "SELECT e.entry_id, e.method, e.path, b.side, b.preview_text "
+            "FROM entries e "
+            "JOIN bodies b ON b.entry_id = e.entry_id "
+            "WHERE e.entry_id = ? AND b.preview_text IS NOT NULL",
+            (eid,),
+        ).fetchall()
+        for body in row:
+            text = body["preview_text"] or ""
+            for name in _field_names_in_preview(text):
+                if not _USER_NAME_RE.search(name) or _PASSWORD_NAME_RE.search(name):
+                    continue
+                key = (eid, name.lower())
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append(
+                    {
+                        "entry_id": eid,
+                        "method": body["method"],
+                        "path": body["path"],
+                        "side": body["side"],
+                        "kind": "paired_field",
+                        "name": name,
+                        "paired_with_password": True,
+                    }
+                )
+                if len(out) >= limit:
+                    return out[:limit]
+    return out[:limit]
+
+
+def _field_names_in_preview(text: str) -> list[str]:
+    names: list[str] = []
+    stripped = text.lstrip()
+    if stripped.startswith(("{", "[")):
+        try:
+            data = json.loads(text)
+        except (json.JSONDecodeError, TypeError):
+            data = None
+        if data is not None:
+            from hardly.core.secrets import _json_keys
+
+            return [str(k) for k in _json_keys(data)[:80]]
+    if "=" in text and "<" not in text[:40]:
+        from urllib.parse import parse_qsl
+
+        for key, _ in parse_qsl(text, keep_blank_values=True):
+            if key:
+                names.append(key)
+    for m in re.finditer(
+        r"""<(?:input|textarea)\b[^>]*\bname\s*=\s*['"]([^'"]+)['"]""",
+        text,
+        re.I,
+    ):
+        names.append(m.group(1))
+    return names
+
+
+def _oauth_signals(
+    conn: sqlite3.Connection,
+    *,
+    host: str | None,
+    query_secrets: list[dict[str, Any]],
+    limit: int,
+) -> dict[str, Any]:
+    """OAuth-ish query/body parameter names (code, state, redirect_uri, …)."""
+    hits: list[dict[str, Any]] = []
+    seen: set[tuple[Any, ...]] = set()
+    for qs in query_secrets:
+        if _OAUTH_PARAM_RE.match(str(qs.get("name") or "")):
+            key = (qs["entry_id"], qs["name"].lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            hits.append({**qs, "kind": "oauth_query"})
+
+    clauses = ["e.is_noise = 0"]
+    params: list[Any] = []
+    if host:
+        clauses.append("e.host = ?")
+        params.append(host.lower())
+    # Path hints: /oauth, /authorize, /token, /callback
+    rows = conn.execute(
+        f"""
+        SELECT e.entry_id, e.method, e.host, e.path, e.status, e.query_json
+        FROM entries e
+        WHERE {" AND ".join(clauses)}
+          AND (
+            lower(e.path) LIKE '%oauth%'
+            OR lower(e.path) LIKE '%authorize%'
+            OR lower(e.path) LIKE '%/token%'
+            OR lower(e.path) LIKE '%callback%'
+            OR lower(e.path) LIKE '%openid%'
+          )
+        ORDER BY e.entry_id ASC
+        LIMIT 40
+        """,
+        params,
+    ).fetchall()
+    paths = [
+        {
+            "entry_id": r["entry_id"],
+            "method": r["method"],
+            "host": r["host"],
+            "path": r["path"],
+            "status": r["status"],
+        }
+        for r in rows
+    ]
+    for r in rows:
+        try:
+            query = json.loads(r["query_json"] or "{}")
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(query, dict):
+            continue
+        for name in query:
+            if not _OAUTH_PARAM_RE.match(str(name)):
+                continue
+            key = (r["entry_id"], str(name).lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            hits.append(
+                {
+                    "entry_id": r["entry_id"],
+                    "method": r["method"],
+                    "path": r["path"],
+                    "side": "request",
+                    "kind": "oauth_query",
+                    "name": str(name),
+                }
+            )
+            if len(hits) >= limit:
+                break
+
+    return {
+        "param_hits": hits[:limit],
+        "paths": paths[:20],
+        "param_names": sorted({h["name"] for h in hits}, key=str.lower),
+        "likely": bool(hits or paths),
+    }
+
+
 def _login_flow(
     conn: sqlite3.Connection,
     *,
     host: str | None,
     password_fields: list[dict[str, Any]],
+    identity_fields: list[dict[str, Any]],
     auth: dict[str, Any],
     session_cookies: list[str],
     shapes: list[dict[str, Any]],
+    oauth: dict[str, Any],
 ) -> dict[str, Any]:
     """Hypothesize a login sequence from password posts → tokens/cookies."""
     steps: list[dict[str, Any]] = []
@@ -439,6 +646,11 @@ def _login_flow(
             or h.get("kind") in {"json_key", "form_field", "query_param", "html_password"}
         }
     )
+    id_by_entry = {
+        f["entry_id"]: f["name"]
+        for f in identity_fields
+        if f.get("paired_with_password")
+    }
     # Prefer POST/PUT credential submissions on auth-ish paths.
     for eid in cred_ids:
         row = conn.execute(
@@ -451,16 +663,17 @@ def _login_flow(
         role = "credential_submit"
         if AUTH_PATH_RE.search(row["path"] or ""):
             role = "login_submit"
-        steps.append(
-            {
-                "role": role,
-                "entry_id": row["entry_id"],
-                "method": row["method"],
-                "host": row["host"],
-                "path": row["path"],
-                "status": row["status"],
-            }
-        )
+        step: dict[str, Any] = {
+            "role": role,
+            "entry_id": row["entry_id"],
+            "method": row["method"],
+            "host": row["host"],
+            "path": row["path"],
+            "status": row["status"],
+        }
+        if eid in id_by_entry:
+            step["identity_field"] = id_by_entry[eid]
+        steps.append(step)
 
     for tr in auth.get("token_response_entries") or []:
         steps.append(
@@ -490,6 +703,17 @@ def _login_flow(
                 }
             )
 
+    for p in (oauth.get("paths") or [])[:10]:
+        steps.append(
+            {
+                "role": "oauth_path",
+                "entry_id": p["entry_id"],
+                "method": p.get("method"),
+                "path": p.get("path"),
+                "status": p.get("status"),
+            }
+        )
+
     # De-dupe by (role, entry_id), keep order by entry_id.
     uniq: list[dict[str, Any]] = []
     seen: set[tuple[Any, ...]] = set()
@@ -504,11 +728,13 @@ def _login_flow(
         "step_count": len(uniq),
         "steps": uniq[:30],
         "session_cookies": session_cookies,
+        "identity_fields": [f["name"] for f in identity_fields[:10]],
+        "oauth_likely": bool(oauth.get("likely")),
         "confidence": (
             "high"
             if cred_ids and (auth.get("token_response_count") or session_cookies)
             else "medium"
-            if cred_ids or auth.get("auth_path_count")
+            if cred_ids or auth.get("auth_path_count") or oauth.get("likely")
             else "low"
         ),
     }

@@ -183,8 +183,16 @@ _WORKFLOWS: tuple[dict[str, str], ...] = (
     {
         "name": "guest_portal",
         "steps": (
-            "hardly_open -> hardly_brief -> hardly_wall -> "
+            "hardly_open -> hardly_brief (includes credentials summary) -> "
+            "hardly_credentials / hardly_wall -> "
             "hardly_correlate / hardly_trace -> hardly_stub or hardly_recipe_plan"
+        ),
+    },
+    {
+        "name": "login_session",
+        "steps": (
+            "hardly_open -> hardly_credentials -> "
+            "hardly_trace / hardly_cookies -> hardly_compare_entries pre/post login"
         ),
     },
     {

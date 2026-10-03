@@ -37,6 +37,26 @@ def portal_brief(
     coverage = q.body_coverage(conn, host=host)
     content = summarize_content(conn, host=host, exclude_noise=True, limit=120)
 
+    from hardly.core.credentials import map_credentials
+
+    cred = map_credentials(conn, har_path=har_path, host=host, limit=25)
+    credentials = {
+        "password_field_count": cred.get("password_field_count"),
+        "identity_fields": [
+            f.get("name") for f in (cred.get("identity_fields") or [])[:8]
+        ],
+        "session_cookies": (cred.get("session_cookies") or [])[:12],
+        "csrf_names": (cred.get("csrf_names") or [])[:12],
+        "shapes_by_kind": cred.get("shapes_by_kind") or {},
+        "cookie_flags_by": cred.get("cookie_flags_by") or {},
+        "oauth_likely": bool((cred.get("oauth") or {}).get("likely")),
+        "login_flow": {
+            "confidence": (cred.get("login_flow") or {}).get("confidence"),
+            "step_count": (cred.get("login_flow") or {}).get("step_count"),
+            "steps": ((cred.get("login_flow") or {}).get("steps") or [])[:8],
+        },
+    }
+
     form_pages = []
     for item in forms.get("entries") or []:
         field_names: list[str] = []
@@ -81,6 +101,23 @@ def portal_brief(
             f"SPA APIs often live on related_hosts (same apex {apex}); "
             "pass that host to hardly_endpoints / hardly_story.",
         )
+    if (
+        credentials.get("password_field_count")
+        or credentials.get("shapes_by_kind")
+        or credentials.get("session_cookies")
+        or credentials.get("oauth_likely")
+    ):
+        next_bits.insert(
+            0,
+            "Credentials/login signals present — drill with hardly_credentials "
+            "(names/shapes only).",
+        )
+    if (walls.get("hit_count") or 0) > 0:
+        next_bits.insert(
+            0,
+            "Wall hits — prefer interactive capture (channel=chrome) over "
+            "headless/urllib.",
+        )
 
     return {
         "host": host,
@@ -92,6 +129,8 @@ def portal_brief(
         "correlations": (corr.get("correlations") or [])[:12],
         "cookie_names_set": cookies.get("names_set"),
         "cookie_names_sent": cookies.get("names_sent"),
+        "cookie_flags_by": cookies.get("by_flag") or {},
+        "credentials": credentials,
         "form_pages": form_pages[:8],
         "js_routes": [
             {"path": r.get("path"), "score": r.get("score"), "count": r.get("count")}

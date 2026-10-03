@@ -37,6 +37,9 @@ def test_map_credentials_sample(tmp_path, monkeypatch):
     assert result["password_field_count"] >= 1
     names = {f["name"].lower() for f in result["password_fields"]}
     assert "password" in names
+    id_names = {f["name"].lower() for f in result["identity_fields"]}
+    assert "email" in id_names
+    assert any(f.get("paired_with_password") for f in result["identity_fields"])
     assert result["login_flow"]["step_count"] >= 1
     roles = {s["role"] for s in result["login_flow"]["steps"]}
     assert "login_submit" in roles or "credential_submit" in roles
@@ -61,7 +64,26 @@ def test_map_credentials_portal_session(tmp_path, monkeypatch):
     assert "SESSIONID" in result["session_cookies"] or any(
         "session" in n.lower() for n in result["session_cookies"]
     )
+    assert result["cookie_flags_by"].get("httponly") or any(
+        f.get("httponly") for f in result.get("cookie_flags") or []
+    )
     assert any(
         "password" in f["name"].lower() or f.get("kind") == "html_password"
         for f in result["password_fields"]
     ) or result["csrf_names"]
+
+
+def test_brief_includes_credentials(tmp_path, monkeypatch):
+    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
+    from hardly.core.brief import portal_brief
+
+    info = sess.open_har(str(FIX), force=True)
+    conn = sess.require_conn(info["session_id"])
+    brief = portal_brief(
+        conn,
+        har_path=sess.get_har_path(info["session_id"]),
+        host="api.example.com",
+    )
+    assert "credentials" in brief
+    assert brief["credentials"]["password_field_count"] >= 1
+    assert "hardly_credentials" in (brief.get("next") or "")
