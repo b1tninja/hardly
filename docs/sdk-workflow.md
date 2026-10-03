@@ -79,6 +79,15 @@ hardly export-md a.har -o API.md --host api.site.example
 hardly recipe-plan a.har -o steps.json               # capture recipe to refresh the capture later
 ```
 
+`hardly stub` emits a runnable client that **carries tokens forward**: values
+issued by an earlier response are extracted at run time — all hidden form fields
+are carried forward (`_hidden_fields`, covering ASP.NET VIEWSTATE/EVENTVALIDATION
+and antiforgery fields), cookies are echoed into headers (`_cookie`, URL-decoded,
+e.g. XSRF-TOKEN to X-XSRF-TOKEN), and JSON keys (including double-encoded bodies)
+are read with `_json_path`. Previous bodies are kept in `self.resp[entry_id]`.
+User-supplied values (passwords, search terms) stay `PLACEHOLDER_*` defaults,
+overridable as `run(txtpassword="...")`.
+
 The stub is a **sketch**: secrets are `PLACEHOLDER_*`, steps follow capture
 order, correlation notes show where tokens come from. Treat it as scaffolding
 and move the real logic into your SDK.
