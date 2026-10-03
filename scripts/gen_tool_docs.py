@@ -1,4 +1,4 @@
-"""Regenerate docs/tools.md from the MCP tool definitions in server.py.
+"""Regenerate docs/tools.md from the MCP tool definitions in server.py (and docs/cli.md).
 
     python scripts/gen_tool_docs.py          # write docs/tools.md
     python scripts/gen_tool_docs.py --check  # exit 1 if the file is stale
@@ -122,7 +122,7 @@ def render() -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-SKILL_REFS = ("cheatsheet", "concepts", "sdk-workflow", "capture", "gate-policy", "reporting", "tools")
+SKILL_REFS = ("cheatsheet", "concepts", "sdk-workflow", "capture", "gate-policy", "reporting", "tools", "cli")
 REFS_DIR = ROOT / "skills" / "hardly" / "references"
 
 
@@ -144,11 +144,16 @@ def sync_refs() -> None:
 
 
 def main() -> int:
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import gen_cli_docs
+
     text = render()
     if "--check" in sys.argv:
-        return 0 if OUT.exists() and OUT.read_text(encoding="utf-8") == text else 1
+        fresh = OUT.exists() and OUT.read_text(encoding="utf-8") == text
+        return 0 if fresh and gen_cli_docs.main_check() else 1
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(text, encoding="utf-8")
+    gen_cli_docs.OUT.write_text(gen_cli_docs.render(), encoding="utf-8")
     sync_refs()
     print(f"wrote {OUT} ({text.count('### ')} tools) and skills/hardly/references")
     return 0

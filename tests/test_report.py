@@ -162,14 +162,18 @@ def test_detectors_are_evidence_only_by_default(opened):
 def test_cli_report(opened, tmp_path, capsys, monkeypatch):
     _, har = opened
     parser = cli.build_parser()
-    args = parser.parse_args(["report", str(har), "--detail", "standard", "--write"])
+    args = parser.parse_args(["session", "report", str(har), "--detail", "standard"])
     assert args.func(args) == 0
     out = json.loads(capsys.readouterr().out)
-    assert out["findings"] and (har.parent / "w.report.json").is_file()
-    args = parser.parse_args(["report", str(har), "--format", "md"])
+    assert out["findings"]
+    args = parser.parse_args(["write", "export", str(har), "--format", "report", "-o", str(har.parent / "w.report.json")])
+    assert args.func(args) == 0
+    assert (har.parent / "w.report.json").is_file()
+    capsys.readouterr()
+    args = parser.parse_args(["session", "report", str(har), "--format", "md"])
     assert args.func(args) == 0
     assert capsys.readouterr().out.startswith("# HAR report")
-    args = parser.parse_args(["report", str(har), "--sections", "bogus"])
+    args = parser.parse_args(["session", "report", str(har), "--categories", "bogus"])
     assert args.func(args) == 1
 
 

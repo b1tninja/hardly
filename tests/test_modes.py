@@ -49,4 +49,6 @@ def test_cli_modes():
     from hardly import cli
 
     parser = cli.build_parser()
-    assert "modes" in parser._subparsers._group_actions[0].choices
+    assert "guide" in parser._subparsers._group_actions[0].choices
+    args = parser.parse_args(["guide", "mode", "archive"])
+    assert args.func.__name__ == "cmd_guide_mode"

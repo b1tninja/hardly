@@ -158,7 +158,7 @@ def test_cli_bad_output_no_traceback(tmp_path, capsys, monkeypatch):
     d = tmp_path / "adir"
     d.mkdir()
     with pytest.raises(SystemExit) as ei:
-        cli.main(["capture", "discover", "http://127.0.0.1:1/", "-o", str(d)])
+        cli.main(["browser", "capture-discover", "http://127.0.0.1:1/", "--analyze", "--confirm", "-o", str(d)])
     out = capsys.readouterr().out
     assert ei.value.code == 1 and "directory" in out and "output_path" in out
 

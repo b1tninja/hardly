@@ -199,6 +199,6 @@ def test_confirm_missing_errors_say_how():
 
 
 def test_cli_start(capsys):
-    args = cli.build_parser().parse_args(["start", "--goal", "x", "--har", "a.har"])
+    args = cli.build_parser().parse_args(["guide", "task-plan", "--goal", "x", "--har-path", "a.har"])
     assert args.func(args) == 0
     assert json.loads(capsys.readouterr().out)["plan"]

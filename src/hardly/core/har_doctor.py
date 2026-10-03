@@ -201,7 +201,7 @@ def normalize_config(config: dict | str | Path | None) -> dict[str, Any]:
 
 
 def add_cli_flags(parser) -> None:
-    """Add the knobs as argparse flags (for ``hardly har-doctor``)."""
+    """Add the knobs as argparse flags (for ``hardly har file-check``)."""
     a = parser.add_argument
     a("--config", help="JSON file or JSON string with any of the knobs")
     a("--checks", help="comma list/globs of checks to run (default all)")
@@ -209,7 +209,7 @@ def add_cli_flags(parser) -> None:
     a("--severity", action="append", metavar="CODE=LEVEL", help="override a severity (repeatable)")
     a("--max-entry-bytes", type=int)
     a("--truncation-ratio", type=float)
-    a("--clock-skew-s", type=float)
+    a("--clock-skew-seconds", type=float, dest="clock_skew_s")
     a("--noise-ratio", type=float)
     a("--strict", action="store_true", help="treat warnings as errors")
     a("--fail-on", choices=[*SEVERITIES, "never"])

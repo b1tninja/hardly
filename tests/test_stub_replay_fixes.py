@@ -120,7 +120,7 @@ def test_joint_credential_ablation_and_cookie_itemised(tmp_path, monkeypatch):
     assert res["required_any_of"] == [["Authorization", "sid"]]
 
 
-def test_bad_overrides_json_cli(tmp_path, monkeypatch, capsys):
+def test_bad_overrides_cli(tmp_path, monkeypatch, capsys):
     from hardly import cli
 
     har = tmp_path / "t.har"
@@ -129,7 +129,7 @@ def test_bad_overrides_json_cli(tmp_path, monkeypatch, capsys):
     )
     monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
     with pytest.raises(SystemExit) as exc:
-        cli.main(["replay-check", str(har), "0", "--yes", "--overrides-json", str(tmp_path / "o.json")])
+        cli.main(["send", "entry-ablation", str(har), "0", "--confirm", "--overrides", str(tmp_path / "o.json")])
     out = capsys.readouterr().out
     assert exc.value.code == 1
     assert "inline JSON" in out

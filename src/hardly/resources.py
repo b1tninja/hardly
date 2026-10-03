@@ -22,6 +22,7 @@ DOC_RESOURCES: dict[str, str] = {
     "reporting": "reporting.md",
     "catalog": "catalog.md",
     "crawl-handoff": "crawl-handoff.md",
+    "cli": "cli.md",
 }
 
 # Docs copied into the skill's references/ directory.
@@ -33,6 +34,7 @@ SKILL_REFERENCES = (
     "gate-policy.md",
     "reporting.md",
     "tools.md",
+    "cli.md",
 )
 
 
