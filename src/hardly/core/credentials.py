@@ -32,6 +32,12 @@ _USER_NAME_RE = re.compile(
     r"user(name)?|e[-_]?mail|login|account|userid|user_?id|identifier|phone|mobile",
     re.I,
 )
+# Names that contain "user" but are not a login identity.
+_NOT_IDENTITY_RE = re.compile(
+    r"agent|ip_?address|user_?type|user_?info|user_?count|user_?role|user_?group|"
+    r"user_?list|users$|accountnumber|account_?type|login_?count|last_?login",
+    re.I,
+)
 _OAUTH_PARAM_RE = re.compile(
     r"^(code|state|redirect_uri|client_id|client_secret|scope|grant_type|"
     r"refresh_token|access_token|id_token|nonce|code_challenge|"
@@ -560,6 +566,7 @@ def _identity_fields(
             name
             and _USER_NAME_RE.search(name)
             and not _PASSWORD_NAME_RE.search(name)
+            and not _NOT_IDENTITY_RE.search(name)
         )
         if not is_identity:
             continue
@@ -628,7 +635,11 @@ def _identity_fields(
         for body in row:
             text = body["preview_text"] or ""
             for name in _field_names_in_preview(text):
-                if not _USER_NAME_RE.search(name) or _PASSWORD_NAME_RE.search(name):
+                if (
+                    not _USER_NAME_RE.search(name)
+                    or _PASSWORD_NAME_RE.search(name)
+                    or _NOT_IDENTITY_RE.search(name)
+                ):
                     continue
                 key = (eid, name.lower())
                 if key in seen:
@@ -872,14 +883,19 @@ def _login_flow(
             h["entry_id"]
             for h in password_fields
             if h.get("side") == "request"
-            or h.get("kind") in {"json_key", "form_field", "query_param", "html_password"}
+            or h.get("kind") in {"query_param", "html_password"}
+            # json/form keys count only on the request side: dummy-style APIs
+            # echo "password" back in profile responses.
+            or (h.get("kind") in {"json_key", "form_field"} and h.get("side") != "response")
         }
     )
-    id_by_entry = {
-        f["entry_id"]: f["name"]
-        for f in identity_fields
-        if f.get("paired_with_password")
-    }
+    id_by_entry: dict[Any, str] = {}
+    # Response-side names first so a request field (what the client sends) wins.
+    for f in sorted(
+        (f for f in identity_fields if f.get("paired_with_password")),
+        key=lambda f: f.get("side") == "request",
+    ):
+        id_by_entry[f["entry_id"]] = f["name"]
     # Prefer POST/PUT credential submissions on auth-ish paths.
     for eid in cred_ids:
         row = conn.execute(
@@ -911,6 +927,8 @@ def _login_flow(
         steps.append(step)
 
     for tr in auth.get("token_response_entries") or []:
+        if _request_had_authorization(conn, tr["entry_id"]):
+            continue  # echo endpoint (e.g. /bearer): the client already held the token
         steps.append(
             {
                 "role": "token_issue",
@@ -940,6 +958,34 @@ def _login_flow(
 
     for wa in (webauthn_steps or [])[:6]:
         steps.append(wa)
+
+    try:
+        from hardly.core.challenges import detect_challenges
+
+        for ch in detect_challenges(conn, host=host, limit=10)["auth_challenges"]:
+            steps.append(
+                {
+                    "role": "auth_challenge",
+                    "entry_id": ch["entry_id"],
+                    "method": ch["method"],
+                    "path": ch["path"],
+                    "status": ch["status"],
+                    "schemes": [s["scheme"] for s in ch["schemes"]],
+                }
+            )
+            retry = ch.get("retried_with_credentials")
+            if retry:
+                steps.append(
+                    {
+                        "role": "auth_retry",
+                        "entry_id": retry["entry_id"],
+                        "method": ch["method"],
+                        "path": ch["path"],
+                        "status": retry["status"],
+                    }
+                )
+    except Exception:  # noqa: BLE001 — challenge detection is additive
+        pass
 
     for p in (oauth.get("paths") or [])[:10]:
         steps.append(
@@ -1186,3 +1232,12 @@ def _webauthn_signals(conn: sqlite3.Connection, *, host: str | None) -> dict[str
         "has_verify": any(s["role"] == "webauthn_verify" for s in steps),
         "steps": steps[:10],
     }
+
+
+def _request_had_authorization(conn: sqlite3.Connection, entry_id: int) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM headers WHERE entry_id = ? AND side = 'request' "
+        "AND lower(name) IN ('authorization', 'proxy-authorization') LIMIT 1",
+        (entry_id,),
+    ).fetchone()
+    return row is not None

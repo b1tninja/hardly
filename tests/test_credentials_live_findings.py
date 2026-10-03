@@ -109,3 +109,37 @@ def test_spa_login_and_aborted_entries_notes(tmp_path, monkeypatch):
     assert any("Client-rendered" in n for n in out["notes"])
     assert out["aborted_entries"]["count"] == 4
     assert any("no response" in n for n in out["notes"])
+
+
+def test_login_flow_ignores_echoed_passwords_and_models_http_challenges(tmp_path, monkeypatch):
+    token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJlLXZhbHVlLWhlcmU"
+    out = _creds(tmp_path, monkeypatch, [
+        _entry(1, "POST", "https://dj.example/auth/login", req_ct="application/json",
+               req_body=json.dumps({"username": "emilys", "password": "hunter22"}),
+               body=json.dumps({"accessToken": token, "refreshToken": token, "email": "e@x.co"}), ct="application/json"),
+        # profile echoes the password and a userAgent field; it is NOT a login
+        _entry(2, "GET", "https://dj.example/auth/me", req_headers={"Authorization": f"Bearer {token}"},
+               body=json.dumps({"id": 1, "username": "emilys", "email": "e@x.co", "password": "hunter22", "userAgent": "Mozilla/5.0 X"}),
+               ct="application/json"),
+        # echo endpoint: returns the token the client already sent
+        _entry(3, "GET", "https://hb.example/bearer", req_headers={"Authorization": f"Bearer {token}"},
+               body=json.dumps({"authenticated": True, "token": token}), ct="application/json"),
+        # Basic challenge then retry
+        _entry(4, "GET", "https://hb.example/basic-auth/u/p", status=401,
+               resp_headers={"WWW-Authenticate": 'Basic realm="Fake Realm"'}),
+        _entry(5, "GET", "https://hb.example/basic-auth/u/p", req_headers={"Authorization": "Basic dTpw"},
+               body='{"authenticated":true}', ct="application/json"),
+    ])
+    flow = out["login_flow"]["steps"]
+    by_entry = {}
+    for s in flow:
+        by_entry.setdefault(s["entry_id"], []).append(s["role"])
+    assert "login_submit" in by_entry[0] or "credential_submit" in by_entry[0]
+    assert not {"login_submit", "credential_submit"} & set(by_entry.get(1, []))      # /auth/me is not a login
+    assert "token_issue" not in by_entry.get(2, [])                                  # echo endpoint
+    assert "auth_challenge" in by_entry[3] and "auth_retry" in by_entry[4]
+    login = next(s for s in flow if s["entry_id"] == 0 and s["role"] in {"login_submit", "credential_submit"})
+    assert login["identity_field"] == "username"
+    names = [f["name"] for f in out["identity_fields"]]
+    assert "userAgent" not in names
+    assert "hunter22" not in json.dumps(out) and token not in json.dumps(out)

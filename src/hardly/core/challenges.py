@@ -96,6 +96,7 @@ def detect_challenges(
             JOIN headers h2 ON h2.entry_id = e2.entry_id AND h2.side = 'request'
             WHERE e2.entry_id > ? AND e2.method = ? AND e2.host = ?
               AND e2.path = ? AND lower(h2.name) IN ('authorization', 'proxy-authorization')
+              AND e2.status >= 100
             ORDER BY e2.entry_id LIMIT 1
             """,
             (row["entry_id"], row["method"], row["host"], row["path"]),
