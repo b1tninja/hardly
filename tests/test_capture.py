@@ -213,3 +213,14 @@ def test_headless_capture_example(tmp_path):
     assert har.is_file()
     assert har.stat().st_size > 100
     assert (result.get("entry_count_hint") or 0) >= 1
+
+
+def test_browser_executable_env(tmp_path, monkeypatch):
+    from hardly.capture import default_executable
+
+    exe = tmp_path / "chromium"
+    exe.write_text("")
+    monkeypatch.setenv("HARDLY_BROWSER_EXECUTABLE", str(exe))
+    assert default_executable() == str(exe)
+    monkeypatch.setenv("HARDLY_BROWSER_EXECUTABLE", str(tmp_path / "missing"))
+    assert default_executable() == ""

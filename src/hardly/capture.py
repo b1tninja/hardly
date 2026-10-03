@@ -202,12 +202,17 @@ def playwright_status() -> dict[str, Any]:
     chromium_ok = bool((browsers.get("chromium") or {}).get("installed"))
     channel = default_channel()
     # channel=chrome uses system Chrome — no playwright browser download needed
-    out["ready"] = chromium_ok or bool(channel)
+    executable = default_executable()
+    out["browser_executable"] = executable or None
+    out["ready"] = chromium_ok or bool(channel) or bool(executable)
     if not out["ready"]:
         out["hint"] = (
             "Chromium browser binary missing. Run: playwright install chromium "
-            "(or set HARDLY_BROWSER_CHANNEL=chrome to use system Chrome)"
+            "(or set HARDLY_BROWSER_CHANNEL=chrome to use system Chrome, or "
+            "HARDLY_BROWSER_EXECUTABLE=/path/to/chromium)"
         )
+    elif executable and not chromium_ok:
+        out["hint"] = f"Ready (executable={executable})."
     elif channel:
         out["hint"] = (
             f"Ready (channel={channel}). Prefer channel=chrome for Akamai / bot walls."
@@ -250,6 +255,16 @@ def default_har_path(label: str = "capture") -> Path:
 
 def default_channel() -> str:
     return (os.environ.get("HARDLY_BROWSER_CHANNEL") or "").strip()
+
+
+def default_executable() -> str:
+    """Chromium binary to launch instead of Playwright's own download.
+
+    Set ``HARDLY_BROWSER_EXECUTABLE`` when the preinstalled browser build does
+    not match the installed Playwright version (common in managed containers).
+    """
+    path = (os.environ.get("HARDLY_BROWSER_EXECUTABLE") or "").strip()
+    return path if path and Path(path).is_file() else ""
 
 
 def start_capture(
@@ -1007,6 +1022,8 @@ def capture_headless(
         launch_kwargs: dict[str, Any] = {"headless": True}
         if use_channel:
             launch_kwargs["channel"] = use_channel
+        elif default_executable():
+            launch_kwargs["executable_path"] = default_executable()
         context_kwargs: dict[str, Any] = {
             "record_har_path": str(target),
             "record_har_mode": "full",

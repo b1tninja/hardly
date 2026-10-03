@@ -107,6 +107,11 @@ def run_job(job: dict) -> int:
             launch_kwargs: dict = {"headless": not headed}
             if channel:
                 launch_kwargs["channel"] = channel
+            else:
+                from hardly.capture import default_executable
+
+                if default_executable():
+                    launch_kwargs["executable_path"] = default_executable()
 
             context_kwargs: dict = {
                 "record_har_path": str(har_path),
