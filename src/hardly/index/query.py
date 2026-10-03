@@ -416,6 +416,9 @@ def search_entries(
             size=r["body_size"],
         )
         _flag_double_encoded(conn, r["entry_id"], content)
+        from hardly.core.streams import attach_stream_hints
+
+        attach_stream_hints(conn, r["entry_id"], content)
         kind = (content.get("kind") or "").lower()
         subtype = (content.get("subtype") or "").lower()
         if want_kind and want_kind not in {kind, subtype}:
@@ -915,6 +918,9 @@ def get_entry(
         size=resp_size,
     )
     _flag_double_encoded(conn, entry_id, content)
+    from hardly.core.streams import attach_stream_hints
+
+    attach_stream_hints(conn, entry_id, content)
 
     shapes: list[dict[str, Any]] = []
     try:

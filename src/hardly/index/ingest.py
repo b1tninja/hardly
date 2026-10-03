@@ -45,7 +45,7 @@ from hardly.index.schema import connect, init_db
 PREVIEW_CHARS = 8000
 # Bump when ingest output changes meaning (redaction, shapes, signals) so cached
 # indexes built by older versions are rebuilt instead of reused.
-INDEX_VERSION = 4
+INDEX_VERSION = 5
 # HTML portals often bury forms after scripts/CSS; keep more for hardly_forms.
 HTML_PREVIEW_CHARS = 64_000
 
@@ -149,6 +149,56 @@ def _body_text(content: dict | None) -> tuple[str | None, str | None, int]:
         elif mime:
             return f"(binary base64, {size} bytes)", mime, int(size)
     return text, mime, int(size)
+
+
+def _raw_bytes(content: dict | None, mime: str | None) -> bytes | None:
+    """Raw bytes of a base64-encoded non-textual HAR body (capped), else None."""
+    import base64
+    import binascii
+
+    if not content or content.get("encoding") != "base64" or _is_textual_mime(mime):
+        return None
+    text = content.get("text")
+    if not isinstance(text, str) or not text or len(text) > 4_000_000:
+        return None
+    try:
+        return base64.b64decode(text, validate=False)
+    except (binascii.Error, ValueError):
+        return None
+
+
+def _detect_streams(
+    conn, entry_id: int, side: str, mime: str | None, path: str,
+    text: str | None, content: dict | None,
+) -> None:
+    from hardly.core.streams import analyze_body, store_stream
+
+    raw = _raw_bytes(content, mime)
+    if raw is None and (text is None or text.startswith("(binary base64")):
+        return
+    try:
+        hit = analyze_body(mime, path, None if raw is not None else text, raw)
+    except Exception:  # detectors must never break ingest
+        return
+    if hit:
+        store_stream(conn, entry_id, side, hit[0], hit[1])
+
+
+def _store_websocket(conn, entry_id: int, entry: dict) -> None:
+    from hardly.core.streams import analyze_websocket, store_stream
+
+    msgs = entry.get("_webSocketMessages")
+    if not isinstance(msgs, list) or not msgs:
+        return
+    clean = [
+        {k: (_num(v) if k in ("time", "opcode") else v) for k, v in m.items()}
+        for m in msgs[:5001]
+        if isinstance(m, dict)
+    ]
+    summary = analyze_websocket(clean)
+    if summary:
+        summary["messages"] = len(msgs)
+        store_stream(conn, entry_id, "messages", "websocket", summary)
 
 
 def _store_body(
@@ -433,6 +483,9 @@ def ingest_har(har_path: str | Path, db_path: str | Path) -> dict[str, Any]:
             _store_headers(conn, entry_id, "response", _header_list(resp.get("headers")))
             _store_body(conn, entry_id, "request", req_text, req_mime or (post or {}).get("mimeType"), req_size)
             _store_body(conn, entry_id, "response", resp_text, mime, resp_size)
+            _detect_streams(conn, entry_id, "request", req_mime or (post or {}).get("mimeType"), parsed["path"], req_text, post)
+            _detect_streams(conn, entry_id, "response", mime, parsed["path"], resp_text, content)
+            _store_websocket(conn, entry_id, entry)
             _record_query_shapes(conn, entry_id, parsed.get("query"))
             _record_body_shapes(conn, entry_id, "request", req_text)
             _record_body_shapes(conn, entry_id, "response", resp_text)
