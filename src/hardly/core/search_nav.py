@@ -112,6 +112,10 @@ def actions_as_links(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [o for o in out if o["css"]]
 
 
+_GENERIC_KEYWORDS = frozenset(
+    {"search", "searches", "find", "lookup", "look up", "query", "records", "record", "online",
+     "services", "service", "portal", "index", "public", "database", "directory", "viewer", "inquiry"}
+)
 _SITE_SEARCH_NAME = re.compile(
     r"^(q|s|search|query|keyword|keywords|term|searchterm|site-?search|keys|search[-_]?(term|text|box|input|query|field)|"
     r"cdssearchtext|searchtext|st|k|text)$",
@@ -141,7 +145,9 @@ def search_form_reached(
     names (nothing to submit). A one-field form counts only when its field name
     is specific and, if ``keywords`` are given, mentions one of them.
     """
-    kw = [k.lower() for k in keywords if k]
+    # Generic words ("search", "records"...) match every site-search box, so
+    # only the caller's domain terms can vouch for a form.
+    kw = [k.lower() for k in keywords if k and k.lower().strip() not in _GENERIC_KEYWORDS]
     for form in structure.get("forms") or []:
         fields = form.get("fields") or []
         if any((f.get("type") or "").lower() == "password" for f in fields):

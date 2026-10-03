@@ -103,3 +103,13 @@ def test_hidden_mobile_triggers_are_not_candidates():
         {"kind": "button", "tag": "button", "id": "go", "name": "", "text": "Search records", "xpath": ""},
     ]
     assert [a["css"] for a in actions_as_links(acts)] == ["#go"]
+
+
+def test_generic_keywords_cannot_vouch_for_site_search():
+    from hardly.core.search_nav import search_form_reached as reached
+
+    box = extract_html_structure('<form action="/x"><input type="text" name="search"><input type="submit"></form>')
+    assert reached(box, keywords=["search", "records"]) is None
+    assert reached(box, keywords=["search", "parcel"]) is None       # name does not mention parcel
+    spec = extract_html_structure('<form action="/x"><input type="text" name="parcel_search"><input type="submit"></form>')
+    assert reached(spec, keywords=["parcel"]) is not None

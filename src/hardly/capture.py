@@ -1068,9 +1068,7 @@ def capture_headless(
             goto_error: str | None = None
             try:
                 if target_url and target_url != "about:blank":
-                    page.goto(
-                        target_url, wait_until="domcontentloaded", timeout=60_000
-                    )
+                    _goto_with_retry(page, target_url)
                 elif target_url == "about:blank":
                     page.goto("about:blank")
             except Exception as exc:  # noqa: BLE001
@@ -1151,6 +1149,29 @@ def capture_headless(
     return out
 
 
+_TRANSIENT_NAV = (
+    "ERR_TOO_MANY_RETRIES", "ERR_CONNECTION_RESET", "ERR_CONNECTION_CLOSED",
+    "ERR_EMPTY_RESPONSE", "ERR_NETWORK_CHANGED", "ERR_HTTP2_PROTOCOL_ERROR",
+    "ERR_SOCKET_NOT_CONNECTED", "is interrupted by another navigation",
+)
+
+
+def _goto_with_retry(
+    page: Any, url: str, *, wait_until: str = "domcontentloaded", timeout: int = 60_000, attempts: int = 3
+) -> Any:
+    """``page.goto`` that retries transient network errors (not proxy denials)."""
+    last: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            return page.goto(url, wait_until=wait_until, timeout=timeout)
+        except Exception as exc:  # noqa: BLE001
+            last = exc
+            if not any(t in str(exc) for t in _TRANSIENT_NAV) or attempt == attempts - 1:
+                raise
+            page.wait_for_timeout(1_200 * (attempt + 1))
+    raise last  # pragma: no cover — loop always returns or raises
+
+
 def _wait_ms(raw: dict[str, Any], default: int) -> int:
     """Wait length in ms from ``ms`` or (friendlier) ``seconds``."""
     if raw.get("ms") not in (None, ""):
@@ -1215,9 +1236,10 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
         try:
             if has_href and pick.get("target") == "_blank":
                 via = "goto"  # would open a new tab we are not tracking
-                page.goto(href, wait_until="domcontentloaded", timeout=30_000)
+                _goto_with_retry(page, href, timeout=30_000)
             else:
-                loc = page.locator(pick["click"]["css"]).first
+                # first *visible* match: the same text often also sits in a hidden mega-menu
+                loc = page.locator(pick["click"]["css"] + ":visible").first
                 try:
                     loc.wait_for(state="visible", timeout=1_500)
                     loc.click(timeout=6_000)
@@ -1225,7 +1247,7 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
                     if not has_href:
                         raise
                     via = "goto"
-                    page.goto(href, wait_until="domcontentloaded", timeout=30_000)
+                    _goto_with_retry(page, href, timeout=30_000)
         except Exception as exc:  # noqa: BLE001
             hops.append({"from": before, "clicked": pick["text"], "error": str(exc)[:120]})
             continue
@@ -1258,7 +1280,7 @@ def _run_inprocess_recipe(page: Any, steps: list[dict[str, Any]]) -> dict[str, A
                 dest = str(raw.get("url") or "").strip()
                 if not dest:
                     raise CaptureError("goto requires url")
-                page.goto(dest, wait_until="domcontentloaded", timeout=60_000)
+                _goto_with_retry(page, dest)
                 step_out["result"] = {"url": page.url}
             elif op == "click":
                 css = str(raw.get("css") or raw.get("selector") or "").strip()

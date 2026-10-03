@@ -249,3 +249,29 @@ def test_bare_capture_url_means_run():
     assert normalize_argv(["capture", "list"]) == ["capture", "list"]
     assert normalize_argv(["summary", "a.har"]) == ["summary", "a.har"]
     assert normalize_argv(["capture", "-h"]) == ["capture", "-h"]
+
+
+def test_goto_with_retry_retries_transient_errors_only():
+    from hardly.capture import _goto_with_retry
+
+    class Page:
+        def __init__(self, errors):
+            self.errors, self.calls = list(errors), 0
+
+        def goto(self, url, **kw):
+            self.calls += 1
+            if self.errors:
+                raise RuntimeError(self.errors.pop(0))
+            return "ok"
+
+        def wait_for_timeout(self, ms):
+            pass
+
+    p = Page(["net::ERR_TOO_MANY_RETRIES at x", "Navigation to y is interrupted by another navigation to about:blank"])
+    assert _goto_with_retry(p, "https://x") == "ok" and p.calls == 3
+    denied = Page(["net::ERR_TUNNEL_CONNECTION_FAILED at x"])
+    try:
+        _goto_with_retry(denied, "https://x")
+        raise AssertionError("should have raised")
+    except RuntimeError:
+        assert denied.calls == 1  # proxy denial is permanent: no retry
