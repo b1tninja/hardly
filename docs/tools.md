@@ -270,6 +270,10 @@ Live, polite exploration of an ArcGIS REST service or layer URL (needs confirm=t
 
 Curl-first, robots-aware, polite crawl that finds candidate pages. LIVE GETs: requires confirm=true.
 
+### `hardly_redirect_diag(url, confirm=False, max_hops=12)`
+
+Explain a redirect loop (ERR_TOO_MANY_RETRIES/REDIRECTS). LIVE GETs: requires confirm=true.
+
 ### `hardly_replay_check(session_id, entry_ids, confirm=False, overrides_json=None, max_requests=15, delay_s=0.5, allow_unsafe=False)`
 
 Live replay minimisation (needs confirm=true). Replays one entry (or an ordered flow of entry ids; earlier ids are prior steps, the last is the target) with a cookie jar, then removes one header / cookie / query param / body field / prior step at a time and reports which are REQUIRED vs OPTIONAL (names only, no bodies). Secrets only via overrides_json: {"headers":{},"cookies":{},"query":{},"body":{}}; missing ones are listed under needs_override. GET/HEAD only unless allow_unsafe=true. Hard stop on 429 / Retry-After / gate stop; captcha token fields are never sent. Budget-skipped items appear under not_tested.

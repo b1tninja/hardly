@@ -18,6 +18,11 @@ import re
 from typing import Any
 
 _GATE_TARGET = re.compile(r"recaptcha|hcaptcha|h-captcha|turnstile|captcha|challenge", re.I)
+# Inside page scripts the bare word "challenge" is common (comments, variable names);
+# only the captcha products and their response fields count.
+_GATE_JS_TARGET = re.compile(r"recaptcha|hcaptcha|h-captcha|turnstile|captcha|cf-chl|cf_chl", re.I)
+_PASSWORD_JS = re.compile(r"password|passwd|type\s*=\s*['\"]?password", re.I)
+_JS_ACTS = re.compile(r"\.value\s*=|setAttribute|dispatchEvent|\.click\s*\(|\.submit\s*\(|requestSubmit|execCommand|\.fill\s*\(", re.I)
 _GATE_JS = re.compile(r"\b(?:grecaptcha(?:\.enterprise)?\.execute|turnstile\.render|hcaptcha\.execute)\b", re.I)
 _PASSWORD_TARGET = re.compile(
     r"type\s*=\s*['\"]?password|\[type=['\"]?password|\b(?:password|passwd|pwd)\b", re.I
@@ -44,8 +49,10 @@ def check_step(step: dict[str, Any]) -> tuple[bool, str]:
             return False, f"policy: step targets a captcha/challenge element ({key})"
     if op == "fetch" and _GATE_TARGET.search(str(step.get("url") or "")):
         return False, "policy: fetch targets a captcha/challenge endpoint"
-    if op == "evaluate" and js and _GATE_TARGET.search(js):
+    if op == "evaluate" and js and _GATE_JS_TARGET.search(js):
         return False, "policy: script touches a captcha/challenge element"
+    if op == "evaluate" and js and not step.get("allow_login") and _PASSWORD_JS.search(js) and _JS_ACTS.search(js):
+        return False, 'policy: script writes to or submits a password input; needs "allow_login": true'
 
     if op == "fill" and not step.get("allow_login"):
         for key in ("css", "selector", "ref", "target", "name", "label"):

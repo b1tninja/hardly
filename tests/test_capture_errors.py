@@ -9,7 +9,7 @@ from hardly.core.capture_errors import classify_capture_error, with_error_class
         ("net::ERR_TUNNEL_CONNECTION_FAILED at https://x", "environment_blocked", False),
         ("CONNECT tunnel failed, response 403", "environment_blocked", False),
         ("x-deny-reason: host_not_allowed", "environment_blocked", False),
-        ("net::ERR_TOO_MANY_RETRIES at x", "transient", True),
+        ("net::ERR_TOO_MANY_RETRIES at x", "redirect_loop", True),
         ("net::ERR_CONNECTION_RESET", "transient", True),
         ("Navigation is interrupted by another navigation to y", "transient", True),
         ("net::ERR_HTTP2_PROTOCOL_ERROR", "transient", True),

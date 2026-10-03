@@ -1176,6 +1176,26 @@ def hardly_arcgis_explore(url: str, confirm: bool = False) -> str:
 
 
 @mcp.tool
+def hardly_redirect_diag(url: str, confirm: bool = False, max_hops: int = 12) -> str:
+    """Explain a redirect loop (ERR_TOO_MANY_RETRIES/REDIRECTS). LIVE GETs: requires confirm=true.
+
+    Follows the redirect chain by hand with and without cookies and reports the loop
+    shape: www<->apex or http<->https flips, trailing-slash fights, growing return
+    URLs, cookie-dependent redirects, and whether the alternate host resolves.
+    Typical causes: bad rewrite rules or an unexpected (non-canonical) domain.
+    Reports statuses, redacted URLs and cookie NAMES only.
+    """
+    if not confirm:
+        return _ok({"error": "redirect_diag requires confirm=true (performs live GET requests)"})
+    from hardly.core.redirect_diag import diagnose_redirects
+
+    try:
+        return _ok(diagnose_redirects(url, max_hops=max(2, min(max_hops, 20))))
+    except Exception as exc:  # noqa: BLE001
+        return _err(exc)
+
+
+@mcp.tool
 def hardly_crawl(
     start_url: str,
     keywords_json: str | None = None,

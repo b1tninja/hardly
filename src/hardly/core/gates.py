@@ -94,7 +94,9 @@ _PROXY_BODY = re.compile(
 _PROXY_HEADER = re.compile(
     r"^(x-proxy-[a-z-]+|proxy-status|x-squid-error|x-envoy-[a-z-]+|x-egress-[a-z-]+|proxy-authenticate)$", re.I
 )
-_PROXY_VIA = re.compile(r"squid|proxy|envoy|tinyproxy|privoxy|mitm", re.I)
+# "HAProxy"/"reverse-proxy" are ordinary site infrastructure; only a bare proxy name counts.
+_PROXY_VIA = re.compile(r"(?<![A-Za-z-])(?:squid|proxy|envoy|tinyproxy|privoxy|mitm)", re.I)
+_NON_TEXT_MIME = re.compile(r"javascript|ecmascript|css|image/|font/|octet-stream|wasm|audio/|video/", re.I)
 
 _TERMS_CONTEXT = re.compile(
     r"disclaimer|terms (of use|of service|and conditions|& conditions)|i (agree|accept)|"
@@ -229,6 +231,12 @@ def classify_response(
     status = int(status or 0)
     h = _norm_headers(headers)
     text = body or ""
+    # Wording scans (lockout, password fields, pricing, terms) only make sense on
+    # documents: a JS bundle that contains the phrase "too many attempts" is not a gate.
+    if _NON_TEXT_MIME.search(h.get("content-type", "")):
+        text_for_wording = ""
+    else:
+        text_for_wording = text
 
     env = _environment(status, h, text)
     if env:
@@ -278,8 +286,8 @@ def classify_response(
         rl.append("status:429")
     if "retry-after" in h and (status in (403, 423, 429, 503) or status >= 400):
         rl.append("header:retry-after")
-    if text and status != 200 or (text and _LOCKOUT.search(text[:6000]) and status in (200, 202)):
-        if _LOCKOUT.search(text[:6000]):
+    if text_for_wording and status != 200 or (text_for_wording and _LOCKOUT.search(text_for_wording[:6000]) and status in (200, 202)):
+        if _LOCKOUT.search(text_for_wording[:6000]):
             rl.append("body:lockout-wording")
     if status == 423:
         rl.append("status:423")
@@ -293,7 +301,7 @@ def classify_response(
         wa = h.get("www-authenticate", "")
         for m in re.finditer(r"(?:^|[\s,])(basic|bearer|digest|negotiate|ntlm)\b", wa, re.I):
             login.append(f"scheme:{m.group(1).lower()}")
-    if text and _PASSWORD_FIELD.search(text):
+    if text_for_wording and _PASSWORD_FIELD.search(text_for_wording):
         login.append("form:password-field")
     if login:
         _merge(gates, _gate("login", login))
@@ -302,16 +310,16 @@ def classify_response(
     pay: list[str] = []
     if status == 402:
         pay.append("status:402")
-    if text:
-        if _PRICE_STRONG.search(text):
+    if text_for_wording:
+        if _PRICE_STRONG.search(text_for_wording):
             pay.append("body:pricing-wording")
-        elif _PRICE_WEAK.search(text) and _AMOUNT.search(text):
+        elif _PRICE_WEAK.search(text_for_wording) and _AMOUNT.search(text_for_wording):
             pay.append("body:pricing-wording")
     if pay and status != 401:
         _merge(gates, _gate("paywall", pay))
 
     # click-through terms
-    if text and "<form" in text.lower() and _ACCEPT_CONTROL.search(text):
+    if text_for_wording and "<form" in text_for_wording.lower() and _ACCEPT_CONTROL.search(text_for_wording):
         path_hit = _TERMS_PATH.search(_path_of(url))
         if _TERMS_CONTEXT.search(text[:20000]) or path_hit:
             ev = ["form:accept-control"]
@@ -323,6 +331,20 @@ def classify_response(
             if forbids:
                 ev.append("terms:forbid-automation")
             _merge(gates, _gate("click_through_terms", ev, action=action_for("click_through_terms", forbids_automation=forbids)))
+
+    # One rate_limit gate per response (status-based and vendor-based evidence merge).
+    rls = [k for k in gates if k[0] == "rate_limit"]
+    if len(rls) > 1:
+        keep = gates[rls[0]]
+        for k in rls[1:]:
+            keep["evidence"] = list(dict.fromkeys(keep["evidence"] + gates.pop(k)["evidence"]))[:8]
+            keep["action"] = "stop"
+        keep["vendor"] = next((k[1] for k in rls if k[1]), None)
+    # A terms page that says "no automation" is a click-through gate that stops;
+    # the generic block-wording match on the same page is the same fact, not a bot wall.
+    if any(k[0] == "click_through_terms" for k in gates):
+        for k in [k for k in gates if k[0] == "bot_wall" and k[1] == "generic-block"]:
+            gates.pop(k)
 
     return list(gates.values())
 

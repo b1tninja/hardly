@@ -1316,6 +1316,7 @@ def capture_headless(
 
                 page = context.new_page()
                 goto_error: str | None = None
+                goto_http_status = False
                 goto_timeout = 60_000
                 if deadline is not None:
                     goto_timeout = int(
@@ -1330,12 +1331,17 @@ def capture_headless(
                     # API roots that return 204 / abort navigation still allow
                     # recipe fetch/evaluate against absolute URLs.
                     goto_error = str(exc)
-                    if not recipe:
+                    if any(t in goto_error for t in _HTTP_STATUS_NAV):
+                        # The server answered 401/429/503...: that response IS the
+                        # finding and is in the HAR. Do not abort, do not navigate away.
+                        goto_http_status = True
+                    elif not recipe:
                         raise CaptureError(goto_error) from exc
-                    try:
-                        page.goto("about:blank")
-                    except Exception:  # noqa: BLE001
-                        pass
+                    else:
+                        try:
+                            page.goto("about:blank")
+                        except Exception:  # noqa: BLE001
+                            pass
                 if recipe:
                     recipe_result = _run_inprocess_recipe(
                         page, recipe, deadline=deadline
@@ -1394,6 +1400,19 @@ def capture_headless(
             "wait_seconds": float(wait_seconds),
             "recipe": recipe_result,
             "inprocess": True,
+            **(
+                {
+                    "goto_error": goto_error,
+                    **{
+                        k.replace("error_", "goto_error_"): v
+                        for k, v in with_error_class({"error": goto_error}).items()
+                        if k != "error"
+                    },
+                    "goto_http_status": goto_http_status,
+                }
+                if goto_error
+                else {}
+            ),
         },
         "slot": {k: slot[k] for k in ("waited_s", "queue_depth", "slot")},
         "browser_executable_source": exe_source or None,
@@ -1453,17 +1472,39 @@ def _classified(exc: CaptureError) -> CaptureError:
     return CaptureError(f"{msg} [error_class={info['class']}] {info['advice']}")
 
 
+_NAV_INFO: dict[int, tuple[int, dict[str, str]]] = {}
+_HTTP_STATUS_NAV = ("ERR_HTTP_RESPONSE_CODE_FAILURE", "ERR_INVALID_AUTH_CREDENTIALS")
+
+
+def _remember_nav(page: Any, resp: Any) -> None:
+    """Keep the real status/headers of the last main-document response."""
+    try:
+        if resp is not None:
+            _NAV_INFO[id(page)] = (int(resp.status), {k.lower(): v for k, v in (resp.headers or {}).items()})
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _goto_with_retry(
     page: Any, url: str, *, wait_until: str = "domcontentloaded", timeout: int = 60_000, attempts: int = 3
 ) -> Any:
-    """``page.goto`` that retries transient network errors (not proxy denials)."""
+    """``page.goto`` that retries transient network errors (not proxy denials).
+
+    A redirect loop (``ERR_TOO_MANY_RETRIES/REDIRECTS``) gets one retry only: the
+    browser's cookie jar fills while it loops, so a second try sometimes succeeds,
+    but a real loop never will.
+    """
     last: Exception | None = None
     for attempt in range(attempts):
         try:
-            return page.goto(url, wait_until=wait_until, timeout=timeout)
+            resp = page.goto(url, wait_until=wait_until, timeout=timeout)
+            _remember_nav(page, resp)
+            return resp
         except Exception as exc:  # noqa: BLE001
             last = exc
-            if not any(t in str(exc) for t in _TRANSIENT_NAV) or attempt == attempts - 1:
+            msg = str(exc)
+            limit = 2 if "ERR_TOO_MANY_" in msg else attempts
+            if not any(t in msg for t in _TRANSIENT_NAV) or attempt >= limit - 1:
                 raise
             page.wait_for_timeout(1_200 * (attempt + 1))
     raise last  # pragma: no cover — loop always returns or raises
@@ -1520,8 +1561,9 @@ def _page_gate_classes(page: Any, html: str) -> list[str]:
     """Stop-sign gate classes the settled page classifies as (never click through)."""
     from hardly.core.gates import classify_response
 
+    status, headers = _NAV_INFO.get(id(page), (200, {}))
     try:
-        gates = classify_response(200, {}, html or "", getattr(page, "url", "") or "")
+        gates = classify_response(status, headers, html or "", getattr(page, "url", "") or "")
     except Exception:  # noqa: BLE001
         return []
     classes = {g["class"] for g in gates if g["class"] in _STOP_GATES}
@@ -1562,6 +1604,18 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
     hops: list[dict[str, Any]] = []
     form = None
     last_strong = False  # the last successful hop followed a link that named a search
+
+    def _on_response(resp: Any) -> None:
+        try:
+            if resp.request.is_navigation_request() and resp.frame == page.main_frame:
+                _remember_nav(page, resp)
+        except Exception:  # noqa: BLE001
+            pass
+
+    try:
+        page.on("response", _on_response)
+    except Exception:  # noqa: BLE001 - test doubles / old pages
+        _on_response = None  # type: ignore[assignment]
     kw_lower = [k.lower() for k in keywords if k.strip()]
     for _ in range(max_hops + 1):
         html = _settled_content(page)
@@ -1646,6 +1700,11 @@ def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
         last_strong = landed and has_search_term(pick["text"]) and (
             not kw_lower or any(k in (pick["text"] or "").lower() for k in kw_lower)
         )
+    try:
+        if _on_response is not None:
+            page.remove_listener("response", _on_response)
+    except Exception:  # noqa: BLE001
+        pass
     return {"reached": form is not None, "form": form, "hops": hops, "url": page.url}
 
 
@@ -1697,7 +1756,17 @@ def _run_inprocess_recipe(
                 css = str(raw.get("css") or raw.get("selector") or "").strip()
                 if not css:
                     raise CaptureError("fill requires css")
-                page.locator(css).first.fill(
+                target = page.locator(css).first
+                if not raw.get("allow_login"):
+                    # Selectors can reach a password input without naming it
+                    # ("input >> nth=1"): check what was actually selected.
+                    try:
+                        itype = str(target.evaluate("e => (e.type || '').toLowerCase()", timeout=3_000))
+                    except Exception:  # noqa: BLE001
+                        itype = ""
+                    if itype == "password":
+                        raise CaptureError('policy: fill into a password input needs "allow_login": true')
+                target.fill(
                     str(raw.get("value") or ""),
                     timeout=int(raw.get("timeout_ms") or 10_000),
                 )

@@ -506,6 +506,16 @@ def cmd_arcgis_explore(args: argparse.Namespace) -> int:
     return 1 if "error" in out else 0
 
 
+def cmd_redirect_diag(args: argparse.Namespace) -> int:
+    from hardly.core.redirect_diag import diagnose_redirects
+
+    if not args.yes:
+        _print({"error": "redirect-diag requires --yes (performs live GET requests)"})
+        return 1
+    _print(diagnose_redirects(args.url, max_hops=args.max_hops))
+    return 0
+
+
 def cmd_crawl(args: argparse.Namespace) -> int:
     from hardly.core.crawl import crawl
 
@@ -1634,6 +1644,15 @@ def build_parser() -> argparse.ArgumentParser:
     arcgis_x.add_argument("url")
     arcgis_x.add_argument("--confirm", action="store_true")
     arcgis_x.set_defaults(func=cmd_arcgis_explore)
+
+    rd_p = sub.add_parser(
+        "redirect-diag",
+        help="Diagnose a redirect loop / ERR_TOO_MANY_RETRIES (live GETs; requires --yes)",
+    )
+    rd_p.add_argument("url")
+    rd_p.add_argument("--max-hops", type=int, default=12)
+    rd_p.add_argument("--yes", action="store_true", help="Confirm live requests")
+    rd_p.set_defaults(func=cmd_redirect_diag)
 
     crawl_p = sub.add_parser(
         "crawl",

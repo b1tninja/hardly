@@ -79,9 +79,18 @@ def detect_walls(
         hits = [h for h in hits if h["entry_id"] not in env_ids]
         status_only = [s for s in status_only if s["entry_id"] not in env_ids]
     blocking = list(prot["blocking"])
+    protection_view = [dict(v) for v in prot["vendors"]]
+    recommendation = prot["recommendation"]
     if env_ids:
         site_vendors = {g.get("vendor") for g in gates["gates"] if g["class"] != "environment_blocked"}
         blocking = [b for b in blocking if b in site_vendors]
+        # A vendor whose "blocked" entries were all our sandbox's refusals was not blocking us.
+        for v in protection_view:
+            ids = set(v.get("blocked_entry_ids") or [])
+            if v["state"] in {"blocked", "challenged"} and ids and ids <= env_ids and v["id"] not in site_vendors:
+                v["state"] = "present"
+        if not blocking:
+            recommendation = f"Environment block: {ENV_MESSAGE}. Not a site wall."
     hits = hits[: min(limit, 60)]
     by_kind: dict[str, int] = {}
     for h in hits:
@@ -99,10 +108,10 @@ def detect_walls(
         "environment_blocked": env,
         "protection": [
             {k: v[k] for k in ("id", "name", "category", "confidence", "state")}
-            for v in prot["vendors"]
+            for v in protection_view
         ],
         "status_only": status_only,
-        "recommendation": prot["recommendation"],
+        "recommendation": recommendation,
         "next": (
             "Bot walls need headed Chrome capture (channel=chrome), not urllib. "
             "Use hardly_capture_start; then continue in archive mode on the saved HAR."

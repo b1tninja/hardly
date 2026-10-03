@@ -139,3 +139,13 @@ bodies. `hardly coverage` shows what is still empty or truncated.
 
 Capture writes full request and response bodies, including credentials. Treat
 every HAR as a secret: `*.har` is git-ignored; don't share or commit them.
+
+## Redirect loops (`ERR_TOO_MANY_RETRIES`)
+
+`net::ERR_TOO_MANY_RETRIES` / `ERR_TOO_MANY_REDIRECTS` almost always means a redirect loop:
+a bad rewrite rule, an unexpected (non-canonical) domain (www vs apex, http vs https,
+trailing slash), or a redirect that needs a cookie set on an earlier hop. Capture classifies
+it as `redirect_loop` and retries once. Run `hardly redirect-diag <url> --yes`
+(MCP `hardly_redirect_diag`, `confirm=true`) to follow the chain by hand with and without
+cookies, name the loop shape, and probe the alternate host. Output: statuses, redacted URLs
+and cookie names only.
