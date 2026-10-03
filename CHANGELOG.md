@@ -7,6 +7,11 @@ All notable changes are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Storage modes: `HARDLY_INDEX=disk|memory|auto` (default `disk`), `hardly_open(storage=...)`,
+  `hardly open --storage`, `HARDLY_INDEX_MEMORY_MAX_MB`; `storage` reported by `hardly_open`,
+  `hardly_list_sessions` and `hardly_summary`. `memory` leaves no derived data on disk.
+- `hardly_persist` / `hardly persist`: save a session as a compact SQLite file (`VACUUM INTO`,
+  never in place, refuses to overwrite without `overwrite=true`).
 - Release engineering: tag-driven `release.yml` (build once, PyPI trusted publishing with attestations,
   GitHub Release with checksums and CycloneDX SBOM, multi-arch GHCR image, MCP Registry via
   `server.json`), nightly real-browser workflow, CodeQL, Dependabot, pip-audit and workflow lint,
@@ -17,6 +22,9 @@ All notable changes are documented here. The format follows
 - Package metadata: keywords, classifiers and project URLs.
 
 ### Changed
+- Index cache is written atomically (temp file, `VACUUM INTO`, `os.replace`, metadata last), has no
+  WAL, is opened read-only (`mode=ro`), and stray temp files are swept on open. Legacy WAL caches are
+  rebuilt. Contract checks ingest into memory instead of a temp file (fixes Windows file locks).
 - Dockerfile copies `docs/` and `skills/` (required by the wheel build).
 - `AGENTS.md` and `README.md` rewritten to be concise; every doc now opens with a purpose line.
 - Lint auto-fixes (import order, unused imports, deprecated typing forms); no behaviour change.

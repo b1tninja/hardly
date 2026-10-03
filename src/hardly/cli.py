@@ -20,9 +20,20 @@ def _print(data: object) -> None:
 
 
 def cmd_open(args: argparse.Namespace) -> int:
-    result = sess.open_har(args.har, force=args.force)
+    result = sess.open_har(args.har, force=args.force, storage=args.storage)
     _print(result)
     return 0 if "error" not in result else 1
+
+
+def cmd_persist(args: argparse.Namespace) -> int:
+    """Index a HAR in memory and save the index as a SQLite file (VACUUM INTO)."""
+    result = sess.open_har(args.har, storage="memory")
+    if "error" in result:
+        _print(result)
+        return 1
+    out = sess.persist_session(result["session_id"], args.path, overwrite=args.overwrite)
+    _print(out)
+    return 0 if "error" not in out else 1
 
 
 def cmd_reopen(args: argparse.Namespace) -> int:
@@ -53,7 +64,7 @@ def cmd_summary(args: argparse.Namespace) -> int:
         _print(result)
         return 1
     conn = sess.require_conn(result["session_id"])
-    _print(q.summary(conn))
+    _print({**q.summary(conn), "storage": sess.get_storage(result["session_id"])})
     return 0
 
 
@@ -1688,7 +1699,22 @@ def build_parser() -> argparse.ArgumentParser:
     open_p = sub.add_parser("open", help="Index a HAR file")
     open_p.add_argument("har")
     open_p.add_argument("--force", action="store_true")
+    open_p.add_argument(
+        "--storage",
+        choices=list(sess.STORAGE_MODES),
+        default=None,
+        help="disk (cached, default) | memory (nothing written to disk) | auto (memory if small); env HARDLY_INDEX",
+    )
     open_p.set_defaults(func=cmd_open)
+
+    persist_p = sub.add_parser(
+        "persist",
+        help="Index a HAR in memory and save the index as a SQLite file",
+    )
+    persist_p.add_argument("har")
+    persist_p.add_argument("--path", default=None, help="Output file (default: the cache dir)")
+    persist_p.add_argument("--overwrite", action="store_true")
+    persist_p.set_defaults(func=cmd_persist)
 
     reopen_p = sub.add_parser(
         "reopen",

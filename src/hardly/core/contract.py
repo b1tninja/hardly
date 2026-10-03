@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -59,15 +58,17 @@ def _from_endpoint_schema(es: dict) -> dict:
 
 
 def _open_capture(conn_or_har: Any) -> tuple[sqlite3.Connection, Any]:
+    """Return (connection, owned). ``owned`` is the connection to close, or None if borrowed.
+
+    A HAR path is ingested into a private in-memory database: no temp file, nothing to
+    delete (and no open file handle to trip over on Windows).
+    """
     if isinstance(conn_or_har, sqlite3.Connection):
         return conn_or_har, None
-    from hardly.index.ingest import ingest_har
-    from hardly.index.schema import connect
+    from hardly.index.ingest import ingest_memory
 
-    tmp = tempfile.TemporaryDirectory(prefix="hardly-contract-")
-    db = Path(tmp.name) / "c.db"
-    ingest_har(conn_or_har, db)
-    return connect(str(db)), tmp
+    _stats, conn = ingest_memory(conn_or_har)
+    return conn, conn
 
 
 def _flatten(nodes: list[dict]) -> dict:
@@ -254,13 +255,12 @@ def check_contract(conn_or_har: Any, openapi_or_schema_doc: Any, host: str | Non
     from hardly.core.export_openapi import build_openapi
 
     base = _load_spec(openapi_or_schema_doc)
-    conn, tmp = _open_capture(conn_or_har)
+    conn, owned = _open_capture(conn_or_har)
     try:
         fresh = build_openapi(conn, host=host)
     finally:
-        if tmp is not None:
-            conn.close()
-            tmp.cleanup()
+        if owned is not None:
+            owned.close()
     result = diff_contracts(base, fresh, host=host)
     result["host"] = host
     return result

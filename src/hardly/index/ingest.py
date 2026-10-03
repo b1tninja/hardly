@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -38,7 +39,8 @@ from hardly.core.redact import (
     redact_query_string,
 )
 from hardly.core.urls import parse_url, path_template
-from hardly.index.schema import connect, init_db
+from hardly.index.atomic import persist_connection, remove_quietly, tmp_path_for
+from hardly.index.schema import connect_ingest, connect_memory, init_db
 
 PREVIEW_CHARS = 8000
 # Bump when ingest output changes meaning (redaction, shapes, signals) so cached
@@ -387,16 +389,9 @@ def _record_body_shapes(
         walk(data, None, 0)
 
 
-def ingest_har(har_path: str | Path, db_path: str | Path) -> dict[str, Any]:
-    """Parse HAR at har_path into SQLite at db_path. Returns summary stats."""
+def ingest_into(har_path: str | Path, conn: sqlite3.Connection) -> dict[str, Any]:
+    """Parse HAR at har_path into an empty database behind ``conn``. Leaves ``conn`` open."""
     har_path = Path(har_path).resolve()
-    db_path = Path(db_path)
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-
-    if db_path.exists():
-        db_path.unlink()
-
-    conn = connect(str(db_path))
     init_db(conn)
 
     stat = har_path.stat()
@@ -506,11 +501,9 @@ def ingest_har(har_path: str | Path, db_path: str | Path) -> dict[str, Any]:
         ("entry_count", str(counts["entries"])),
     )
     conn.commit()
-    conn.close()
 
     return {
         "har_path": str(har_path),
-        "db_path": str(db_path.resolve()),
         "entries": counts["entries"],
         "noise": counts["noise"],
         "api": counts["api"],
@@ -521,3 +514,39 @@ def ingest_har(har_path: str | Path, db_path: str | Path) -> dict[str, Any]:
         "har_mtime": stat.st_mtime,
         "index_version": INDEX_VERSION,
     }
+
+
+def ingest_memory(har_path: str | Path) -> tuple[dict[str, Any], sqlite3.Connection]:
+    """Ingest into a private ``:memory:`` database; returns (stats, live connection).
+
+    Nothing is written to disk. The caller owns the connection (single-connection use only:
+    a memory database is invisible to any other connection).
+    """
+    conn = connect_memory()
+    try:
+        stats = ingest_into(har_path, conn)
+    except BaseException:
+        conn.close()
+        raise
+    stats["db_path"] = ":memory:"
+    return stats, conn
+
+
+def ingest_har(har_path: str | Path, db_path: str | Path) -> dict[str, Any]:
+    """Parse HAR at har_path into SQLite at db_path (atomic). Returns summary stats.
+
+    Builds in a temp file, writes a compact WAL-free copy with VACUUM INTO and renames it
+    over db_path, so a crash or error never leaves a partial database at db_path.
+    """
+    db_path = Path(db_path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    work = tmp_path_for(db_path, "ingest")
+    conn = connect_ingest(str(work))
+    try:
+        stats = ingest_into(har_path, conn)
+        persist_connection(conn, db_path)
+    finally:
+        conn.close()
+        remove_quietly(work)
+    stats["db_path"] = str(db_path.resolve())
+    return stats

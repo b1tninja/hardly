@@ -26,7 +26,8 @@ pip install -e ".[dev]"
 pip install -e ".[capture]" && playwright install chromium   # optional: record HARs
 ```
 
-Python 3.10+. Cache lives in `~/.cache/hardly/` (override with `HARDLY_CACHE_DIR`).
+Python 3.10+. Cache lives in `~/.cache/hardly/` (override with `HARDLY_CACHE_DIR`). Sensitive capture?
+`HARDLY_INDEX=memory` keeps the index in RAM and writes nothing to disk (`auto` = memory for small HARs).
 
 ## 60-second quick start
 

@@ -21,6 +21,11 @@ in request and response bodies.
 - hardly redacts values in its output and reports names and shapes only, but redaction is
   best-effort. Review anything before sharing it. `hardly har scrub` can strip sensitive values
   from a HAR copy.
+- The index cache (`~/.cache/hardly`, or `HARDLY_CACHE_DIR`) holds redacted previews, header and
+  body data derived from the HAR. For sensitive captures use `HARDLY_INDEX=memory` (or
+  `hardly_open(storage='memory')`): the index stays in process memory, no cache file or metadata is
+  written and nothing derived is left on disk. `hardly_persist` is the only way such a session reaches
+  disk, and only when you ask. Cache files are written atomically and opened read-only.
 - Rotate any credential that appeared in a capture that was shared or stored insecurely.
 - Test fixtures must be synthetic.
 

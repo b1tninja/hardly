@@ -36,21 +36,21 @@ One-pass evidence index (access, auth, stack, data, forms): findings with severi
 
 ## Sessions
 
-### `hardly_open(har_path, force=False)`
+### `hardly_open(har_path, force=False, storage=None)`
 
-Index a HAR file into a queryable session and return session_id plus summary counts. Start here for any existing HAR; never Read the raw HAR file. Reuses the cache when the file is unchanged. Example: hardly_open(har_path='/data/capture.har'), then hardly_brief(session_id).
+Index a HAR file into a queryable session and return session_id plus summary counts. Start here for any existing HAR; never Read the raw HAR file. Reuses the cache when the file is unchanged. storage=disk|memory|auto (default from HARDLY_INDEX, else disk); memory writes nothing to disk. Example: hardly_open(har_path='/data/capture.har'), then hardly_brief(session_id).
 
 ### `hardly_reopen(session_id, force=False)`
 
-Reattach a cached session after an MCP restart without needing the HAR path. Use when hardly_list_sessions shows open=false for your session_id; other tools also auto-reattach. Example: hardly_reopen(session_id='S').
+Reattach a cached session after an MCP restart without needing the HAR path. Use when hardly_list_sessions shows open=false for your session_id; other tools also auto-reattach. Memory sessions are not cached: reopen the HAR instead. Example: hardly_reopen(session_id='S').
 
 ### `hardly_list_sessions()`
 
-List cached and open HAR sessions (session_id, har_path, open flag). Use after an MCP restart or when you lost a session_id; then hardly_reopen if open=false. No arguments.
+List cached and open HAR sessions (session_id, har_path, open flag, storage=disk|memory). Use after an MCP restart or when you lost a session_id; then hardly_reopen if open=false. No arguments.
 
 ### `hardly_close(session_id)`
 
-Close an open session to free memory (the cache file stays on disk, so hardly_reopen can restore it). Example: hardly_close(session_id='S').
+Close an open session to free memory (a disk session's cache file stays, so hardly_reopen can restore it; a memory session is discarded). Example: hardly_close(session_id='S').
 
 ### `hardly_summary(session_id)`
 
@@ -415,3 +415,7 @@ Return the live capture tab's current URL and title. Cheap check of where a clic
 ### `hardly_discover(url, wait_seconds=5, har_path='', channel='', url_filter='', recipe_json='', open_session=True, brief=True, budget_seconds=0, block_noise=False)`
 
 Headless one-shot API discovery: load a URL (optional recipe), stop, open a session and return a brief. Use when the page is scriptable and no person is needed; if the brief shows a wall or captcha, STOP and switch to interactive hardly_capture_start(headed=true, channel='chrome') with a person. Example: hardly_discover(url='https://example.com', wait_seconds=8).
+
+### `hardly_persist(session_id, path=None, overwrite=False)`
+
+Save a session's index as a compact SQLite file (for storage=memory sessions, which otherwise vanish on restart). Refuses to overwrite unless overwrite=true. Example: hardly_persist(session_id='S').

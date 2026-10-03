@@ -181,10 +181,10 @@ def hardly_start(goal: str = "", har_path: str = "", url: str = "") -> str:
 
 
 @_tool
-def hardly_open(har_path: str, force: bool = False) -> str:
-    """Index a HAR file into a queryable session and return session_id plus summary counts. Start here for any existing HAR; never Read the raw HAR file. Reuses the cache when the file is unchanged. Example: hardly_open(har_path='/data/capture.har'), then hardly_brief(session_id).
+def hardly_open(har_path: str, force: bool = False, storage: str | None = None) -> str:
+    """Index a HAR file into a queryable session and return session_id plus summary counts. Start here for any existing HAR; never Read the raw HAR file. Reuses the cache when the file is unchanged. storage=disk|memory|auto (default from HARDLY_INDEX, else disk); memory writes nothing to disk. Example: hardly_open(har_path='/data/capture.har'), then hardly_brief(session_id).
     """
-    return _ok(sess.open_har(har_path, force=force))
+    return _ok(sess.open_har(har_path, force=force, storage=storage))
 
 
 @_tool
@@ -636,21 +636,28 @@ def hardly_discover(
 
 @_tool
 def hardly_list_sessions() -> str:
-    """List cached and open HAR sessions (session_id, har_path, open flag). Use after an MCP restart or when you lost a session_id; then hardly_reopen if open=false. No arguments.
+    """List cached and open HAR sessions (session_id, har_path, open flag, storage=disk|memory). Use after an MCP restart or when you lost a session_id; then hardly_reopen if open=false. No arguments.
     """
     return _ok({"sessions": sess.list_sessions()})
 
 
 @_tool
 def hardly_close(session_id: str) -> str:
-    """Close an open session to free memory (the cache file stays on disk, so hardly_reopen can restore it). Example: hardly_close(session_id='S').
+    """Close an open session to free memory (a disk session's cache file stays, so hardly_reopen can restore it; a memory session is discarded). Example: hardly_close(session_id='S').
     """
     return _ok(sess.close_session(session_id))
 
 
 @_tool
+def hardly_persist(session_id: str, path: str | None = None, overwrite: bool = False) -> str:
+    """Save a session's index as a compact SQLite file (for storage=memory sessions, which otherwise vanish on restart). Refuses to overwrite unless overwrite=true. Example: hardly_persist(session_id='S').
+    """
+    return _ok(sess.persist_session(session_id, path, overwrite=overwrite))
+
+
+@_tool
 def hardly_reopen(session_id: str, force: bool = False) -> str:
-    """Reattach a cached session after an MCP restart without needing the HAR path. Use when hardly_list_sessions shows open=false for your session_id; other tools also auto-reattach. Example: hardly_reopen(session_id='S').
+    """Reattach a cached session after an MCP restart without needing the HAR path. Use when hardly_list_sessions shows open=false for your session_id; other tools also auto-reattach. Memory sessions are not cached: reopen the HAR instead. Example: hardly_reopen(session_id='S').
     """
     return _ok(sess.reopen_session(session_id, force=force))
 
@@ -663,7 +670,7 @@ def hardly_summary(session_id: str) -> str:
         conn = sess.require_conn(session_id)
     except KeyError as exc:
         return _err(exc)
-    return _ok(q.summary(conn))
+    return _ok({**q.summary(conn), "storage": sess.get_storage(session_id)})
 
 
 @_tool

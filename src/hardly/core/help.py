@@ -31,6 +31,7 @@ _CATEGORIES: tuple[dict[str, Any], ...] = (
             "hardly_reopen",
             "hardly_list_sessions",
             "hardly_close",
+            "hardly_persist",
             "hardly_summary",
             "hardly_stats",
             "hardly_coverage",

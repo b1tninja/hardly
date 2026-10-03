@@ -41,6 +41,11 @@ After any capture you are in archive mode on the new `session_id`.
 - Secret values are never returned. Supply secrets via overrides / env only.
 - Paged tools take `limit` / `offset`; keep `limit` small.
 
+## Storage
+- Default `disk`: cached, `hardly_reopen` works after a restart. For sensitive HARs use
+  `hardly_open(path, storage='memory')` (or `HARDLY_INDEX=memory`): nothing derived is written to
+  disk, the session vanishes on restart. `hardly_persist(session_id)` saves it if you need to keep it.
+
 ## Lost?
 `hardly_help(topic)`, `hardly_recommend(goal)`, `hardly_list_sessions`,
 `hardly_reopen(session_id)` after an MCP restart, `hardly_capabilities` if a tool is missing.

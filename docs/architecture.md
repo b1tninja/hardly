@@ -27,9 +27,9 @@ flowchart LR
    filtered for noise, its URL templated (`/users/42` to `/users/{id}`), secret query values redacted,
    text bodies decoded, and per-body signals (`body_signals`: content kind, value shapes, framework
    hints, double-encoded JSON, ...) computed once.
-2. **Index**: one SQLite database per HAR in the cache dir (`HARDLY_CACHE_DIR`, default
-   `~/.cache/hardly`), plus a small metadata JSON. `session.py` maps `session_id` to the connection
-   and reattaches from the cache after an MCP restart.
+2. **Index**: one SQLite database per HAR, held according to the storage mode (below).
+   `session.py` maps `session_id` to the connection; disk sessions reattach from the cache after an
+   MCP restart.
 3. **Query**: `index/query.py` and `core/*` modules read the index and return small dictionaries.
    Detectors return evidence (names, shapes, counts, entry ids); prose advice appears only with
    `explain=true`. Output is paginated and bodies are truncated.
@@ -64,6 +64,35 @@ robots.txt and per-host delays. Secrets for probes come only from explicit overr
 - Generated stubs use placeholders and carry server-issued tokens forward at runtime from earlier
   responses rather than embedding literals.
 - The raw HAR is never returned by any tool.
+
+## Storage modes
+
+`HARDLY_INDEX` (or `hardly_open(storage=...)` / `hardly open --storage`) selects where the index lives:
+
+| Mode | Behaviour |
+|------|-----------|
+| `disk` (default) | Cached in `HARDLY_CACHE_DIR` (default `~/.cache/hardly`) as `<session_id>.db` plus `<session_id>.json`; survives MCP restarts (`hardly_reopen`). |
+| `memory` | Ingested into `:memory:`; no cache file or metadata is written, so no derived data (redacted previews, headers, shapes) is left on disk. The session is gone after a restart; reopen the HAR. Use for sensitive captures. |
+| `auto` | `memory` when the HAR is at most `HARDLY_INDEX_MEMORY_MAX_MB` (default 25), else `disk`. Opt-in because it drops restart reattach for small HARs. |
+
+Results report `storage: memory|disk` (`hardly_open`, `hardly_list_sessions`, `hardly_summary`).
+`hardly_persist(session_id, path=None, overwrite=False)` (CLI `hardly persist HAR`) saves a session as
+a compact SQLite file with `VACUUM INTO`; it never writes in place and refuses to replace an
+existing file unless `overwrite=true`. Without `path` it writes into the cache dir so the session
+reattaches like a disk one. Memory is not much faster than disk (ingest is parse-bound), so choose
+it for privacy, not speed.
+
+**Atomic cache.** A disk ingest builds in a temp file, writes a compact, WAL-free copy with
+`VACUUM INTO` to `.hardly-db-*.tmp` in the cache dir and `os.replace`s it onto `<sid>.db`; the
+metadata JSON is written last the same way. A crash leaves the old cache or none, never a partial
+one. Stray `.hardly-*.tmp` files older than 15 minutes are removed on open. Caches built by older
+versions in WAL mode are rebuilt.
+
+**Read-only open.** Cached indexes open with `file:<path>?mode=ro` (no write locks, no `-wal`/`-shm`
+sidecars, works from a read-only cache dir); memory sessions are sealed with `PRAGMA query_only`.
+Query code never writes; temp tables stay allowed and use `temp_store=MEMORY`. A memory database is
+private to its single connection, which hardly keeps (`check_same_thread=False`); never open a second
+connection to one.
 
 ## INDEX_VERSION rule
 
