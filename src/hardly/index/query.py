@@ -157,12 +157,16 @@ def _host_apex(host: str) -> str:
 # Tile / analytics / payment / captcha CDNs — never seed preferred_host from these.
 _CDN_SEED_RE = re.compile(
     r"(?i)(^|\.)("
-    r"arcgis|arcgisonline|googleapis|gstatic|ggpht|stripe|stripecdn|"
-    r"cloudflare|akamai|walkme|clarity\.ms|linkedin|facebook|fbcdn|"
-    r"googletagmanager|google-analytics|siteimproveanalytics|"
+    r"arcgis\w*|googleapis|gstatic|ggpht|stripe\w*|"
+    r"cloudflare\w*|akamai\w*|edgekey|edgesuite|fastly\w*|walkme|clarity\.ms|linkedin|facebook|fbcdn|"
+    r"googletagmanager|google-analytics|googlesyndication|siteimproveanalytics|"
     r"doubleclick|hotjar|segment\.|sentry\.|newrelic|nr-data|"
-    r"fontawesome|bootstrapcdn|jsdelivr|unpkg|cdnjs|"
-    r"hcaptcha|recaptcha|google\.com|gstatic\.com"
+    r"optimizely|onetrust|cookielaw|cookiebot|trustarc|truste|tiqcdn|adobedtm|demdex|omtrdc|"
+    r"qualtrics|intercom\w*|hubspot\w*|hs-\w+|fullstory|mouseflow|crazyegg|datadoghq|"
+    r"bing\.com|twimg|ytimg|youtube|vimeocdn|typekit|gravatar|"
+    r"fontawesome|bootstrapcdn|jsdelivr|unpkg|cdnjs|jquery\.com|"
+    r"hcaptcha|recaptcha|px-cloud|px-cdn|perimeterx|captcha-delivery|datadome|"
+    r"google\.com|gstatic\.com"
     r")(\.|$)"
 )
 

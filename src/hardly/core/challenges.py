@@ -31,7 +31,12 @@ _CAPTCHAS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("friendly-captcha", re.compile(r"frc-captcha|friendlycaptcha", re.I)),
     ("image-captcha", re.compile(r"<img[^>]+(captcha|verifycode|validatecode)", re.I)),
 )
-_CAPTCHA_FIELD = re.compile(r"(g-recaptcha-response|h-captcha-response|cf-turnstile-response|captcha[\w\-\[\]]*)", re.I)
+# Only the names a form actually submits; element ids like "captcha-demo-form" are noise.
+_CAPTCHA_FIELD = re.compile(
+    r"\bname\s*=\s*[\'\"](g-recaptcha-response|h-captcha-response|cf-turnstile-response|fc-token|"
+    r"frc-captcha-solution|geetest_[a-z]+|mtcaptcha-verifiedtoken|captcha(?:_?(?:code|answer|input|text|response))?)[\'\"]",
+    re.I,
+)
 
 
 def parse_challenges(value: str) -> list[dict[str, Any]]:

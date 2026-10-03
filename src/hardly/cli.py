@@ -1893,6 +1893,10 @@ def normalize_argv(argv: list[str]) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> None:
+    import signal
+
+    if hasattr(signal, "SIGPIPE"):  # `hardly ... | head` must not traceback
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
     parser = build_parser()
     import sys as _sys
 

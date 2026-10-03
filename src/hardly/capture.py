@@ -772,10 +772,10 @@ def run_capture_recipe(
                     raise CaptureError("goto requires url")
                 navigate_capture(cid, url)
                 # Give navigation a moment; url rpc confirms.
-                time.sleep(min(float(raw.get("ms") or 500) / 1000.0, 10.0))
+                time.sleep(min(_wait_ms(raw, 500) / 1000.0, 10.0))
                 step_out["result"] = capture_page_url(cid)
             elif op == "wait":
-                ms = min(max(int(raw.get("ms") or 1000), 0), 30_000)
+                ms = min(max(_wait_ms(raw, 1000), 0), 30_000)
                 time.sleep(ms / 1000.0)
                 step_out["result"] = {"waited_ms": ms}
             elif op == "elements":
@@ -1151,6 +1151,15 @@ def capture_headless(
     return out
 
 
+def _wait_ms(raw: dict[str, Any], default: int) -> int:
+    """Wait length in ms from ``ms`` or (friendlier) ``seconds``."""
+    if raw.get("ms") not in (None, ""):
+        return int(float(raw["ms"]))
+    if raw.get("seconds") not in (None, ""):
+        return int(float(raw["seconds"]) * 1000)
+    return default
+
+
 def _settled_content(page: Any) -> str:
     """``page.content()`` that survives in-flight navigations and empty shells."""
     try:
@@ -1242,7 +1251,7 @@ def _run_inprocess_recipe(page: Any, steps: list[dict[str, Any]]) -> dict[str, A
         step_out: dict[str, Any] = {"op": op, "ok": True}
         try:
             if op == "wait":
-                ms = min(max(int(raw.get("ms") or 1000), 0), 30_000)
+                ms = min(max(_wait_ms(raw, 1000), 0), 30_000)
                 page.wait_for_timeout(ms)
                 step_out["result"] = {"waited_ms": ms}
             elif op == "goto":
