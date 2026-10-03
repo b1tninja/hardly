@@ -548,17 +548,31 @@ def cmd_replay_check(args: argparse.Namespace) -> int:
         _print(result)
         return 1
     conn = sess.require_conn(result["session_id"])
-    overrides = json.loads(args.overrides_json) if args.overrides_json else None
-    _print(
-        replay_check(
-            conn,
-            args.entry_ids,
-            overrides=overrides,
-            max_requests=args.max_requests,
-            delay_s=args.delay,
-            allow_unsafe=args.allow_unsafe,
-        )
+    overrides = None
+    if args.overrides_json:
+        try:
+            overrides = json.loads(args.overrides_json)
+        except ValueError:
+            _print(
+                {
+                    "error": "--overrides-json must be inline JSON text, not a file path: "
+                    '{"headers":{},"cookies":{},"query":{},"body":{}}'
+                }
+            )
+            return 1
+        if not isinstance(overrides, dict):
+            _print({"error": "--overrides-json must be a JSON object"})
+            return 1
+    out = replay_check(
+        conn,
+        args.entry_ids,
+        overrides=overrides,
+        max_requests=args.max_requests,
+        delay_s=args.delay,
+        allow_unsafe=args.allow_unsafe,
+        allow_gates=getattr(args, "allow_gate", None),
     )
+    _print(out)
     return 0
 
 
