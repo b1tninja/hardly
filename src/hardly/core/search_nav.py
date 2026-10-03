@@ -66,8 +66,11 @@ def rank_search_links(
             f"a:has-text({_q(text)})" if text and len(text) <= 80
             else f"a[href={_q(link.get('href_raw') or href)}]"
         )
+        if link.get("css"):
+            css = link["css"]
         out.append(
             {
+                "kind": link.get("kind") or "link",
                 "score": score,
                 "matched_keywords": matched,
                 "text": text,
@@ -77,6 +80,22 @@ def rank_search_links(
         )
     out.sort(key=lambda r: (-r["score"], r["href"]))
     return out[:limit]
+
+
+def actions_as_links(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Adapt JS click targets (buttons, postback/js links) to link-shaped rows."""
+    out = []
+    for a in actions:
+        sel = f"#{a['id']}" if a.get("id") and re.fullmatch(r"[A-Za-z][\w-]*", a["id"]) else None
+        out.append(
+            {
+                "text": a.get("text") or "",
+                "href": f"action:{a.get('kind')}:{a.get('id') or a.get('xpath')}",
+                "kind": a.get("kind"),
+                "css": sel or (f"{a['tag']}:has-text({_q(a['text'])})" if a.get("text") else None),
+            }
+        )
+    return [o for o in out if o["css"]]
 
 
 def _q(value: str) -> str:
@@ -114,7 +133,7 @@ def find_search_entry(
         s = extract_html_structure(
             row["body"], base_url=f"{row['scheme']}://{row['host']}{row['path']}"
         )
-        for link in s.get("links") or []:
+        for link in (s.get("links") or []) + actions_as_links(s.get("actions") or []):
             links.append({**link, "entry_id": row["entry_id"]})
     ranked = rank_search_links(links, keywords=kw, limit=limit)
     return {

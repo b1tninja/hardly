@@ -20,6 +20,7 @@ _MAX_FIELDS = 80
 _MAX_LOOSE = 40
 _MAX_LINKS = 60
 _MAX_HANDLERS = 60
+_MAX_ACTIONS = 60
 _MAX_LABELS = 60
 _MAX_SIGNAL_SAMPLES = 12
 _MAX_HANDLER_CHARS = 120
@@ -127,6 +128,7 @@ def extract_html_structure(html: str, *, base_url: str = "") -> dict[str, Any]:
         "forms": [],
         "loose_inputs": [],
         "links": [],
+        "actions": [],
         "handlers": [],
         "handler_functions": [],
         "labels": [],
@@ -148,6 +150,7 @@ def extract_html_structure(html: str, *, base_url: str = "") -> dict[str, Any]:
     forms: list[dict[str, Any]] = []
     loose: list[dict[str, Any]] = []
     links: list[dict[str, Any]] = []
+    actions: list[dict[str, Any]] = []
     handlers: list[dict[str, Any]] = []
     functions: list[dict[str, Any]] = []
     signals: dict[str, Any] = {}
@@ -161,6 +164,7 @@ def extract_html_structure(html: str, *, base_url: str = "") -> dict[str, Any]:
         forms = [_finalize_form(f) for f in parser.forms[:_MAX_FORMS]]
         loose = [_finalize_field(f) for f in parser.loose[:_MAX_LOOSE]]
         links = parser.links[:_MAX_LINKS]
+        actions = parser.actions[:_MAX_ACTIONS]
         handlers = parser.handlers[:_MAX_HANDLERS]
         functions = _summarize_handler_functions(handlers)
         signals = _summarize_signals(parser.signals)
@@ -171,6 +175,7 @@ def extract_html_structure(html: str, *, base_url: str = "") -> dict[str, Any]:
         "forms": forms,
         "loose_inputs": loose,
         "links": links,
+        "actions": actions,
         "handlers": handlers,
         "handler_functions": functions,
         "labels": labels,
@@ -280,6 +285,9 @@ class _FormParser(HTMLParser):
         self.loose: list[dict[str, Any]] = []
         self.links: list[dict[str, Any]] = []
         self.handlers: list[dict[str, Any]] = []
+        self.actions: list[dict[str, Any]] = []
+        self._action: dict[str, Any] | None = None
+        self._action_text: list[str] = []
         self.signals: list[dict[str, str]] = []
         self._form: dict[str, Any] | None = None
         self._select: dict[str, Any] | None = None
@@ -301,6 +309,7 @@ class _FormParser(HTMLParser):
         xpath = self._xpath(ad)
         self._note_signals(tag, ad)
         self._note_handlers(tag, ad, xpath=xpath)
+        self._note_action(tag, ad, xpath)
 
         if tag == "form":
             action = ad.get("action") or ""
@@ -430,6 +439,8 @@ class _FormParser(HTMLParser):
             self._leave(tag)
 
     def handle_endtag(self, tag: str) -> None:
+        if self._action is not None and tag == self._action["tag"]:
+            self._close_action()
         if tag == "form" and self._form is not None:
             self.forms.append(self._form)
             self._form = None
@@ -476,6 +487,54 @@ class _FormParser(HTMLParser):
             self._textarea_text.append(data)
         if self._link is not None:
             self._link_text.append(data)
+        if self._action is not None:
+            self._action_text.append(data)
+
+    def _note_action(self, tag: str, ad: dict[str, str], xpath: str) -> None:
+        """Track JS-driven click targets (no navigable href) with visible text."""
+        if self._action is not None:
+            return
+        href = (ad.get("href") or "").strip().lower()
+        has_js = bool(ad.get("onclick")) or href.startswith("javascript:")
+        is_input_btn = tag == "input" and (ad.get("type") or "").lower() in {
+            "submit", "button", "image",
+        }
+        if tag == "a" and (has_js or href in {"", "#"}):
+            kind = "postback" if "__dopostback" in (ad.get("href", "") + ad.get("onclick", "")).lower() else "js_link"
+        elif tag == "button":
+            kind = "button"
+        elif is_input_btn:
+            kind = "button"
+        else:
+            return
+        action = {
+            "kind": kind,
+            "tag": tag,
+            "id": ad.get("id") or "",
+            "name": ad.get("name") or "",
+            "text": "",
+            "xpath": xpath,
+        }
+        if tag == "input":
+            action["text"] = _shape_value("link_text", ad.get("value") or ad.get("alt") or "") or ""
+            self._append_action(action)
+            return
+        self._action = action
+        self._action_text = []
+
+    def _append_action(self, action: dict[str, Any]) -> None:
+        if len(self.actions) < _MAX_ACTIONS and (action["text"] or action["id"]):
+            self.actions.append(action)
+
+    def _close_action(self) -> None:
+        action = self._action
+        self._action = None
+        if action is None:
+            return
+        text = re.sub(r"\s+", " ", "".join(self._action_text)).strip()
+        action["text"] = _shape_value("link_text", text) or ""
+        self._action_text = []
+        self._append_action(action)
 
     def _enter(self, tag: str) -> None:
         counts = self._sibling_counts[-1]

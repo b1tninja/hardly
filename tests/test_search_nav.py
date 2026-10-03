@@ -28,3 +28,19 @@ def test_find_search_entry_on_sample():
     r = sess.open_har("tests/fixtures/sample.har")
     out = find_search_entry(sess.require_conn(r["session_id"]), keywords=["doc"])
     assert "candidates" in out and out["pages_scanned"] >= 0
+
+
+def test_js_actions_are_candidates():
+    html = """<a href="javascript:__doPostBack('ctl00$nav$lnkFind','')">Find a Widget</a>
+    <a href="#" onclick="go()">Gadget Search</a>
+    <input type="submit" id="btnGo" value="Lookup">
+    <button id="b2">Sign in</button><button>Cancel</button>"""
+    s = extract_html_structure(html)
+    kinds = {a["kind"] for a in s["actions"]}
+    assert {"postback", "js_link", "button"} <= kinds
+    from hardly.core.search_nav import actions_as_links
+
+    top = rank_search_links(actions_as_links(s["actions"]), keywords=("gadget",))
+    assert top[0]["text"] == "Gadget Search" and top[0]["kind"] == "js_link"
+    texts = [r["text"] for r in top]
+    assert "Find a Widget" in texts and "Lookup" in texts and "Sign in" not in texts
