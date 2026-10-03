@@ -138,3 +138,20 @@ def test_forms_query_on_sample_har(tmp_path, monkeypatch):
     assert detail["links"]
     assert detail["handlers"]
     assert detail["forms"][0].get("xpath")
+
+
+def test_named_token_pair_anti_forgery():
+    html = """<form action="/login.action" method="post">
+    <input type="hidden" name="struts.token.name" value="token">
+    <input type="hidden" name="token" value="ABCDEF123456">
+    <input type="text" name="username"><input type="submit" value="Go"></form>
+    <form action="/other"><input type="hidden" name="a" value="b">
+    <input type="hidden" name="b" value="c"></form>"""
+    out = extract_html_structure(html)
+    first, second = out["forms"]
+    assert first["anti_forgery"] == {
+        "scheme": "named_token",
+        "name_field": "struts.token.name",
+        "token_field": "token",
+    }
+    assert "anti_forgery" not in second  # indirection without "token" is not flagged

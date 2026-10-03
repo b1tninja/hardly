@@ -511,7 +511,9 @@ def hardly_discover(
     Agent-driven API discovery — no person needed. Returns ``session_id``,
     ``brief``, ``capture_mode=headless``, and ``mode=archive`` for drill-down.
     ``recipe_json`` is a JSON list of steps (goto/wait/aria/click/fill/…) or
-    empty for a plain load+wait. If the brief shows a wall, switch to
+    empty for a plain load+wait. A ``find_click`` step
+    (``{"op":"find_click","keywords":["your","terms"],"max_hops":4}``) follows
+    ranked links/buttons until a real search form appears. If the brief shows a wall, switch to
     interactive: hardly_capture_start(headed=true, channel=chrome) and ask
     the person.
     """
@@ -1081,6 +1083,100 @@ def hardly_recipe_plan(
 
 
 @mcp.tool
+def hardly_challenges(
+    session_id: str,
+    host: str | None = None,
+    limit: int = 20,
+) -> str:
+    """Detect HTTP auth challenges, throttling/lockout signals, captcha widgets.
+
+    WWW-Authenticate / Proxy-Authenticate schemes (Basic, Bearer, Digest,
+    Negotiate…) with safe parameters and whether the request was retried with
+    credentials; 429/423/Retry-After/X-RateLimit-* and lockout wording; and
+    captcha widget markup (reCAPTCHA, hCaptcha, Turnstile, Arkose…). Challenge
+    nonces are never returned.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.challenges import detect_challenges
+
+    return _ok(detect_challenges(conn, host=host, limit=min(limit, 50)))
+
+
+@mcp.tool
+def hardly_data_attrs(
+    session_id: str,
+    host: str | None = None,
+    entry_id: int | None = None,
+    limit: int = 20,
+) -> str:
+    """Interpret HTML data-* attributes (MDN dataset model).
+
+    Per attribute: dataset key (data-foo-bar -> fooBar), counts, tags, value
+    kinds (id/uuid/url/json/boolean/...), enum-like values, plus endpoint URLs
+    and embedded JSON config the page hands to scripts, and framework hints
+    (Bootstrap, Stimulus, Rails UJS, htmx, test hooks, tracking). Free text is
+    never echoed.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.data_attrs import scan_session
+
+    return _ok(scan_session(conn, host=host, entry_id=entry_id, limit=min(limit, 60)))
+
+
+@mcp.tool
+def hardly_grids(
+    session_id: str,
+    host: str | None = None,
+    limit: int = 20,
+) -> str:
+    """Detect data-grid frameworks, JSON envelope conventions and paging params.
+
+    HTML grid libraries (DataTables, jqGrid, AG Grid, Kendo, RadGrid, GridView
+    pager commands…), response envelopes (OData, JSON:API, HAL, Spring/DRF
+    pagination, Relay, ArcGIS REST, GeoJSON…), request paging/sort parameter
+    styles, and common data-* attributes. Names and counts only.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.grids import detect_grids
+
+    return _ok(detect_grids(conn, host=host, limit=min(limit, 50)))
+
+
+@mcp.tool
+def hardly_find_search(
+    session_id: str,
+    host: str | None = None,
+    keywords: list[str] | None = None,
+    limit: int = 15,
+) -> str:
+    """Rank links likely to lead to a search/lookup page.
+
+    Generic signals (search, lookup, find, viewer...) plus optional caller
+    ``keywords`` for the site's domain vocabulary. Returns candidates and a
+    ready ``next_step`` click for hardly_capture_recipe; repeat per hop until
+    a form with input fields appears.
+    """
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.search_nav import find_search_entry
+
+    return _ok(
+        find_search_entry(conn, host=host, keywords=keywords or [], limit=min(limit, 40))
+    )
+
+
+@mcp.tool
 def hardly_redirects(
     session_id: str,
     host: str | None = None,
@@ -1386,7 +1482,14 @@ def hardly_wall(
     host: str | None = None,
     limit: int = 30,
 ) -> str:
-    """Detect bot walls / challenges (Akamai, Cloudflare, captcha, 403/429)."""
+    """Report bot walls actually hit, plus the bot-protection products seen.
+
+    Identifies Cloudflare, Akamai, Imperva, DataDome, HUMAN/PerimeterX, Kasada,
+    F5, AWS WAF, Vercel, Anubis, reCAPTCHA/hCaptcha/Turnstile/Arkose and more,
+    with a state per product (blocked / challenged / clearance_seen / present).
+    A CDN header on a normal page is informational, not a wall. Never solves or
+    evades; a block means re-capture interactively with a person.
+    """
     try:
         conn = sess.require_conn(session_id)
     except KeyError as exc:

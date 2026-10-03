@@ -5,6 +5,13 @@ with small, redacted, paginated tools — so agents need hardly any of the raw
 file.
 
 Human setup (venv, Docker, Cursor MCP): **[README.md](README.md)**.
+Deeper docs: **[docs/](docs/README.md)** (concepts, SDK workflow, capture,
+technologies, integrating). After changing an MCP tool run
+`python scripts/gen_tool_docs.py`.
+
+hardly is a generic, content-neutral helper: technology detectors and resource
+kinds only — no site-specific logic. Downstream SDK projects use hardly and
+keep their own recipes, fixtures and vocabularies.
 
 ## Commands
 
@@ -56,8 +63,8 @@ Prefer MCP/CLI helpers over reading the HAR:
    `hardly_endpoints` / `hardly_content` for API surface and payload kinds
 3. HTML portals: `hardly_brief` first (includes a credentials summary +
    cookie flags), then `hardly_story` / `hardly_forms` / `hardly_ui` /
-   `hardly_outline`. `hardly_forms` labels cover Acclaim detailLabel,
-   th/td, dt/dd, MPTSWEB bold cells, and KoFile `span.base` rows — prefer
+   `hardly_outline`. `hardly_forms` labels cover div label/value pairs,
+   th/td, dt/dd, bold-cell tables, and `span.base` rows — prefer
    those over scraping bodies. Live tab: `hardly_capture_aria` for
    Playwright accessibility YAML + `refs[]`
 4. Credentials / login: `hardly_credentials` for the full map (password +
@@ -68,16 +75,24 @@ Prefer MCP/CLI helpers over reading the HAR:
 5. Missing detail URL: `hardly_routes` + `handler_functions`, then
    `hardly_tree(entry_id=…)` / `hardly_around(entry_id=…)`. GraphQL:
    `hardly_graphql`. Param drift: `hardly_params`
+5a. Data-heavy pages: `hardly_grids` (grid libraries, JSON envelopes, paging
+   params) and `hardly_data_attrs` (HTML `data-*` keys, endpoint URLs, embedded
+   JSON, framework hints)
+5b. Landing page, no search form yet: `hardly_find_search(keywords=[...])`
+   ranks links (generic signals + your domain terms) and returns a `next_step` click for the next headless hop
 6. Client sketch: `hardly_stub`; next capture: `hardly_recipe_plan`
-7. After a capture: `hardly_wall` (Akamai/CF), `hardly_issues` /
+7. After a capture: `hardly_wall` (identifies the WAF/bot-manager/captcha product
+   and whether it blocked; CDN headers alone are informational),
+   `hardly_challenges` (HTTP auth challenges, throttling, captcha widgets),
+   `hardly_issues` /
    `hardly_coverage` if bodies look empty; `hardly_slow` /
    `hardly_duplicates` for odd traffic; `hardly_pages` for pageref groups;
    `hardly_diff` vs an earlier session (includes credentials delta)
 8. `hardly_entry` / `hardly_schema` / export — only for needed details
 
 Optional dep for capture: `pip install -e ".[capture]"` +
-`playwright install chromium` (or `HARDLY_BROWSER_CHANNEL=chrome`). For CA
-counties: `python -m asspy.sample <county>`. Do not use Cursor's IDE browser
+`playwright install chromium` (or `HARDLY_BROWSER_CHANNEL=chrome`). hardly stays content-neutral (technology helpers and generic
+resource kinds only; no site-specific logic). Do not use Cursor's IDE browser
 expecting a HAR path.
 
 ## Boundaries
@@ -94,7 +109,7 @@ expecting a HAR path.
 - Prefer **live soak** over private HAR fixtures when checking stacks:
   `hardly soak-live --list`, then `hardly soak-live` (or
   `python -m hardly.soak_live`). Catalog in `hardly.live_targets` — ASP.NET
-  VIEWSTATE (wyobiz), HTML forms, login password fields, SPA, GraphQL
+  VIEWSTATE (local-webforms), HTML forms, login password fields, SPA, GraphQL
   (`countries-gql` recipe `fetch`), JSON/OpenAPI. Optional
   `--write-fixtures DIR` for small redacted snippets (not full HARs).
   Headless one-shots use in-process `capture_headless` (set

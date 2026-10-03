@@ -45,7 +45,7 @@ _RULES: tuple[tuple[tuple[str, ...], list[str], str], ...] = (
         "Interactive: start headed chrome, ask the person, then stop + brief.",
     ),
     (
-        ("portal", "guest", "county", "acclaim", "recorder", "search form"),
+        ("portal", "guest", "search form", "webforms", "viewstate"),
         ["hardly_brief", "hardly_forms", "hardly_correlate", "hardly_stub"],
         "Start with a portal brief, then forms/CSRF, then a client sketch.",
     ),

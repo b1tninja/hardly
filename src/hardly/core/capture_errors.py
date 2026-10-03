@@ -10,11 +10,10 @@ TRANSIENT_NAV: tuple[str, ...] = (
     "ERR_TOO_MANY_RETRIES",
     "ERR_CONNECTION_RESET",
     "ERR_CONNECTION_CLOSED",
-    "ERR_CONNECTION_ABORTED",
     "ERR_EMPTY_RESPONSE",
     "ERR_HTTP2_PROTOCOL_ERROR",
     "ERR_NETWORK_CHANGED",
-    "ERR_ABORTED",
+    "ERR_SOCKET_NOT_CONNECTED",
     "interrupted by another navigation",
 )
 

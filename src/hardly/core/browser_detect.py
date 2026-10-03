@@ -127,7 +127,7 @@ def pin_hint(builds: list[dict[str, Any]], expected: str | None) -> str | None:
     if not builds:
         return None
     parts = []
-    for b in builds:
+    for b in {str(x["build"]): x for x in builds}.values():
         pw = PLAYWRIGHT_FOR_CHROMIUM_BUILD.get(str(b["build"]), "unknown")
         parts.append(f"chromium build {b['build']} <-> playwright {pw}")
     known = [

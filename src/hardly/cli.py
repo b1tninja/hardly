@@ -430,6 +430,62 @@ def cmd_diff(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_find_search(args: argparse.Namespace) -> int:
+    from hardly.core.search_nav import find_search_entry
+
+    result = sess.open_har(args.har)
+    if "error" in result:
+        _print(result)
+        return 1
+    conn = sess.require_conn(result["session_id"])
+    _print(
+        find_search_entry(
+            conn, host=args.host, keywords=args.keyword or [], limit=args.limit
+        )
+    )
+    return 0
+
+
+def cmd_grids(args: argparse.Namespace) -> int:
+    from hardly.core.grids import detect_grids
+
+    result = sess.open_har(args.har)
+    if "error" in result:
+        _print(result)
+        return 1
+    conn = sess.require_conn(result["session_id"])
+    _print(detect_grids(conn, host=args.host, limit=args.limit))
+    return 0
+
+
+def cmd_challenges(args: argparse.Namespace) -> int:
+    from hardly.core.challenges import detect_challenges
+
+    result = sess.open_har(args.har)
+    if "error" in result:
+        _print(result)
+        return 1
+    conn = sess.require_conn(result["session_id"])
+    _print(detect_challenges(conn, host=args.host, limit=args.limit))
+    return 0
+
+
+def cmd_data_attrs(args: argparse.Namespace) -> int:
+    from hardly.core.data_attrs import scan_session
+
+    result = sess.open_har(args.har)
+    if "error" in result:
+        _print(result)
+        return 1
+    conn = sess.require_conn(result["session_id"])
+    _print(
+        scan_session(
+            conn, host=args.host, entry_id=args.entry_id, limit=args.limit
+        )
+    )
+    return 0
+
+
 def cmd_recipe_plan(args: argparse.Namespace) -> int:
     from hardly.core.recipe_plan import recipe_from_story
 
@@ -855,6 +911,8 @@ def cmd_capture(args: argparse.Namespace) -> int:
         stop_capture,
     )
 
+    if not hasattr(args, "url"):
+        args.url = ""
     action = getattr(args, "capture_action", None) or "run"
     try:
         if action == "list":
@@ -1033,8 +1091,14 @@ def cmd_capture(args: argparse.Namespace) -> int:
     return 0 if result.get("status") in ("stopped", "running", "starting") else 1
 
 
-def _add_capture_flags(p: argparse.ArgumentParser) -> None:
-    p.add_argument("url", nargs="?", default="", help="Start URL (optional)")
+def _add_capture_flags(
+    p: argparse.ArgumentParser, *, url: bool = True, url_default: Any = ""
+) -> None:
+    # discover declares its own required url; a second optional positional of
+    # the same dest would silently overwrite it with "". The parent ``capture``
+    # parser passes SUPPRESS so its default never clobbers a subcommand's url.
+    if url:
+        p.add_argument("url", nargs="?", default=url_default, help="Start URL (optional)")
     p.add_argument(
         "-o",
         "--output",
@@ -1415,6 +1479,46 @@ def build_parser() -> argparse.ArgumentParser:
     )
     diff_p.set_defaults(func=cmd_diff)
 
+    challenges_p = sub.add_parser(
+        "challenges",
+        help="Auth challenges, throttling/lockout, captcha widgets",
+    )
+    challenges_p.add_argument("har")
+    challenges_p.add_argument("--host")
+    challenges_p.add_argument("--limit", type=int, default=20)
+    challenges_p.set_defaults(func=cmd_challenges)
+
+    data_attrs_p = sub.add_parser(
+        "data-attrs",
+        help="Interpret HTML data-* attributes (dataset keys, endpoints, JSON, frameworks)",
+    )
+    data_attrs_p.add_argument("har")
+    data_attrs_p.add_argument("--host")
+    data_attrs_p.add_argument("--entry-id", type=int)
+    data_attrs_p.add_argument("--limit", type=int, default=20)
+    data_attrs_p.set_defaults(func=cmd_data_attrs)
+
+    grids_p = sub.add_parser(
+        "grids",
+        help="Detect grid frameworks, JSON envelope and paging conventions",
+    )
+    grids_p.add_argument("har")
+    grids_p.add_argument("--host")
+    grids_p.add_argument("--limit", type=int, default=20)
+    grids_p.set_defaults(func=cmd_grids)
+
+    find_search_p = sub.add_parser(
+        "find-search",
+        help="Rank links likely to lead to a search page in a capture",
+    )
+    find_search_p.add_argument("har")
+    find_search_p.add_argument("--host")
+    find_search_p.add_argument(
+        "--keyword", action="append", help="Domain term to boost (repeatable)"
+    )
+    find_search_p.add_argument("--limit", type=int, default=15)
+    find_search_p.set_defaults(func=cmd_find_search)
+
     recipe_plan_p = sub.add_parser(
         "recipe-plan",
         help="Suggest a capture recipe from a portal story",
@@ -1636,7 +1740,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Headless mode: load URL, optional recipe, open session + brief",
     )
     discover_p.add_argument("url")
-    _add_capture_flags(discover_p)
+    _add_capture_flags(discover_p, url=False)
     discover_p.add_argument(
         "--recipe",
         default="",
@@ -1759,15 +1863,44 @@ def build_parser() -> argparse.ArgumentParser:
     recipe_p.set_defaults(func=cmd_capture, capture_action="recipe")
 
     # Bare `hardly capture URL` (no subcommand) — argparse needs a default path.
-    _add_capture_flags(cap_p)
+    _add_capture_flags(cap_p, url_default=argparse.SUPPRESS)
     cap_p.set_defaults(func=cmd_capture, capture_action="run")
 
     return p
 
 
+_CAPTURE_ACTIONS = frozenset(
+    {"run", "start", "discover", "stop", "list", "status", "goto", "elements",
+     "aria", "doctor", "screenshot", "click", "fill", "press", "url", "recipe"}
+)
+
+
+def normalize_argv(argv: list[str]) -> list[str]:
+    """Make bare ``hardly capture [flags] URL`` mean ``hardly capture run ...``.
+
+    argparse cannot mix an optional positional with subcommands, so insert the
+    default ``run`` action when no capture subcommand is present.
+    """
+    if not argv or argv[0] != "capture":
+        return argv
+    rest = argv[1:]
+    if any(a in _CAPTURE_ACTIONS for a in rest if not a.startswith("-")):
+        # A subcommand word is present (flag values like "-o run" are rare).
+        return argv
+    if any(a in {"-h", "--help"} for a in rest):
+        return argv
+    return ["capture", "run", *rest]
+
+
 def main(argv: list[str] | None = None) -> None:
+    import signal
+
+    if hasattr(signal, "SIGPIPE"):  # `hardly ... | head` must not traceback
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
     parser = build_parser()
-    args = parser.parse_args(argv)
+    import sys as _sys
+
+    args = parser.parse_args(normalize_argv(list(_sys.argv[1:] if argv is None else argv)))
     code = args.func(args)
     sys.exit(code)
 

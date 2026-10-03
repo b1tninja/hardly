@@ -145,6 +145,9 @@ def _match_url(
     path = parsed.path or "/"
     query = parsed.query or None
     if query:
+        from hardly.core.redact import redact_query_string
+
+        query = redact_query_string(query)  # stored query strings are redacted
         row = conn.execute(
             """
             SELECT * FROM entries

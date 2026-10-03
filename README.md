@@ -1,9 +1,26 @@
 # hardly
 
-HAR analysis MCP server and CLI — index, query, document, and probe APIs
-**without** loading giant HAR files into the model context.
+A generic helper and MCP server for **reading and capturing HAR files** and
+turning them into what you need to write a client SDK: endpoints, forms and
+labels, data and media kinds, and how credentials and authentication work.
+Index a capture into SQLite once, then query it with small, redacted,
+paginated tools — you *hardly* need the whole file.
 
-You *hardly* need the whole file.
+hardly is content-neutral: it knows technologies (HTML forms, ASP.NET
+WebForms, GraphQL, OAuth, cookies/CSRF, bot walls) and resource kinds (JSON,
+CSV, HTML tables, PDF, images…), not any particular site or subject. SDKs and
+adapters built on top of it keep their own recipes and vocabularies.
+
+## Documentation
+
+| Doc | Contents |
+|-----|----------|
+| [docs/concepts.md](docs/concepts.md) | Sessions, the index, redaction, the three modes |
+| [docs/sdk-workflow.md](docs/sdk-workflow.md) | Capture → analyse → client sketch / OpenAPI, step by step |
+| [docs/capture.md](docs/capture.md) | Headless and interactive capture, recipes, env vars, containers |
+| [docs/technologies.md](docs/technologies.md) | What hardly detects, per technology |
+| [docs/integrating.md](docs/integrating.md) | Using hardly from another project; fixtures; soak; contributing |
+| [docs/tools.md](docs/tools.md) | Generated reference for every MCP tool |
 
 ## Why
 
@@ -109,7 +126,7 @@ Call `hardly_modes` / `hardly_mode` (or `hardly modes`) before other tools:
 hardly modes
 hardly modes archive --har path/to/capture.har
 hardly modes headless --url https://portal.example.com
-hardly modes --goal "ask the user to search the county portal"
+hardly modes --goal "ask the user to search the portal"
 ```
 
 MCP prompts: `analyze_har`, `discover_apis`, `capture_portal`.
@@ -148,8 +165,10 @@ Cursor’s IDE browser does **not** hand hardly a HAR path.
 
 Capture backfills bodies that Playwright often leaves as `content.size == -1`.
 
-For California county portals, prefer `python -m asspy.sample <county>` (writes
-under `$ASSPY_HOME/samples/`).
+hardly is content-neutral: it ships helpers for common technologies (ASP.NET
+WebForms, GraphQL, OAuth/cookie auth) and generic resource classes (forms, data,
+media, credentials), not site- or domain-specific logic. Keep site recipes and
+samples in separate projects.
 
 ## MCP tools
 
@@ -158,14 +177,16 @@ under `$ASSPY_HOME/samples/`).
 | Modes | `modes`, `mode`, `capabilities`, `help`, `recommend` |
 | Session | `open`, `reopen`, `list_sessions`, `close`, `summary`, `stats`, `coverage` |
 | Discovery | `summary`, `stats`, `hosts` (`preferred_host`), `endpoints`, `content`, `search`, `entry`, `compare_entries` |
-| Portal / HTML | `brief`, `story`, `forms` / `ui` (incl. Acclaim / MPTSWEB / KoFile labels), `outline`, `pages`, `wall` |
+| Portal / HTML | `brief`, `story`, `forms` / `ui` (incl. common label/value layouts), `outline`, `pages`, `wall` |
 | Tokens / credentials | `credentials` (login map + jwt/hex/base64 shapes), `correlate`, `trace`, `cookies`, `secrets`, `redirects` |
-| Structure | `routes`, `around`, `tree`, `params`, `graphql`, `duplicates`, `slow` |
-| Quality | `coverage`, `issues`, `diff`, `recommend` |
+| Structure | `routes`, `around`, `tree`, `params`, `graphql`, `grids`, `data_attrs`, `find_search`, `duplicates`, `slow` |
+| Quality | `coverage`, `issues`, `wall`, `challenges`, `diff`, `recommend` |
 | Auth / schema | `auth`, `flow`, `schema` |
 | Export | `export_md`, `export_openapi`, `export_postman`, `export_brief`, `stub`, `recipe_plan`, `curl`, `sql` |
 | Live probe | `probe` (`confirm=true`; secrets only via overrides) |
 | Capture | `discover`, `capture_doctor`, `capture_start` / `stop` / `list` / `status`, `capture_aria`, `capture_screenshot`, `capture_elements`, `capture_click` / `fill` / `press`, `capture_goto` / `url`, `capture_recipe`, `capture_once` |
+
+Signatures and descriptions for every tool: [docs/tools.md](docs/tools.md).
 
 **Token rules:** bodies truncated, secrets redacted, lists paginated. Never
 returns the full HAR.
@@ -285,13 +306,13 @@ the cache dir and are never committed.
 pip install -e ".[capture]"
 playwright install chromium
 hardly soak-live --list
-hardly soak-live --ids example,wyobiz,countries-gql,jsonplaceholder
+hardly soak-live --ids example,local-webforms,countries-gql,jsonplaceholder
 hardly soak-live --write-fixtures tmp/live-fixtures
 # or: python -m hardly.soak_live
 HARDLY_LIVE_CAPTURE=1 pytest tests/test_live_soak.py -q
 ```
 
-Catalog: `hardly.live_targets` — ASP.NET (`wyobiz`), HTML forms, login,
+Catalog: `hardly.live_targets` — ASP.NET (`local-webforms`), HTML forms, login,
 GraphQL (in-page `fetch` recipe), JSON/OpenAPI. `--write-fixtures` saves small
 redacted HTML/JSON snippets (not full HARs) for offline unit tests.
 Archive soak against local HARs remains `python scripts/soak.py`.

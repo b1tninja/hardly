@@ -11,7 +11,7 @@ from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urljoin
 
-from hardly.core.redact import REDACTED, is_sensitive_key, redact_string
+from hardly.core.redact import REDACTED, is_sensitive_key, redact_string, redact_url
 
 _MAX_VALUE_CHARS = 80
 _MAX_OPTIONS = 30
@@ -20,6 +20,7 @@ _MAX_FIELDS = 80
 _MAX_LOOSE = 40
 _MAX_LINKS = 60
 _MAX_HANDLERS = 60
+_MAX_ACTIONS = 60
 _MAX_LABELS = 60
 _MAX_SIGNAL_SAMPLES = 12
 _MAX_HANDLER_CHARS = 120
@@ -72,7 +73,7 @@ _DETAIL_RE = re.compile(
     re.I,
 )
 
-# Acclaim / similar: label div next to value div
+# Label div next to value div (detailLabel-style layouts)
 _LABEL_ROW = re.compile(
     r'<div\b[^>]*\bclass="[^"]*\bdetailLabel\b[^"]*"[^>]*>\s*(.*?)\s*</div>\s*'
     r'<div\b[^>]*\bclass="[^"]*\b(?:formInput|listDocDetails)\b[^"]*"[^>]*>\s*(.*?)\s*</div>',
@@ -86,13 +87,13 @@ _DT_DD = re.compile(
     r"<dt\b[^>]*>\s*(.*?)\s*</dt>\s*<dd\b[^>]*>\s*(.*?)\s*</dd>",
     re.I | re.S,
 )
-# MPTSWEB / Bootstrap detail tables: bold label cell → value cell
+# Bootstrap-style detail tables: bold label cell → value cell
 _TD_BOLDER = re.compile(
     r'<td\b[^>]*\bclass="[^"]*\bfont-weight-bolder\b[^"]*"[^>]*>\s*(.*?)\s*</td>\s*'
     r"<td\b[^>]*>\s*(.*?)\s*</td>",
     re.I | re.S,
 )
-# KoFile CountyFusion: <td><span class="base" id="fcNspan">Label:</span></td><td>value</td>
+# Label span cells: <td><span class="base" id="fcNspan">Label:</span></td><td>value</td>
 # (ids are fc1span / fc2span / …; allow attributes in either order)
 _TD_SPAN_BASE = re.compile(
     r"<td\b[^>]*>\s*<span\b(?=[^>]*\b(?:class=\"[^\"]*\bbase\b[^\"]*\"|id=\"fc\d+span\"))[^>]*>"
@@ -127,6 +128,7 @@ def extract_html_structure(html: str, *, base_url: str = "") -> dict[str, Any]:
         "forms": [],
         "loose_inputs": [],
         "links": [],
+        "actions": [],
         "handlers": [],
         "handler_functions": [],
         "labels": [],
@@ -148,6 +150,7 @@ def extract_html_structure(html: str, *, base_url: str = "") -> dict[str, Any]:
     forms: list[dict[str, Any]] = []
     loose: list[dict[str, Any]] = []
     links: list[dict[str, Any]] = []
+    actions: list[dict[str, Any]] = []
     handlers: list[dict[str, Any]] = []
     functions: list[dict[str, Any]] = []
     signals: dict[str, Any] = {}
@@ -161,6 +164,7 @@ def extract_html_structure(html: str, *, base_url: str = "") -> dict[str, Any]:
         forms = [_finalize_form(f) for f in parser.forms[:_MAX_FORMS]]
         loose = [_finalize_field(f) for f in parser.loose[:_MAX_LOOSE]]
         links = parser.links[:_MAX_LINKS]
+        actions = parser.actions[:_MAX_ACTIONS]
         handlers = parser.handlers[:_MAX_HANDLERS]
         functions = _summarize_handler_functions(handlers)
         signals = _summarize_signals(parser.signals)
@@ -171,6 +175,7 @@ def extract_html_structure(html: str, *, base_url: str = "") -> dict[str, Any]:
         "forms": forms,
         "loose_inputs": loose,
         "links": links,
+        "actions": actions,
         "handlers": handlers,
         "handler_functions": functions,
         "labels": labels,
@@ -280,6 +285,9 @@ class _FormParser(HTMLParser):
         self.loose: list[dict[str, Any]] = []
         self.links: list[dict[str, Any]] = []
         self.handlers: list[dict[str, Any]] = []
+        self.actions: list[dict[str, Any]] = []
+        self._action: dict[str, Any] | None = None
+        self._action_text: list[str] = []
         self.signals: list[dict[str, str]] = []
         self._form: dict[str, Any] | None = None
         self._select: dict[str, Any] | None = None
@@ -301,6 +309,7 @@ class _FormParser(HTMLParser):
         xpath = self._xpath(ad)
         self._note_signals(tag, ad)
         self._note_handlers(tag, ad, xpath=xpath)
+        self._note_action(tag, ad, xpath)
 
         if tag == "form":
             action = ad.get("action") or ""
@@ -309,7 +318,7 @@ class _FormParser(HTMLParser):
             ):
                 action = urljoin(self.base_url, action)
             self._form = {
-                "action": action,
+                "action": redact_url(action),
                 "method": (ad.get("method") or "get").upper(),
                 "id": ad.get("id") or "",
                 "name": ad.get("name") or "",
@@ -430,6 +439,8 @@ class _FormParser(HTMLParser):
             self._leave(tag)
 
     def handle_endtag(self, tag: str) -> None:
+        if self._action is not None and tag == self._action["tag"]:
+            self._close_action()
         if tag == "form" and self._form is not None:
             self.forms.append(self._form)
             self._form = None
@@ -476,6 +487,54 @@ class _FormParser(HTMLParser):
             self._textarea_text.append(data)
         if self._link is not None:
             self._link_text.append(data)
+        if self._action is not None:
+            self._action_text.append(data)
+
+    def _note_action(self, tag: str, ad: dict[str, str], xpath: str) -> None:
+        """Track JS-driven click targets (no navigable href) with visible text."""
+        if self._action is not None:
+            return
+        href = (ad.get("href") or "").strip().lower()
+        has_js = bool(ad.get("onclick")) or href.startswith("javascript:")
+        is_input_btn = tag == "input" and (ad.get("type") or "").lower() in {
+            "submit", "button", "image",
+        }
+        if tag == "a" and (has_js or href in {"", "#"}):
+            kind = "postback" if "__dopostback" in (ad.get("href", "") + ad.get("onclick", "")).lower() else "js_link"
+        elif tag == "button":
+            kind = "button"
+        elif is_input_btn:
+            kind = "button"
+        else:
+            return
+        action = {
+            "kind": kind,
+            "tag": tag,
+            "id": ad.get("id") or "",
+            "name": ad.get("name") or "",
+            "text": "",
+            "xpath": xpath,
+        }
+        if tag == "input":
+            action["text"] = _shape_value("link_text", ad.get("value") or ad.get("alt") or "") or ""
+            self._append_action(action)
+            return
+        self._action = action
+        self._action_text = []
+
+    def _append_action(self, action: dict[str, Any]) -> None:
+        if len(self.actions) < _MAX_ACTIONS and (action["text"] or action["id"]):
+            self.actions.append(action)
+
+    def _close_action(self) -> None:
+        action = self._action
+        self._action = None
+        if action is None:
+            return
+        text = re.sub(r"\s+", " ", "".join(self._action_text)).strip()
+        action["text"] = _shape_value("link_text", text) or ""
+        self._action_text = []
+        self._append_action(action)
 
     def _enter(self, tag: str) -> None:
         counts = self._sibling_counts[-1]
@@ -570,6 +629,7 @@ def _shape_link(
     resolved = raw
     if base_url and not raw.startswith(("http://", "https://", "//", "#")):
         resolved = urljoin(base_url, raw)
+    resolved, raw = redact_url(resolved), redact_url(raw)
     return {
         "tag": tag,
         "href": _shape_value("href", resolved) or "",
@@ -647,11 +707,41 @@ def _finalize_form(form: dict[str, Any]) -> dict[str, Any]:
         "field_names": names[:_MAX_FIELDS],
         "fields": fields,
     }
+    token_pair = _named_token_pair(form.get("fields") or [])
+    if token_pair:
+        out["anti_forgery"] = token_pair
     onsubmit = form.get("onsubmit") or ""
     if onsubmit:
         out["onsubmit"] = _shape_handler(onsubmit)
         out["onsubmit_functions"] = _handler_functions(onsubmit)
     return out
+
+
+def _named_token_pair(fields: list[dict[str, Any]]) -> dict[str, str] | None:
+    """Detect the "token name indirection" anti-forgery pattern.
+
+    One hidden field's *value* is the *name* of another hidden field that holds
+    the token (e.g. ``token.name`` = ``token``). A client must read the first
+    field to learn which parameter to send the token under. Technology-level:
+    seen in several server frameworks, so no framework is named here.
+    """
+    hidden = {
+        f.get("name"): f
+        for f in fields
+        if f.get("name") and (f.get("type") or "").lower() == "hidden"
+    }
+    for name, field in hidden.items():
+        target = field.get("value")
+        if not isinstance(target, str) or target == name or target not in hidden:
+            continue
+        if "token" not in f"{name} {target}".lower():
+            continue
+        return {
+            "scheme": "named_token",
+            "name_field": str(name),
+            "token_field": target,
+        }
+    return None
 
 
 def _finalize_field(field: dict[str, Any]) -> dict[str, Any]:

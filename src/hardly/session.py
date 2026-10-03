@@ -10,7 +10,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from hardly.index.ingest import ingest_har
+from hardly.index.ingest import INDEX_VERSION, ingest_har
 from hardly.index.schema import connect
 
 _lock = threading.Lock()
@@ -126,6 +126,7 @@ def open_har(har_path: str | Path, *, force: bool = False) -> dict:
                 stat = path.stat()
                 if (
                     meta.get("har_path") != str(path)
+                    or meta.get("index_version") != INDEX_VERSION
                     or meta.get("har_size") != stat.st_size
                     or abs(meta.get("har_mtime", 0) - stat.st_mtime) > 0.001
                 ):

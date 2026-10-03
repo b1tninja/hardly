@@ -29,7 +29,15 @@ _ATTR = re.compile(
 )
 _TOKENISH_NAME = re.compile(
     r"(token|csrf|xsrf|nonce|viewstate|eventvalidation|requestverification|"
-    r"session|state|challenge|authenticity)",
+    r"session|state|challenge|authenticity|key|ticket|secret|password|passwd)",
+    re.I,
+)
+# Request headers that are protocol plumbing, not replayed server-issued values.
+_PLUMBING_HEADER = re.compile(
+    r"^(:|accept|user-agent|host|referer|origin|content-|sec-|cache-control|"
+    r"connection|upgrade-insecure|pragma|dnt|te$|if-|range|cookie|authorization|"
+    r"x-requested-with|priority|via|forwarded|x-forwarded|x-real-ip|"
+    r"traceparent|tracestate|x-datadog|x-b3)",
     re.I,
 )
 _UUID = re.compile(
@@ -292,6 +300,10 @@ def _extract_consume(
         elif name in {"x-csrf-token", "x-xsrf-token", "x-request-verification-token"}:
             if _keep_value(value):
                 found.append(("header", value, name))
+        elif not _PLUMBING_HEADER.match(name) and _keep_value(value):
+            # Custom header carrying a value issued earlier (session key,
+            # API key handshake, per-page nonce).
+            found.append(("header", value, name))
         elif name == "authorization" and _keep_value(value):
             # Skip — always sensitive; still note reuse by length only if Bearer
             token = value.split(None, 1)[-1] if " " in value else value
