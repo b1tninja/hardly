@@ -36,6 +36,8 @@ from hardly.core.redact import (
     is_sensitive_key,
     redact_body_text,
     redact_header_value,
+    redact_query_dict,
+    redact_query_string,
 )
 from hardly.core.urls import parse_url, path_template
 from hardly.index.schema import connect, init_db
@@ -390,8 +392,10 @@ def ingest_har(har_path: str | Path, db_path: str | Path) -> dict[str, Any]:
                     parsed["host"],
                     parsed["path"],
                     path_template(parsed["path"]),
-                    json.dumps(parsed["query"]) if parsed["query"] else None,
-                    parsed["query_raw"] or None,
+                    # Secret-bearing values never reach the index (shapes are recorded
+                    # from the original below); entry/curl/stub/params read these.
+                    json.dumps(redact_query_dict(parsed["query"])) if parsed["query"] else None,
+                    redact_query_string(parsed["query_raw"]) or None,
                     status,
                     mime,
                     entry.get("startedDateTime"),

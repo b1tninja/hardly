@@ -164,6 +164,32 @@ def is_sensitive_key(key: str) -> bool:
     )
 
 
+def _is_secret_param(name: str) -> bool:
+    lowered = name.lower().replace("-", "_")
+    return (
+        lowered in URL_SECRET_PARAMS
+        or lowered.replace("_", "") in URL_SECRET_PARAMS
+        or is_sensitive_key(name)
+    )
+
+
+def redact_query_string(qs: str | None) -> str | None:
+    """Replace values of secret-bearing query params; keep names and the rest."""
+    if not qs or "=" not in qs:
+        return qs
+    pieces = []
+    for chunk in qs.split("&"):
+        name, sep, _val = chunk.partition("=")
+        pieces.append(f"{name}={REDACTED}" if sep and _is_secret_param(name) else chunk)
+    return "&".join(pieces)
+
+
+def redact_query_dict(query: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not query:
+        return query
+    return {k: (REDACTED if _is_secret_param(str(k)) else v) for k, v in query.items()}
+
+
 def redact_url(url: str) -> str:
     """Hide secret-bearing query values and ``;jsessionid=`` style path params.
 
