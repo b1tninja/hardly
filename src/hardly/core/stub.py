@@ -9,6 +9,7 @@ with extraction code instead of placeholders. Only user-supplied inputs
 
 from __future__ import annotations
 
+import inspect
 import json
 import re
 import sqlite3
@@ -17,6 +18,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
+from hardly.core.ajax_delta import delta_hidden, parse_delta
+from hardly.core.grids import paging_helper_source, paging_params
+from hardly.core.pagination import find_next, iter_follow
+from hardly.core.retry import (
+    RETRY_STATUSES,
+    backoff_delay,
+    retry_after_seconds,
+)
 from hardly.core.redact import classify_value_shape, is_sensitive_key
 from hardly.core.story import portal_story
 
@@ -39,6 +48,8 @@ _HELPERS = '''\
 def _hidden_fields(html: str) -> dict[str, str]:
     """All <input type=hidden> fields (name -> value) in an HTML document."""
     found: dict[str, str] = {}
+    if parse_delta(html):  # ASP.NET AJAX partial response
+        return delta_hidden(html)
 
     class _P(HTMLParser):
         def handle_starttag(self, tag, attrs):
@@ -118,6 +129,21 @@ def _json_path(text: str, path: str) -> str:
     assert cur is not None, f"JSON path {path!r} not found in previous response"
     return str(cur)
 '''
+
+
+_HELPERS += "\n\n" + "\n\n".join(
+    inspect.getsource(f) for f in (parse_delta, delta_hidden)
+)
+
+
+def _runtime_source() -> str:
+    """Run-time helpers (retry/backoff, next-link following, paging) for stubs."""
+    funcs = (retry_after_seconds, backoff_delay, find_next, iter_follow)
+    return (
+        "RETRY_STATUSES = " + repr(RETRY_STATUSES) + "\n\n\n"
+        + "\n\n\n".join(inspect.getsource(f) for f in funcs)
+        + "\n\n\n" + paging_helper_source()
+    )
 
 
 def client_stub(
@@ -209,9 +235,12 @@ def client_stub(
         '"""\n\n'
         "from __future__ import annotations\n\n"
         "import json\n"
+        "import os\n"
+        "import time\n"
         "from html.parser import HTMLParser\n"
         "from http.cookiejar import CookieJar\n"
-        "from urllib.parse import unquote, urlencode\n"
+        "from urllib.error import HTTPError, URLError\n"
+        "from urllib.parse import unquote, urlencode, urljoin\n"
         "from urllib.request import HTTPCookieProcessor, Request, build_opener\n\n"
         f"BASE = {base!r}\n"
         "UA = (\n"
@@ -225,7 +254,11 @@ def client_stub(
         "    def __init__(self) -> None:\n"
         "        self._jar = CookieJar()\n"
         "        self._opener = build_opener(HTTPCookieProcessor(self._jar))\n"
-        "        self.resp: dict[int, str] = {}  # entry_id -> response body\n\n"
+        "        self.resp: dict[int, str] = {}  # entry_id -> response body\n"
+        "        self.hidden: dict[str, str] = {}  # latest AJAX-delta hidden fields\n"
+        "        self.last_headers: dict[str, str] = {}\n"
+        "        self.pagers: dict[int, tuple] = {}  # entry_id -> (fetch, config)\n"
+        "        self.followers: dict[int, object] = {}  # entry_id -> fetch(ref)\n\n"
         "    def _fetch(\n"
         "        self,\n"
         "        method: str,\n"
@@ -233,12 +266,69 @@ def client_stub(
         "        data: bytes | None = None,\n"
         "        headers: dict[str, str] | None = None,\n"
         "    ) -> tuple[int, str]:\n"
+        '        """One request with retry/backoff (429/5xx, Retry-After honoured).\n\n'
+        "        Tune with HARDLY_STUB_RETRIES (default 3) and HARDLY_STUB_BACKOFF\n"
+        "        (base seconds, default 1.0). Non-idempotent requests are retried\n"
+        '        only on 429/503, which the server rejected before processing.\n'
+        '        """\n'
         '        sent = {"User-Agent": UA, "Accept": "*/*"}\n'
         "        if headers:\n"
         "            sent.update(headers)\n"
-        "        req = Request(url, data=data, headers=sent, method=method)\n"
-        "        with self._opener.open(req, timeout=60) as resp:\n"
-        '            return int(resp.status), resp.read().decode("utf-8", "replace")\n\n'
+        '        retries = int(os.environ.get("HARDLY_STUB_RETRIES", "3"))\n'
+        '        base = float(os.environ.get("HARDLY_STUB_BACKOFF", "1.0"))\n'
+        '        safe = method.upper() in ("GET", "HEAD", "OPTIONS")\n'
+        "        for attempt in range(retries + 1):\n"
+        "            req = Request(url, data=data, headers=sent, method=method)\n"
+        "            try:\n"
+        "                with self._opener.open(req, timeout=60) as resp:\n"
+        "                    status, hdrs, raw = int(resp.status), resp.headers, resp.read()\n"
+        "            except HTTPError as exc:\n"
+        "                status, hdrs, raw = int(exc.code), exc.headers, exc.read()\n"
+        "            except URLError:\n"
+        "                if attempt >= retries or not safe:\n"
+        "                    raise\n"
+        "                time.sleep(backoff_delay(attempt, None, base, jitter=0.2))\n"
+        "                continue\n"
+        "            if (\n"
+        "                status in RETRY_STATUSES\n"
+        "                and attempt < retries\n"
+        "                and (safe or status in (429, 503))\n"
+        "            ):\n"
+        '                wait = retry_after_seconds(hdrs.get("Retry-After"))\n'
+        "                time.sleep(backoff_delay(attempt, wait, base, jitter=0.2))\n"
+        "                continue\n"
+        "            break\n"
+        "        self.last_headers = {k: v for k, v in hdrs.items()}\n"
+        '        text = raw.decode("utf-8", "replace")\n'
+        "        for kind, ident, _content in parse_delta(text):\n"
+        '            if kind == "error":\n'
+        '                raise AssertionError(f"async postback error {ident}")\n'
+        "        self.hidden.update(delta_hidden(text))\n"
+        "        return status, text\n\n"
+        "    def _refresh(self, form: dict) -> dict:\n"
+        '        """Swap in the newest server-issued hidden values (VIEWSTATE etc.)."""\n'
+        "        return {k: self.hidden.get(k, v) for k, v in form.items()}\n\n"
+        "    def _absorb(self, body: str) -> str:\n"
+        "        if \"<input\" in body:\n"
+        "            self.hidden.update(_hidden_fields(body))\n"
+        "        return body\n\n"
+        "    def _follow_get(self, url, query, hdrs, ref):\n"
+        '        """Fetch the first page (ref None) or the next-link/cursor page."""\n'
+        "        if ref is None:\n"
+        "            target = url + ('?' + urlencode(query) if query else '')\n"
+        '        elif ref["kind"] in ("link-header", "next-link"):\n'
+        '            target = urljoin(url, ref["value"])\n'
+        "        else:\n"
+        '            target = url + "?" + urlencode({**query, ref["param"]: ref["value"]})\n'
+        '        _, body = self._fetch("GET", target, headers=hdrs)\n'
+        "        return self.last_headers, body\n\n"
+        "    def pages(self, entry_id: int, **overrides):\n"
+        '        """Iterate page bodies of a captured paged request until empty/last."""\n'
+        "        fetch, cfg = self.pagers[entry_id]\n"
+        "        return iter_pages(fetch, **{**cfg, **overrides})\n\n"
+        "    def follow(self, entry_id: int, **kw):\n"
+        '        """Iterate page bodies by following next-link/cursor/Link header."""\n'
+        "        return iter_follow(self.followers[entry_id], **kw)\n\n"
         "    def run(self, **inputs: str) -> None:\n"
         "        # Steps follow capture order; pass user inputs as keywords.\n"
         "        inp = {**INPUT_DEFAULTS, **inputs}\n"
@@ -249,6 +339,8 @@ def client_stub(
         head
         + _HELPERS
         + "\n\n"
+        + _runtime_source()
+        + "\n\n\n"
         + cls
         + "\n"
         + indented
@@ -405,6 +497,9 @@ def _earlier_hidden_sources(
         if not row or not row["preview_text"]:
             continue
         text = row["preview_text"]
+        # AJAX partial responses carry refreshed hidden fields (names only here).
+        for n in delta_hidden(text):
+            found[n] = eid
         if "html" not in (row["content_type"] or "").lower() and "<input" not in text.lower():
             continue
         for n in _hidden_names(text):
@@ -498,7 +593,13 @@ def _entry_step(
 
     # --- URL (query params may be carried) --------------------------------
     query_wires = {w["to_name_hint"]: w for w in by_where.get("query", [])}
-    if query_wires and row["query_raw"]:
+    nxt = _next_shape(conn, entry_id) if method == "GET" else None
+    paging = (
+        paging_params(dict(parse_qsl(row["query_raw"] or "", keep_blank_values=True)))
+        if method == "GET"
+        else None
+    )
+    if (query_wires or nxt or paging) and row["query_raw"]:
         query: dict[str, Any] = {}
         for k, v in parse_qsl(row["query_raw"], keep_blank_values=True):
             if k in query_wires:
@@ -514,6 +615,9 @@ def _entry_step(
                 query[k] = v
         lines.append(f"query = {_render(query)}")
         lines.append(f"url = {base_url!r} + '?' + urlencode(query)")
+    elif nxt:
+        lines.append("query = {}")
+        lines.append(f"url = {base_url!r}")
     else:
         url = base_url + (f"?{row['query_raw']}" if row["query_raw"] else "")
         lines.append(f"url = {url!r}")
@@ -575,7 +679,9 @@ def _entry_step(
                     f"# hidden fields (VIEWSTATE, antiforgery, ...) carried "
                     f"from entry {src}"
                 )
-                form["**"] = _Spread(f"_hidden_fields(self.resp[{src}])")
+                form["**"] = _Spread(
+                    f"{{**_hidden_fields(self.resp[{src}]), **self.hidden}}"
+                )
             for name, val in parse_qsl(raw, keep_blank_values=True)[:40]:
                 if not name:
                     continue
@@ -609,16 +715,71 @@ def _entry_step(
                     form[name] = val
             lines.append(f"form = {_render(form)}")
             send = ", data=urlencode(form).encode()"
+            paging = paging_params(dict(parse_qsl(raw, keep_blank_values=True)[:60]))
+            if paging:
+                lines.append(
+                    f"# paging ({paging['style']}): iterate with self.pages({entry_id})"
+                )
+                lines.append(
+                    f"self.pagers[{entry_id}] = (lambda p, _u=url, _f=dict(form), "
+                    f"_h=dict(hdrs): self._absorb(self._fetch({method!r}, _u, "
+                    f"data=urlencode({{**self._refresh(_f), **p}}).encode(), "
+                    f"headers=_h)[1]), {_pager_cfg(paging)!r})"
+                )
 
     lines.append(
         f"status, body = self._fetch({method!r}, url{send}, headers=hdrs)"
     )
     lines.append(f"self.resp[{entry_id}] = body")
     lines.append("assert status < 400, (status, body[:200])")
+    if method == "GET" and paging:
+        lines.append(f"# paging ({paging['style']}): iterate with self.pages({entry_id})")
+        lines.append(
+            f"self.pagers[{entry_id}] = (lambda p, _u={base_url!r}, _q=dict(query), "
+            f"_h=dict(hdrs): self._absorb(self._fetch('GET', _u + '?' + "
+            f"urlencode({{**_q, **p}}), headers=_h)[1]), {_pager_cfg(paging)!r})"
+        )
+    if method == "GET" and nxt:
+        lines.append(
+            f"# pagination ({nxt['kind']} {nxt['name']}): self.follow({entry_id})"
+        )
+        lines.append(
+            f"self.followers[{entry_id}] = lambda ref, _u={base_url!r}, "
+            "_q=dict(query), _h=dict(hdrs): self._follow_get(_u, _q, _h, ref)"
+        )
     return {
         "host": f"{row['scheme']}://{row['host']}",
         "code": "\n".join(lines),
     }
+
+
+def _pager_cfg(paging: dict[str, Any]) -> dict[str, Any]:
+    """iter_pages keywords from a paging_params() result (names and ints only)."""
+    keys = ("page_param", "offset_param", "size_param", "first", "size", "value_fmt")
+    return {k: paging[k] for k in keys if paging.get(k) is not None}
+
+
+def _next_shape(conn: sqlite3.Connection, entry_id: int) -> dict[str, Any] | None:
+    """next-link / cursor / Link-header shape of this entry's response, if any."""
+    row = conn.execute(
+        "SELECT preview_text FROM bodies WHERE entry_id = ? AND side = 'response'",
+        (entry_id,),
+    ).fetchone()
+    hdrs = {
+        h["name"]: h["value_redacted"]
+        for h in conn.execute(
+            "SELECT name, value_redacted FROM headers WHERE entry_id = ? "
+            "AND side = 'response' AND lower(name) = 'link'",
+            (entry_id,),
+        )
+    }
+    try:
+        ref = find_next(hdrs, (row["preview_text"] if row else "") or "")
+    except Exception:  # noqa: BLE001
+        return None
+    if ref and ref["kind"] == "cursor" and not ref["param"]:
+        return None
+    return ref
 
 
 _ALWAYS_PLACEHOLDER = re.compile(
