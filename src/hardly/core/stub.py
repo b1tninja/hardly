@@ -388,6 +388,17 @@ def _entry_step(
         if k.lower()
         in {"content-type", "accept", "x-requested-with", "origin", "referer"}
     }
+    # Authorization/API-key headers: keep the scheme, never the value.
+    for k in list(headers):
+        low = k.lower()
+        if low == "authorization":
+            basic = str(headers[k]).lower().startswith("basic")
+            interesting[k] = (
+                "Basic PLACEHOLDER_BASIC_CREDENTIALS" if basic
+                else "Bearer PLACEHOLDER_TOKEN"
+            )
+        elif low in {"api_key", "api-key", "apikey", "x-api-key", "x-auth-token", "x-access-token"}:
+            interesting[k] = f"PLACEHOLDER_{low.upper().replace('-', '_')}"
     by_where: dict[str, list[dict[str, Any]]] = {}
     for w in wires:
         by_where.setdefault(w["to_where"], []).append(w)

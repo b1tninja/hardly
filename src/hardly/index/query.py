@@ -157,12 +157,16 @@ def _host_apex(host: str) -> str:
 # Tile / analytics / payment / captcha CDNs — never seed preferred_host from these.
 _CDN_SEED_RE = re.compile(
     r"(?i)(^|\.)("
-    r"arcgis|arcgisonline|googleapis|gstatic|ggpht|stripe|stripecdn|"
-    r"cloudflare|akamai|walkme|clarity\.ms|linkedin|facebook|fbcdn|"
-    r"googletagmanager|google-analytics|siteimproveanalytics|"
+    r"arcgis\w*|googleapis|gstatic|ggpht|stripe\w*|"
+    r"cloudflare\w*|akamai\w*|edgekey|edgesuite|fastly\w*|walkme|clarity\.ms|linkedin|facebook|fbcdn|"
+    r"googletagmanager|google-analytics|googlesyndication|siteimproveanalytics|"
     r"doubleclick|hotjar|segment\.|sentry\.|newrelic|nr-data|"
-    r"fontawesome|bootstrapcdn|jsdelivr|unpkg|cdnjs|"
-    r"hcaptcha|recaptcha|google\.com|gstatic\.com"
+    r"optimizely|onetrust|cookielaw|cookiebot|trustarc|truste|tiqcdn|adobedtm|demdex|omtrdc|"
+    r"qualtrics|intercom\w*|hubspot\w*|hs-\w+|fullstory|mouseflow|crazyegg|datadoghq|"
+    r"bing\.com|twimg|ytimg|youtube|vimeocdn|typekit|gravatar|"
+    r"fontawesome|bootstrapcdn|jsdelivr|unpkg|cdnjs|jquery\.com|"
+    r"hcaptcha|recaptcha|px-cloud|px-cdn|perimeterx|captcha-delivery|datadome|"
+    r"google\.com|gstatic\.com"
     r")(\.|$)"
 )
 
@@ -516,8 +520,7 @@ def list_forms(
     if exclude_noise:
         clauses.append("e.is_noise = 0")
     where = " AND ".join(clauses)
-    # Oversample then rank by label_count so detail pages (KoFile transAddDoc,
-    # MPTSWEB AsrMain) beat early login/search shells within the first page.
+    # Oversample then rank by label_count so detail pages (label-rich) beat early login/search shells within the first page.
     scan = min(150, max(min(limit, 100) * 5, min(limit, 100) + offset + 10))
     rows = conn.execute(
         f"""

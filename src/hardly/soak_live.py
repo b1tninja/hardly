@@ -3,7 +3,7 @@
 Usage::
 
     python -m hardly.soak_live
-    python -m hardly.soak_live --ids wyobiz,httpbin-form
+    python -m hardly.soak_live --ids local-webforms,httpbin-form
     HARDLY_LIVE_CAPTURE=1 pytest tests/test_live_soak.py
 
 Requires ``pip install -e ".[capture]"`` and ``playwright install chromium``.
@@ -31,6 +31,20 @@ def _ensure_cache() -> Path:
     return Path(os.environ["HARDLY_CACHE_DIR"])
 
 
+_LOCAL: dict[str, Any] = {}
+
+
+def _resolve_url(url: str) -> str:
+    """Map ``local:/path`` onto the synthetic loopback site (started lazily)."""
+    if not url.startswith("local:"):
+        return url
+    if "base" not in _LOCAL:
+        from hardly.local_site import start
+
+        _LOCAL["server"], _LOCAL["base"] = start()  # daemon thread; lives to exit
+    return _LOCAL["base"] + url.removeprefix("local:")
+
+
 def run_target(target: LiveTarget) -> dict[str, Any]:
     """Capture one target headlessly and evaluate expected analysis signals."""
     from hardly.capture import capture_headless, playwright_status
@@ -41,6 +55,7 @@ def run_target(target: LiveTarget) -> dict[str, Any]:
     from hardly import session as sess
 
     t0 = time.perf_counter()
+    url = _resolve_url(target.url)
     out: dict[str, Any] = {
         "id": target.id,
         "url": target.url,
@@ -56,7 +71,7 @@ def run_target(target: LiveTarget) -> dict[str, Any]:
 
     try:
         captured = capture_headless(
-            target.url,
+            url,
             wait_seconds=target.wait_seconds,
             recipe=list(target.recipe) or None,
             open_session=True,

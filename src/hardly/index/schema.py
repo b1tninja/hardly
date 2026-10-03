@@ -62,6 +62,15 @@ CREATE TABLE IF NOT EXISTS bodies (
 
 CREATE INDEX IF NOT EXISTS idx_bodies_entry ON bodies(entry_id);
 
+-- Signals computed at ingest on the FULL body (the stored preview is capped).
+CREATE TABLE IF NOT EXISTS body_signals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id INTEGER NOT NULL REFERENCES entries(entry_id),
+    kind TEXT NOT NULL,
+    name TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_body_signals_entry ON body_signals(entry_id, kind);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS bodies_fts USING fts5(
     entry_id UNINDEXED,
     side UNINDEXED,

@@ -202,19 +202,24 @@ def playwright_status() -> dict[str, Any]:
     chromium_ok = bool((browsers.get("chromium") or {}).get("installed"))
     channel = default_channel()
     # channel=chrome uses system Chrome — no playwright browser download needed
-    out["ready"] = chromium_ok or bool(channel)
+    executable = default_executable()
+    out["browser_executable"] = executable or None
+    out["ready"] = chromium_ok or bool(channel) or bool(executable)
     if not out["ready"]:
         out["hint"] = (
             "Chromium browser binary missing. Run: playwright install chromium "
-            "(or set HARDLY_BROWSER_CHANNEL=chrome to use system Chrome)"
+            "(or set HARDLY_BROWSER_CHANNEL=chrome to use system Chrome, or "
+            "HARDLY_BROWSER_EXECUTABLE=/path/to/chromium)"
         )
+    elif executable and not chromium_ok:
+        out["hint"] = f"Ready (executable={executable})."
     elif channel:
         out["hint"] = (
             f"Ready (channel={channel}). Prefer channel=chrome for Akamai / bot walls."
         )
     else:
         out["hint"] = (
-            "Ready with bundled Chromium. For county / Akamai portals prefer "
+            "Ready with bundled Chromium. For bot-walled sites (Akamai etc.) prefer "
             "channel=chrome (system Chrome)."
         )
     return out
@@ -250,6 +255,16 @@ def default_har_path(label: str = "capture") -> Path:
 
 def default_channel() -> str:
     return (os.environ.get("HARDLY_BROWSER_CHANNEL") or "").strip()
+
+
+def default_executable() -> str:
+    """Chromium binary to launch instead of Playwright's own download.
+
+    Set ``HARDLY_BROWSER_EXECUTABLE`` when the preinstalled browser build does
+    not match the installed Playwright version (common in managed containers).
+    """
+    path = (os.environ.get("HARDLY_BROWSER_EXECUTABLE") or "").strip()
+    return path if path and Path(path).is_file() else ""
 
 
 def start_capture(
@@ -757,10 +772,10 @@ def run_capture_recipe(
                     raise CaptureError("goto requires url")
                 navigate_capture(cid, url)
                 # Give navigation a moment; url rpc confirms.
-                time.sleep(min(float(raw.get("ms") or 500) / 1000.0, 10.0))
+                time.sleep(min(_wait_ms(raw, 500) / 1000.0, 10.0))
                 step_out["result"] = capture_page_url(cid)
             elif op == "wait":
-                ms = min(max(int(raw.get("ms") or 1000), 0), 30_000)
+                ms = min(max(_wait_ms(raw, 1000), 0), 30_000)
                 time.sleep(ms / 1000.0)
                 step_out["result"] = {"waited_ms": ms}
             elif op == "elements":
@@ -1007,6 +1022,8 @@ def capture_headless(
         launch_kwargs: dict[str, Any] = {"headless": True}
         if use_channel:
             launch_kwargs["channel"] = use_channel
+        elif default_executable():
+            launch_kwargs["executable_path"] = default_executable()
         context_kwargs: dict[str, Any] = {
             "record_har_path": str(target),
             "record_har_mode": "full",
@@ -1051,9 +1068,7 @@ def capture_headless(
             goto_error: str | None = None
             try:
                 if target_url and target_url != "about:blank":
-                    page.goto(
-                        target_url, wait_until="domcontentloaded", timeout=60_000
-                    )
+                    _goto_with_retry(page, target_url)
                 elif target_url == "about:blank":
                     page.goto("about:blank")
             except Exception as exc:  # noqa: BLE001
@@ -1134,6 +1149,132 @@ def capture_headless(
     return out
 
 
+_TRANSIENT_NAV = (
+    "ERR_TOO_MANY_RETRIES", "ERR_CONNECTION_RESET", "ERR_CONNECTION_CLOSED",
+    "ERR_EMPTY_RESPONSE", "ERR_NETWORK_CHANGED", "ERR_HTTP2_PROTOCOL_ERROR",
+    "ERR_SOCKET_NOT_CONNECTED", "is interrupted by another navigation",
+)
+
+
+def _goto_with_retry(
+    page: Any, url: str, *, wait_until: str = "domcontentloaded", timeout: int = 60_000, attempts: int = 3
+) -> Any:
+    """``page.goto`` that retries transient network errors (not proxy denials)."""
+    last: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            return page.goto(url, wait_until=wait_until, timeout=timeout)
+        except Exception as exc:  # noqa: BLE001
+            last = exc
+            if not any(t in str(exc) for t in _TRANSIENT_NAV) or attempt == attempts - 1:
+                raise
+            page.wait_for_timeout(1_200 * (attempt + 1))
+    raise last  # pragma: no cover — loop always returns or raises
+
+
+def _wait_ms(raw: dict[str, Any], default: int) -> int:
+    """Wait length in ms from ``ms`` or (friendlier) ``seconds``."""
+    if raw.get("ms") not in (None, ""):
+        return int(float(raw["ms"]))
+    if raw.get("seconds") not in (None, ""):
+        return int(float(raw["seconds"]) * 1000)
+    return default
+
+
+def _settled_content(page: Any) -> str:
+    """``page.content()`` that survives in-flight navigations and empty shells."""
+    try:
+        page.wait_for_load_state("domcontentloaded", timeout=8_000)
+    except Exception:  # noqa: BLE001
+        pass
+    html = ""
+    for _ in range(4):
+        try:
+            html = page.content()
+        except Exception:  # noqa: BLE001 — "page is navigating and changing the content"
+            page.wait_for_timeout(600)
+            continue
+        if len(html) > 120:
+            return html
+        page.wait_for_timeout(600)
+    return html
+
+
+def _find_click(page: Any, raw: dict[str, Any]) -> dict[str, Any]:
+    """Follow ranked links/buttons hop by hop until a search form appears.
+
+    Step fields: ``keywords`` (list of domain terms), ``max_hops`` (default 4,
+    cap 8), ``min_fields`` (default 2). Generic signals plus caller keywords
+    choose the click; visited targets are never re-clicked. Hidden elements,
+    ``target=_blank`` links and failed clicks fall back to navigating straight
+    to the link's ``href``.
+    """
+    from hardly.core.search_nav import page_candidates, search_form_reached
+
+    keywords = [str(k) for k in (raw.get("keywords") or [])]
+    max_hops = min(max(int(raw.get("max_hops") or 4), 1), 8)
+    min_fields = max(int(raw.get("min_fields") or 2), 1)
+    visited: set[str] = set()
+    hops: list[dict[str, Any]] = []
+    form = None
+    for _ in range(max_hops + 1):
+        html = _settled_content(page)
+        cands, structure = page_candidates(html, base_url=page.url, keywords=keywords)
+        form = search_form_reached(structure, min_fields=min_fields, keywords=keywords)
+        if form:
+            break
+        if len(hops) >= max_hops:
+            break
+        # After the first hop, only follow links with real evidence (a caller
+        # keyword or a strong search/lookup phrase), not generic gateway words.
+        floor = 1 if not hops else 5
+        pick = next(
+            (c for c in cands if c["click"]["css"] not in visited and c["score"] >= floor), None
+        )
+        if pick is None:
+            break
+        visited.add(pick["click"]["css"])
+        before = page.url
+        href = pick.get("href") or ""
+        has_href = href.startswith(("http://", "https://"))
+        via = "click"
+        try:
+            if has_href and pick.get("target") == "_blank":
+                via = "goto"  # would open a new tab we are not tracking
+                _goto_with_retry(page, href, timeout=30_000)
+            else:
+                # first *visible* match: the same text often also sits in a hidden mega-menu
+                loc = page.locator(pick["click"]["css"] + ":visible").first
+                try:
+                    loc.wait_for(state="visible", timeout=1_500)
+                    loc.click(timeout=6_000)
+                except Exception:  # noqa: BLE001 — hidden/covered element
+                    if not has_href:
+                        raise
+                    via = "goto"
+                    _goto_with_retry(page, href, timeout=30_000)
+        except Exception as exc:  # noqa: BLE001
+            hops.append({"from": before, "clicked": pick["text"], "error": str(exc)[:120]})
+            continue
+        try:
+            page.wait_for_load_state("domcontentloaded", timeout=8_000)
+        except Exception:  # noqa: BLE001
+            pass
+        page.wait_for_timeout(400)
+        if page.url.startswith("chrome-error://"):
+            # The destination failed to load: step back and try the next candidate.
+            hops.append({"from": before, "clicked": pick["text"], "error": "navigation failed (browser error page)"})
+            try:
+                _goto_with_retry(page, before, timeout=30_000, attempts=2)
+            except Exception:  # noqa: BLE001
+                break
+            continue
+        hops.append(
+            {"from": before, "clicked": pick["text"], "css": pick["click"]["css"], "to": page.url, "via": via}
+        )
+    return {"reached": form is not None, "form": form, "hops": hops, "url": page.url}
+
+
 def _run_inprocess_recipe(page: Any, steps: list[dict[str, Any]]) -> dict[str, Any]:
     """Minimal recipe runner for in-process headless capture (goto/wait/click/fill)."""
     results: list[dict[str, Any]] = []
@@ -1145,14 +1286,14 @@ def _run_inprocess_recipe(page: Any, steps: list[dict[str, Any]]) -> dict[str, A
         step_out: dict[str, Any] = {"op": op, "ok": True}
         try:
             if op == "wait":
-                ms = min(max(int(raw.get("ms") or 1000), 0), 30_000)
+                ms = min(max(_wait_ms(raw, 1000), 0), 30_000)
                 page.wait_for_timeout(ms)
                 step_out["result"] = {"waited_ms": ms}
             elif op == "goto":
                 dest = str(raw.get("url") or "").strip()
                 if not dest:
                     raise CaptureError("goto requires url")
-                page.goto(dest, wait_until="domcontentloaded", timeout=60_000)
+                _goto_with_retry(page, dest)
                 step_out["result"] = {"url": page.url}
             elif op == "click":
                 css = str(raw.get("css") or raw.get("selector") or "").strip()
@@ -1173,6 +1314,8 @@ def _run_inprocess_recipe(page: Any, steps: list[dict[str, Any]]) -> dict[str, A
             elif op == "press":
                 page.keyboard.press(str(raw.get("key") or "Enter"))
                 step_out["result"] = {"url": page.url}
+            elif op == "find_click":
+                step_out["result"] = _find_click(page, raw)
             elif op == "evaluate":
                 js = str(raw.get("js") or raw.get("expression") or "").strip()
                 if not js:

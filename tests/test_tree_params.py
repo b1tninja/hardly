@@ -15,7 +15,7 @@ def test_tree_js_children(tmp_path, monkeypatch):
     monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path))
     info = sess.open_har(str(FIX), force=True)
     conn = sess.require_conn(info["session_id"])
-    # AcclaimSearchPages.js is entry 8
+    # the search-pages .js script is entry 8
     tree = entry_tree(conn, 8)
     assert tree["initiator_type"] == "parser"
     assert tree["parent"] and tree["parent"]["entry_id"] == 7

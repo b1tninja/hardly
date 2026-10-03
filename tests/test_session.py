@@ -143,3 +143,19 @@ def test_cache_reuse(session_id, tmp_path, monkeypatch):
     again = sess.open_har(FIXTURE, force=False)
     assert again["cached"] is True
     assert again["session_id"] == session_id
+
+
+def test_stale_index_version_is_rebuilt(tmp_path, monkeypatch):
+    """A cache written by an older ingest (unredacted queries, old shapes) is rebuilt."""
+    import json as _json
+
+    monkeypatch.setattr(sess, "cache_dir", lambda: tmp_path / "cache")
+    info = sess.open_har(FIXTURE, force=True)
+    assert sess.open_har(FIXTURE).get("cached") is True
+    meta_path = tmp_path / "cache" / f"{info['session_id']}.json"
+    meta = _json.loads(meta_path.read_text())
+    assert meta["index_version"] >= 3
+    meta["index_version"] = 1
+    meta_path.write_text(_json.dumps(meta))
+    sess._sessions.pop(info["session_id"], None)
+    assert sess.open_har(FIXTURE).get("cached") is False

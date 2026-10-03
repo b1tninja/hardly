@@ -17,3 +17,6 @@ build/
 *.HAR
 .mcp.json
 .cursor/
+
+# Agent worktrees (local checkouts, never commit)
+.claude/worktrees/

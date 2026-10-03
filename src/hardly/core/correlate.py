@@ -29,15 +29,17 @@ _ATTR = re.compile(
 )
 _TOKENISH_NAME = re.compile(
     r"(token|csrf|xsrf|nonce|viewstate|eventvalidation|requestverification|"
-    r"session|state|challenge|authenticity)",
+    r"session|state|challenge|authenticity|key|ticket|secret|password|passwd)",
     re.I,
 )
-_BORING_X_HEADERS = {
-    "x-requested-with",
-    "x-forwarded-for",
-    "x-forwarded-proto",
-    "x-client-data",
-}
+# Request headers that are protocol plumbing, not replayed server-issued values.
+_PLUMBING_HEADER = re.compile(
+    r"^(:|accept|user-agent|host|referer|origin|content-|sec-|cache-control|"
+    r"connection|upgrade-insecure|pragma|dnt|te$|if-|range|cookie|authorization|"
+    r"x-requested-with|priority|via|forwarded|x-forwarded|x-real-ip|"
+    r"traceparent|tracestate|x-datadog|x-b3)",
+    re.I,
+)
 _UUID = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     re.I,
@@ -300,13 +302,13 @@ def _extract_consume(
                 cname, cval = part.split("=", 1)
                 if _keep_value(cval.strip()):
                     found.append(("cookie", cval.strip(), cname.strip()))
-        elif (
-            name in {"x-csrf-token", "x-xsrf-token", "x-request-verification-token"}
-            or (name.startswith("x-") and name not in _BORING_X_HEADERS)
-            or _TOKENISH_NAME.search(name)
-        ) and name not in {"cookie", "set-cookie", "authorization"}:
+        elif name in {"x-csrf-token", "x-xsrf-token", "x-request-verification-token"}:
             if _keep_value(value):
                 found.append(("header", value, name))
+        elif not _PLUMBING_HEADER.match(name) and _keep_value(value):
+            # Custom header carrying a value issued earlier (session key,
+            # API key handshake, per-page nonce).
+            found.append(("header", value, name))
         elif name == "authorization" and _keep_value(value):
             # Skip — always sensitive; still note reuse by length only if Bearer
             token = value.split(None, 1)[-1] if " " in value else value

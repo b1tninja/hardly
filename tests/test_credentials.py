@@ -141,3 +141,35 @@ def test_entry_includes_shapes(tmp_path, monkeypatch):
     # Password must not appear in query dump.
     blob = str(entry)
     assert "s3cret" not in blob
+
+
+def test_credentials_reports_named_token_forms(tmp_path, monkeypatch):
+    import json
+
+    from hardly import session as sess
+    from hardly.core.credentials import map_credentials
+
+    html = (
+        '<form action="/login.action" method="post">'
+        '<input type="hidden" name="struts.token.name" value="token">'
+        '<input type="hidden" name="token" value="SECRETTOKENVALUE123">'
+        '<input name="username"><input type="password" name="password"></form>'
+    )
+    entry = {
+        "startedDateTime": "2026-01-01T00:00:01.000Z", "time": 5,
+        "request": {"method": "GET", "url": "https://app.example.com/login", "httpVersion": "HTTP/1.1",
+                    "headers": [], "queryString": [], "cookies": [], "headersSize": -1, "bodySize": 0},
+        "response": {"status": 200, "statusText": "OK", "httpVersion": "HTTP/1.1",
+                     "headers": [{"name": "Content-Type", "value": "text/html"}], "cookies": [],
+                     "redirectURL": "", "headersSize": -1, "bodySize": len(html),
+                     "content": {"size": len(html), "mimeType": "text/html", "text": html}},
+    }
+    path = tmp_path / "f.har"
+    path.write_text(json.dumps({"log": {"version": "1.2", "creator": {"name": "t", "version": "1"}, "entries": [entry]}}))
+    monkeypatch.setenv("HARDLY_CACHE_DIR", str(tmp_path / "cache"))
+    info = sess.open_har(str(path), force=True)
+    out = map_credentials(sess.require_conn(info["session_id"]))
+    forms = out["anti_forgery_forms"]
+    assert forms and forms[0]["token_field"] == "token"
+    assert forms[0]["name_field"] == "struts.token.name"
+    assert "SECRETTOKENVALUE123" not in str(out)
