@@ -114,3 +114,11 @@ never bodies or values.
 ## Stub helpers
 
 Generated stubs retry 429/5xx with backoff and `Retry-After` (`HARDLY_STUB_RETRIES`, `HARDLY_STUB_BACKOFF`), expose `client.pages(entry_id)` (grid paging parameters) and `client.follow(entry_id)` (cursor / next-link / `Link` header), and carry refreshed hidden fields from ASP.NET AJAX partial responses. `hardly pagination <har>` shows the detected paging shapes.
+
+## Verifying a client
+
+- `hardly flow-graph <har> <entry>` shows the ordered steps and which earlier response supplied each header, cookie, hidden field or value, plus the inputs you must supply (credentials, tokens).
+- `hardly flow-replay <har> <entry> --confirm` replays that flow live (dry run without `--confirm`) and names the first step whose status, content type or body shape diverges. Secrets come from `HARDLY_INPUT_<NAME>` env vars or `--env-json`; values are never printed.
+- `hardly contract-check <har> <openapi>` compares a fresh capture with an exported OpenAPI file and lists drift. "Removed" means not observed, which may only be a coverage gap.
+- `hardly body-query` searches inside very large bodies (JSONPath-lite or regex, paged); `hardly streams` summarises gRPC/protobuf/MessagePack/CSV/SSE/WebSocket traffic.
+- `hardly har-doctor` checks the HAR itself (truncated bodies, sanitised cookies, clock skew, noise); `hardly har prune|split|merge|scrub` produce cleaned copies and never edit in place.

@@ -62,6 +62,18 @@ Body-preview coverage: how many entries have usable text vs empty/truncated.
 
 ## Endpoints and content
 
+### `hardly_streams(session_id, host=None, kind=None, exclude_noise=True, limit=40)`
+
+Summarise non-JSON stream/binary formats: gRPC(-web), protobuf, MessagePack, CSV/TSV, SSE and WebSocket frames. Shapes only.
+
+### `hardly_body_query(session_id, entry_id, side='response', jsonpath=None, regex=None, offset=0, limit=20, max_chars=300, context=40, ignore_case=False)`
+
+Search inside a large body without loading it into context: JSONPath-lite ($.a[*].b, ..key, [a:b]) or regex, paged (pass next_offset while has_more). Sensitive keys/values come back as shapes.
+
+### `hardly_contract_check(session_id, openapi_path, host=None)`
+
+Compare this capture with a previously exported OpenAPI file and report drift (new/removed endpoints, status, field, parameter and auth changes). Removed = not observed, which may be a coverage gap.
+
 ### `hardly_hosts(session_id, exclude_noise=False)`
 
 List hosts with request counts.
@@ -291,6 +303,14 @@ Write a portal RE brief Markdown file (story, correlate, forms, routes).
 Run a read-only SELECT against the session SQLite index.
 
 ## Live probe
+
+### `hardly_flow_graph(session_id, entry_id, host=None, max_depth=8)`
+
+Trace what a request depends on: which earlier response supplied each header, cookie, hidden field or value. Ordered minimal steps plus inputs the user/env must supply. Names/shapes/ids only.
+
+### `hardly_flow_replay(session_id, target=None, entry_ids=None, env_json=None, confirm=False, delay_s=0.5, max_requests=20, allow_unsafe=False, allow_gates=None)`
+
+Replay an ordered flow live and report the first step whose status/content-type/body shape diverges. Without confirm=true it is a dry run (plan + missing inputs). Secrets only via env_json {name: value} or HARDLY_INPUT_<NAME> env vars; values are never printed. GET/HEAD only unless allow_unsafe; halts on 429/Retry-After/gates.
 
 ### `hardly_probe(session_id, entry_id, confirm=False, header_overrides_json=None, body_override=None, timeout=30.0)`
 

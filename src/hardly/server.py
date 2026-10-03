@@ -1547,6 +1547,100 @@ def hardly_har_scrub(src: str, dst: str, overwrite: bool = False) -> str:
 
 
 @mcp.tool
+def hardly_streams(session_id: str, host: str | None = None, kind: str | None = None, exclude_noise: bool = True, limit: int = 40) -> str:
+    """Summarise non-JSON stream/binary formats: gRPC(-web), protobuf, MessagePack, CSV/TSV, SSE and WebSocket frames. Shapes only."""
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.streams import summarize_streams
+
+    return _ok(summarize_streams(conn, host=host, kind=kind, exclude_noise=exclude_noise, limit=min(limit, 100)))
+
+
+@mcp.tool
+def hardly_body_query(
+    session_id: str,
+    entry_id: int,
+    side: str = "response",
+    jsonpath: str | None = None,
+    regex: str | None = None,
+    offset: int = 0,
+    limit: int = 20,
+    max_chars: int = 300,
+    context: int = 40,
+    ignore_case: bool = False,
+) -> str:
+    """Search inside a large body without loading it into context: JSONPath-lite ($.a[*].b, ..key, [a:b]) or regex, paged (pass next_offset while has_more). Sensitive keys/values come back as shapes."""
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.body_query import BodyQueryError, query_body
+
+    try:
+        return _ok(query_body(conn, entry_id, side, jsonpath=jsonpath, regex=regex, offset=offset, limit=min(limit, 100), max_chars=min(max_chars, 2000), context=context, ignore_case=ignore_case))
+    except BodyQueryError as exc:
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_contract_check(session_id: str, openapi_path: str, host: str | None = None) -> str:
+    """Compare this capture with a previously exported OpenAPI file and report drift (new/removed endpoints, status, field, parameter and auth changes). Removed = not observed, which may be a coverage gap."""
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.contract import check_contract
+
+    try:
+        return _ok(check_contract(conn, openapi_path, host=host))
+    except Exception as exc:  # noqa: BLE001
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_flow_graph(session_id: str, entry_id: int, host: str | None = None, max_depth: int = 8) -> str:
+    """Trace what a request depends on: which earlier response supplied each header, cookie, hidden field or value. Ordered minimal steps plus inputs the user/env must supply. Names/shapes/ids only."""
+    try:
+        conn = sess.require_conn(session_id)
+    except KeyError as exc:
+        return _err(exc)
+    from hardly.core.flow_graph import flow_graph
+
+    return _ok(flow_graph(conn, entry_id, host=host, max_depth=min(max_depth, 20)))
+
+
+@mcp.tool
+def hardly_flow_replay(
+    session_id: str,
+    target: int | None = None,
+    entry_ids: list[int] | None = None,
+    env_json: str | None = None,
+    confirm: bool = False,
+    delay_s: float = 0.5,
+    max_requests: int = 20,
+    allow_unsafe: bool = False,
+    allow_gates: list[str] | None = None,
+) -> str:
+    """Replay an ordered flow live and report the first step whose status/content-type/body shape diverges. Without confirm=true it is a dry run (plan + missing inputs). Secrets only via env_json {name: value} or HARDLY_INPUT_<NAME> env vars; values are never printed. GET/HEAD only unless allow_unsafe; halts on 429/Retry-After/gates."""
+    try:
+        conn = sess.require_conn(session_id)
+        env = json.loads(env_json) if env_json else None
+    except (KeyError, json.JSONDecodeError) as exc:
+        return _err(exc)
+    from hardly.core.flow_replay import replay_flow
+
+    try:
+        return _ok(
+            replay_flow(conn, entry_ids=entry_ids, target=target, env=env, confirm=confirm, delay_s=delay_s,
+                        max_requests=max_requests, allow_unsafe=allow_unsafe, allow_gates=allow_gates)
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _err(exc)
+
+
+@mcp.tool
 def hardly_stack(
     session_id: str,
     host: str | None = None,

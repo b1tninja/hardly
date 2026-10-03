@@ -764,6 +764,79 @@ def cmd_har_tool(args: argparse.Namespace) -> int:
     return 0
 
 
+def _session_conn(har: str):
+    result = sess.open_har(har)
+    if "error" in result:
+        _print(result)
+        return None
+    return sess.require_conn(result["session_id"])
+
+
+def cmd_streams(args: argparse.Namespace) -> int:
+    from hardly.core.streams import summarize_streams
+
+    conn = _session_conn(args.har)
+    if conn is None:
+        return 1
+    _print(summarize_streams(conn, host=args.host, kind=args.kind, limit=args.limit))
+    return 0
+
+
+def cmd_body_query(args: argparse.Namespace) -> int:
+    from hardly.core.body_query import BodyQueryError, query_body
+
+    conn = _session_conn(args.har)
+    if conn is None:
+        return 1
+    try:
+        _print(query_body(conn, args.entry_id, args.side, jsonpath=args.jsonpath, regex=args.regex, offset=args.offset, limit=args.limit))
+    except BodyQueryError as exc:
+        _print({"error": str(exc)})
+        return 1
+    return 0
+
+
+def cmd_contract_check(args: argparse.Namespace) -> int:
+    from hardly.core.contract import check_contract
+
+    conn = _session_conn(args.har)
+    if conn is None:
+        return 1
+    try:
+        _print(check_contract(conn, args.openapi, host=args.host))
+    except Exception as exc:  # noqa: BLE001
+        _print({"error": str(exc)})
+        return 1
+    return 0
+
+
+def cmd_flow_graph(args: argparse.Namespace) -> int:
+    from hardly.core.flow_graph import flow_graph
+
+    conn = _session_conn(args.har)
+    if conn is None:
+        return 1
+    _print(flow_graph(conn, args.entry_id, host=args.host, max_depth=args.max_depth))
+    return 0
+
+
+def cmd_flow_replay(args: argparse.Namespace) -> int:
+    from hardly.core.flow_replay import replay_flow
+
+    conn = _session_conn(args.har)
+    if conn is None:
+        return 1
+    try:
+        env = json.loads(args.env_json) if args.env_json else None
+        out = replay_flow(conn, target=args.target, env=env, confirm=args.confirm, delay_s=args.delay,
+                          max_requests=args.max_requests, allow_unsafe=args.allow_unsafe, allow_gates=args.allow_gate)
+    except Exception as exc:  # noqa: BLE001
+        _print({"error": str(exc)})
+        return 1
+    _print(out)
+    return 0
+
+
 def cmd_tables(args: argparse.Namespace) -> int:
     from hardly.core.tables import scan_session
 
@@ -2002,6 +2075,47 @@ def build_parser() -> argparse.ArgumentParser:
     hp.add_argument("--no-dedupe", action="store_true")
     hp.add_argument("--overwrite", action="store_true")
     hp.set_defaults(func=cmd_har_tool)
+
+    st_p = sub.add_parser("streams", help="Summarise gRPC/protobuf/MessagePack/CSV/SSE/WebSocket bodies (shapes only)")
+    st_p.add_argument("har")
+    st_p.add_argument("--host")
+    st_p.add_argument("--kind")
+    st_p.add_argument("--limit", type=int, default=40)
+    st_p.set_defaults(func=cmd_streams)
+
+    bq_p = sub.add_parser("body-query", help="Search inside a large body by JSONPath-lite or regex (paged)")
+    bq_p.add_argument("har")
+    bq_p.add_argument("entry_id", type=int)
+    bq_p.add_argument("--side", default="response", choices=("request", "response"))
+    bq_p.add_argument("--jsonpath")
+    bq_p.add_argument("--regex")
+    bq_p.add_argument("--offset", type=int, default=0)
+    bq_p.add_argument("--limit", type=int, default=20)
+    bq_p.set_defaults(func=cmd_body_query)
+
+    cc_p = sub.add_parser("contract-check", help="Report drift between a capture and an exported OpenAPI file")
+    cc_p.add_argument("har")
+    cc_p.add_argument("openapi")
+    cc_p.add_argument("--host")
+    cc_p.set_defaults(func=cmd_contract_check)
+
+    fg_p = sub.add_parser("flow-graph", help="Trace what a request depends on (names/shapes only)")
+    fg_p.add_argument("har")
+    fg_p.add_argument("entry_id", type=int)
+    fg_p.add_argument("--host")
+    fg_p.add_argument("--max-depth", type=int, default=8)
+    fg_p.set_defaults(func=cmd_flow_graph)
+
+    fr_p = sub.add_parser("flow-replay", help="Replay a flow live and find the first diverging step (dry run unless --confirm)")
+    fr_p.add_argument("har")
+    fr_p.add_argument("target", type=int)
+    fr_p.add_argument("--confirm", action="store_true", help="Send live requests")
+    fr_p.add_argument("--env-json", default=None, help="Inline JSON {name: value}; or use HARDLY_INPUT_<NAME> env vars")
+    fr_p.add_argument("--delay", type=float, default=0.5)
+    fr_p.add_argument("--max-requests", type=int, default=20)
+    fr_p.add_argument("--allow-unsafe", action="store_true")
+    fr_p.add_argument("--allow-gate", action="append", default=None)
+    fr_p.set_defaults(func=cmd_flow_replay)
 
     tables_p = sub.add_parser(
         "tables",

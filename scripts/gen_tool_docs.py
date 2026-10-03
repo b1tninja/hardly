@@ -18,14 +18,14 @@ OUT = ROOT / "docs" / "tools.md"
 GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Orientation", ("modes", "mode", "capabilities", "help", "recommend", "report")),
     ("Sessions", ("open", "reopen", "list_sessions", "close", "summary", "stats", "coverage")),
-    ("Endpoints and content", ("hosts", "endpoints", "content", "search", "entry", "compare_entries", "flow", "schema", "pages", "grids", "data_attrs", "arcgis")),
+    ("Endpoints and content", ("streams", "body_query", "contract_check", "hosts", "endpoints", "content", "search", "entry", "compare_entries", "flow", "schema", "pages", "grids", "data_attrs", "arcgis")),
     ("HTML, forms and labels", ("brief", "story", "forms", "ui", "outline", "routes", "around", "tree", "params", "find_search", "stack", "tables", "auth_patterns", "pagination")),
     ("HAR hygiene", ("har_doctor", "har_prune", "har_split", "har_merge", "har_scrub")),
     ("Credentials and auth", ("credentials", "auth", "challenges", "correlate", "trace", "cookies", "secrets", "redirects")),
     ("APIs", ("graphql",)),
     ("Quality and traffic", ("issues", "wall", "duplicates", "slow", "diff", "gates")),
     ("Client SDK output", ("stub", "recipe_plan", "curl", "export_md", "export_openapi", "export_postman", "export_brief", "sql")),
-    ("Live probe", ("probe", "arcgis_explore", "crawl", "redirect_diag", "replay_check")),
+    ("Live probe", ("flow_graph", "flow_replay", "probe", "arcgis_explore", "crawl", "redirect_diag", "replay_check")),
     ("Target catalog", ("catalog_list", "catalog_upsert", "catalog_verify")),
 )
 
