@@ -1486,6 +1486,67 @@ def hardly_pagination(session_id: str, host: str | None = None, limit: int = 20)
 
 
 @mcp.tool
+def hardly_har_doctor(har_path: str, config_json: str | None = None) -> str:
+    """Diagnose HAR problems (truncated/omitted bodies, sanitised cookies/headers, clock skew, noise, quirks).
+
+    Knobs in `config_json` (JSON object): checks, exclude, severity_overrides,
+    thresholds{max_entry_bytes,truncation_ratio,clock_skew_s,noise_ratio,min_entries},
+    strict, fail_on, host, ignore_hosts, ignore_paths, max_findings, fix.
+    Findings carry code, severity, count, entry_ids and a fix_hint (e.g. recapture flags).
+    """
+    from hardly.core.har_doctor import diagnose_har
+
+    try:
+        return _ok(diagnose_har(None, har_path, config_json))
+    except Exception as exc:  # noqa: BLE001
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_har_prune(src: str, dst: str, drop_hosts_json: str | None = None, drop_mime_json: str | None = None, drop_noise: bool = False, overwrite: bool = False) -> str:
+    """Write a pruned copy of a HAR (drop hosts / mime globs / known noise). Never in place; refuses an existing dst unless overwrite=true."""
+    from hardly.core.har_tools import prune_har
+
+    try:
+        return _ok(prune_har(src, dst, json.loads(drop_hosts_json or "[]"), json.loads(drop_mime_json or "[]"), drop_noise, overwrite=overwrite))
+    except Exception as exc:  # noqa: BLE001
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_har_split(src: str, outdir: str, by: str = "host", overwrite: bool = False) -> str:
+    """Split a HAR into one file per host or page (streaming)."""
+    from hardly.core.har_tools import split_har
+
+    try:
+        return _ok(split_har(src, by, outdir, overwrite=overwrite))
+    except Exception as exc:  # noqa: BLE001
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_har_merge(paths_json: str, dst: str, overwrite: bool = False, dedupe: bool = True) -> str:
+    """Merge several HARs (JSON list of paths) into one, prefixing page ids and dropping exact duplicates."""
+    from hardly.core.har_tools import merge_hars
+
+    try:
+        return _ok(merge_hars(json.loads(paths_json), dst, overwrite=overwrite, dedupe=dedupe))
+    except Exception as exc:  # noqa: BLE001
+        return _err(exc)
+
+
+@mcp.tool
+def hardly_har_scrub(src: str, dst: str, overwrite: bool = False) -> str:
+    """Write a scrubbed copy of a HAR: secret values, cookies, auth headers and tokens become ***REDACTED***; keys, structure and shapes stay."""
+    from hardly.core.har_tools import scrub_har
+
+    try:
+        return _ok(scrub_har(src, dst, overwrite=overwrite))
+    except Exception as exc:  # noqa: BLE001
+        return _err(exc)
+
+
+@mcp.tool
 def hardly_stack(
     session_id: str,
     host: str | None = None,

@@ -733,6 +733,37 @@ def cmd_pagination(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_har_doctor(args: argparse.Namespace) -> int:
+    from hardly.core import har_doctor
+
+    try:
+        res = har_doctor.diagnose_har(None, args.har, har_doctor.config_from_namespace(args))
+    except (ValueError, OSError) as exc:
+        _print({"error": str(exc)})
+        return 2
+    _print(res)
+    return int(res.get("exit_code") or 0)
+
+
+def cmd_har_tool(args: argparse.Namespace) -> int:
+    from hardly.core import har_tools
+
+    try:
+        if args.har_cmd == "prune":
+            out = har_tools.prune_har(args.har, args.dst, args.drop_host or (), args.drop_mime or (), args.drop_noise, overwrite=args.overwrite)
+        elif args.har_cmd == "split":
+            out = har_tools.split_har(args.har, args.by, args.outdir, overwrite=args.overwrite)
+        elif args.har_cmd == "merge":
+            out = har_tools.merge_hars(args.hars, args.out, overwrite=args.overwrite, dedupe=not args.no_dedupe)
+        else:
+            out = har_tools.scrub_har(args.har, args.dst, overwrite=args.overwrite)
+    except (ValueError, OSError) as exc:
+        _print({"error": str(exc)})
+        return 2
+    _print(out)
+    return 0
+
+
 def cmd_tables(args: argparse.Namespace) -> int:
     from hardly.core.tables import scan_session
 
@@ -1939,6 +1970,38 @@ def build_parser() -> argparse.ArgumentParser:
     pg_p.add_argument("--host")
     pg_p.add_argument("--limit", type=int, default=20)
     pg_p.set_defaults(func=cmd_pagination)
+
+    from hardly.core import har_doctor as _hd
+
+    hd_p = sub.add_parser("har-doctor", help="Diagnose HAR problems (truncated bodies, sanitised cookies, skew, noise); exit code via --fail-on")
+    hd_p.add_argument("har")
+    _hd.add_cli_flags(hd_p)
+    hd_p.set_defaults(func=cmd_har_doctor)
+
+    har_p = sub.add_parser("har", help="HAR hygiene: prune | split | merge | scrub (never in place)")
+    har_sub = har_p.add_subparsers(dest="har_cmd", required=True)
+    for name in ("prune", "scrub"):
+        hp = har_sub.add_parser(name)
+        hp.add_argument("har")
+        hp.add_argument("dst")
+        hp.add_argument("--overwrite", action="store_true")
+        if name == "prune":
+            hp.add_argument("--drop-host", action="append")
+            hp.add_argument("--drop-mime", action="append")
+            hp.add_argument("--drop-noise", action="store_true")
+        hp.set_defaults(func=cmd_har_tool)
+    hp = har_sub.add_parser("split")
+    hp.add_argument("har")
+    hp.add_argument("--by", choices=("host", "page"), default="host")
+    hp.add_argument("--outdir", required=True)
+    hp.add_argument("--overwrite", action="store_true")
+    hp.set_defaults(func=cmd_har_tool)
+    hp = har_sub.add_parser("merge")
+    hp.add_argument("hars", nargs="+")
+    hp.add_argument("--out", required=True)
+    hp.add_argument("--no-dedupe", action="store_true")
+    hp.add_argument("--overwrite", action="store_true")
+    hp.set_defaults(func=cmd_har_tool)
 
     tables_p = sub.add_parser(
         "tables",

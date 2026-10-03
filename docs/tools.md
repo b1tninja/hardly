@@ -168,6 +168,28 @@ Detect generic auth patterns: bearer/refresh JSON login, OIDC/PKCE, SAML POST, d
 
 Recognise cursor / next-link / Link-header pagination. Shapes and entry ids only, never values.
 
+## HAR hygiene
+
+### `hardly_har_doctor(har_path, config_json=None)`
+
+Diagnose HAR problems (truncated/omitted bodies, sanitised cookies/headers, clock skew, noise, quirks).
+
+### `hardly_har_prune(src, dst, drop_hosts_json=None, drop_mime_json=None, drop_noise=False, overwrite=False)`
+
+Write a pruned copy of a HAR (drop hosts / mime globs / known noise). Never in place; refuses an existing dst unless overwrite=true.
+
+### `hardly_har_split(src, outdir, by='host', overwrite=False)`
+
+Split a HAR into one file per host or page (streaming).
+
+### `hardly_har_merge(paths_json, dst, overwrite=False, dedupe=True)`
+
+Merge several HARs (JSON list of paths) into one, prefixing page ids and dropping exact duplicates.
+
+### `hardly_har_scrub(src, dst, overwrite=False)`
+
+Write a scrubbed copy of a HAR: secret values, cookies, auth headers and tokens become ***REDACTED***; keys, structure and shapes stay.
+
 ## Credentials and auth
 
 ### `hardly_credentials(session_id, host=None, limit=40, explain=False)`

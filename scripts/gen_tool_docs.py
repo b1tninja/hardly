@@ -20,6 +20,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Sessions", ("open", "reopen", "list_sessions", "close", "summary", "stats", "coverage")),
     ("Endpoints and content", ("hosts", "endpoints", "content", "search", "entry", "compare_entries", "flow", "schema", "pages", "grids", "data_attrs", "arcgis")),
     ("HTML, forms and labels", ("brief", "story", "forms", "ui", "outline", "routes", "around", "tree", "params", "find_search", "stack", "tables", "auth_patterns", "pagination")),
+    ("HAR hygiene", ("har_doctor", "har_prune", "har_split", "har_merge", "har_scrub")),
     ("Credentials and auth", ("credentials", "auth", "challenges", "correlate", "trace", "cookies", "secrets", "redirects")),
     ("APIs", ("graphql",)),
     ("Quality and traffic", ("issues", "wall", "duplicates", "slow", "diff", "gates")),
