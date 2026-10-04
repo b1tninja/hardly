@@ -50,14 +50,14 @@ _DOC_SEGMENTS = frozenset(
      "support", "learn", "kb", "wiki", "policy", "terms", "privacy", "tutorial", "tutorials"}
 )
 _ATTR = re.compile(
-    r"<(a|area|link)\b[^>]*?\b(href)\s*=\s*(\"([^\"]*)\"|'([^']*)')[^>]*>",
+    r"<(a|area|link)\b[^<>]*?\b(href)\s*=\s*(\"([^\"]*)\"|'([^']*)')[^<>]*>",
     re.I | re.S,
 )
-_FORM = re.compile(r"<form\b([^>]*)>(.*?)(?:</form>|(?=<form\b)|\Z)", re.I | re.S)
+_FORM = re.compile(r"<form\b([^<>]*)>(.*?)(?:</form>|(?=<form\b)|\Z)", re.I | re.S)
 _FORM_ACTION = re.compile(r"\baction\s*=\s*(?:\"([^\"]*)\"|'([^']*)')", re.I)
 _METHOD = re.compile(r"\bmethod\s*=\s*[\"']?(\w+)", re.I)
-_INPUT = re.compile(r"<(?:input|button)\b[^>]*>", re.I | re.S)
-_ATTR_KV = re.compile(r"""([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""")
+_INPUT = re.compile(r"<(?:input|button)\b[^<>]*>", re.I | re.S)
+_ATTR_KV = re.compile(r"""(?<![\w:-])([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""")
 _SOURCE_RANK = {"request": 0, "form": 1, "form_field": 2, "link": 3}
 
 

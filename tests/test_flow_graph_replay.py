@@ -11,6 +11,8 @@ from hardly import session as sess
 from hardly.core.flow_graph import flow_graph
 from hardly.core.flow_replay import replay_flow
 
+pytestmark = pytest.mark.usefixtures("allow_private_hosts")
+
 SECRET = "pw-SECRET-value-123"
 
 

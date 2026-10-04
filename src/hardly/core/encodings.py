@@ -15,6 +15,7 @@ import re
 from typing import Any
 
 from hardly.core.redact import classify_value_shape, is_sensitive_key
+from hardly.core.safe_json import safe_loads
 
 MAX_SCAN_BYTES = 2_000_000
 _WIRE = {0: "varint", 1: "fixed64", 2: "len", 5: "fixed32"}
@@ -202,13 +203,23 @@ def summarize_grpc(raw: bytes) -> dict[str, Any] | None:
     return out
 
 
+#: Decoded bytes examined from a base64 text body (grpc-web-text and similar).
+MAX_DECODED_BYTES = 8_000_000
+
+
 def decode_grpc_text(text: str) -> bytes | None:
     """application/grpc-web-text bodies are base64 (possibly several chunks)."""
     try:
         s = re.sub(r"\s+", "", text)
-        out = b""
+        chunks: list[bytes] = []
+        total = 0
         for part in re.findall(r"[A-Za-z0-9+/]+={0,2}", s):
-            out += base64.b64decode(part + "=" * (-len(part) % 4))
+            chunk = base64.b64decode(part + "=" * (-len(part) % 4))
+            total += len(chunk)
+            if total > MAX_DECODED_BYTES:
+                break
+            chunks.append(chunk)
+        out = b"".join(chunks)
         return out or None
     except (binascii.Error, ValueError):
         return None
@@ -374,7 +385,7 @@ def summarize_sse(text: str) -> dict[str, Any] | None:
         if state["data"]:
             body = "\n".join(state["data"])
             try:
-                sh = json.dumps(json_shape(json.loads(body), max_depth=3), sort_keys=True)
+                sh = json.dumps(json_shape(safe_loads(body), max_depth=3), sort_keys=True)
             except ValueError:
                 sh = "text"
             if sh not in shapes and len(shapes) >= 5:

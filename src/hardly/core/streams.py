@@ -25,6 +25,7 @@ from hardly.core.encodings import (
     summarize_grpc,
     summarize_sse,
 )
+from hardly.core.safe_json import safe_loads
 
 STREAM_KINDS = ("grpc-web", "grpc", "protobuf", "msgpack", "csv", "sse", "websocket")
 _MAX_WS = 5000
@@ -104,7 +105,7 @@ def analyze_websocket(messages: list[dict[str, Any]] | None) -> dict[str, Any] |
             s = data.lstrip()
             if s[:1] in "{[":
                 try:
-                    sh = json.dumps(json_shape(json.loads(s), max_depth=3), sort_keys=True)
+                    sh = json.dumps(json_shape(safe_loads(s), max_depth=3), sort_keys=True)
                 except ValueError:
                     sh = "text"
                 else:
@@ -188,7 +189,7 @@ def attach_stream_hints(conn: sqlite3.Connection, entry_id: int, info: dict[str,
     hints = list(info.get("hints") or [])
     for r in rows:
         try:
-            s = json.loads(r["summary_json"])
+            s = safe_loads(r["summary_json"])
         except ValueError:
             continue
         streams.append({"side": r["side"], "kind": r["kind"], "summary": s})
@@ -239,7 +240,7 @@ def summarize_streams(
     for r in rows:
         by_kind[r["kind"]] = by_kind.get(r["kind"], 0) + 1
         try:
-            summary = json.loads(r["summary_json"])
+            summary = safe_loads(r["summary_json"])
         except ValueError:
             summary = {}
         if r["kind"] == "websocket":

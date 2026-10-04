@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import parse_qsl
 
 from hardly.core.redact import is_sensitive_header, is_sensitive_key
+from hardly.core.safe_json import safe_loads
 
 _MAX = 60
 
@@ -102,7 +103,7 @@ def locate_secrets(
             params,
         ):
             try:
-                query = json.loads(row["query_json"] or "{}")
+                query = safe_loads(row["query_json"] or "{}")
             except (json.JSONDecodeError, TypeError):
                 continue
             if not isinstance(query, dict):
@@ -155,7 +156,7 @@ def _body_sensitive_names(
     stripped = text.lstrip()
     if "json" in ct or stripped.startswith(("{", "[")):
         try:
-            data = json.loads(text)
+            data = safe_loads(text)
         except (json.JSONDecodeError, TypeError):
             data = None
         if data is not None:
@@ -172,15 +173,15 @@ def _body_sensitive_names(
         import re
 
         for m in re.finditer(
-            r"""<(?:input|textarea)\b[^>]*\bname\s*=\s*['"]([^'"]+)['"]""",
+            r"""<(?:input|textarea)\b[^<>]*\bname\s*=\s*['"]([^'"]+)['"]""",
             text,
             re.I,
         ):
             if is_sensitive_key(m.group(1)):
                 out.append((m.group(1), "html_field"))
         for m in re.finditer(
-            r"""type\s*=\s*['"]password['"][^>]*\bname\s*=\s*['"]([^'"]+)['"]"""
-            r"""|\bname\s*=\s*['"]([^'"]+)['"][^>]*type\s*=\s*['"]password['"]""",
+            r"""type\s*=\s*['"]password['"][^<>]*\bname\s*=\s*['"]([^'"]+)['"]"""
+            r"""|\bname\s*=\s*['"]([^'"]+)['"][^<>]*type\s*=\s*['"]password['"]""",
             text,
             re.I,
         ):
@@ -214,7 +215,7 @@ def html_autocomplete_fields(text: str) -> list[tuple[str, str, str]]:
     import re
 
     out: list[tuple[str, str, str]] = []
-    for m in re.finditer(r"<(?:input|textarea)\b([^>]*)>", text, re.I):
+    for m in re.finditer(r"<(?:input|textarea)\b([^<>]*)>", text, re.I):
         attrs = m.group(1)
         ac_m = re.search(r"""autocomplete\s*=\s*['"]([^'"]+)['"]""", attrs, re.I)
         if not ac_m:

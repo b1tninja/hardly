@@ -6,6 +6,8 @@ import json
 import re
 from typing import Any
 
+from hardly.core.safe_json import safe_loads
+
 REDACTED = "***REDACTED***"
 
 SENSITIVE_HEADER_NAMES = frozenset(
@@ -51,6 +53,11 @@ SENSITIVE_JSON_KEYS = frozenset(
         "cardnumber",
         "securitycode",
         "securityanswer",
+        # anti-forgery values: replayable, so treated like credentials
+        "csrf",
+        "xsrf",
+        "nonce",
+        "authenticity",
     }
 )
 
@@ -136,7 +143,9 @@ def _looks_like_base64(text: str) -> bool:
 
 
 def is_sensitive_header(name: str) -> bool:
-    return name.lower() in SENSITIVE_HEADER_NAMES
+    """Credential-bearing header: the known list plus any header NAMED like a secret (``X-Session-Token``)."""
+    low = name.lower()
+    return low in SENSITIVE_HEADER_NAMES or is_sensitive_key(name)
 
 
 def is_sensitive_key(key: str) -> bool:
@@ -199,6 +208,10 @@ def _split_len_marker(chunk: str) -> tuple[str, str]:
     return (chunk[: m.start()], m.group(0)) if m else (chunk, "")
 
 
+#: ``scheme://user:password@host``: the credentials part (never the host) is masked.
+_USERINFO_RE = re.compile(r"^([A-Za-z][A-Za-z0-9+.-]{0,20}://)[^/?#@\s]{1,200}@")
+
+
 def redact_url(url: str) -> str:
     """Hide secret-bearing query values and ``;jsessionid=`` style path params.
 
@@ -207,6 +220,7 @@ def redact_url(url: str) -> str:
     if not url:
         return url
     out = _PATH_PARAM_RE.sub(lambda m: m.group(1) + REDACTED, url)
+    out = _USERINFO_RE.sub(r"\1" + REDACTED + "@", out, count=1)
     if "?" not in out and "#" not in out:
         return out
     from urllib.parse import urlsplit, urlunsplit
@@ -234,10 +248,60 @@ def redact_url(url: str) -> str:
     return urlunsplit(parts._replace(query=scrub(parts.query), fragment=fragment))
 
 
+_URL_STOP = frozenset(" \t\r\n<>\"'(),;[]{}|\\^`")
+#: Longest URL-ish token examined (longer runs are cut, never scanned quadratically).
+_MAX_URL_TOKEN = 8192
+
+
+def redact_urls_in_text(text: str) -> str:
+    """Mask secret query/fragment values of every URL-ish token in free text (linear time).
+
+    A token is a run without whitespace or quoting delimiters around a ``?`` or ``#`` that is
+    followed by ``name=value`` pairs: ``Location`` / ``Referer`` / ``Link`` header values, hrefs,
+    URLs inside JSON strings.
+    """
+    if "=" not in text or ("?" not in text and "#" not in text):
+        return text
+    out: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        q = _next_anchor(text, i)
+        if q < 0:
+            break
+        s = q
+        while s > i and text[s - 1] not in _URL_STOP and q - s < _MAX_URL_TOKEN:
+            s -= 1
+        e = q + 1
+        while e < n and text[e] not in _URL_STOP and e - q < _MAX_URL_TOKEN:
+            e += 1
+        tok = text[s:e]
+        out.append(text[i:s])
+        out.append(_redact_token(tok) if "=" in text[q:e] else tok)
+        i = e
+    out.append(text[i:])
+    return "".join(out)
+
+
+def _next_anchor(text: str, start: int) -> int:
+    a, b = text.find("?", start), text.find("#", start)
+    if a < 0:
+        return b
+    return a if b < 0 else min(a, b)
+
+
+def _redact_token(tok: str) -> str:
+    try:
+        return redact_url(tok)
+    except ValueError:  # urlsplit rejects some junk (bad IPv6 brackets)
+        head, sep, tail = tok.partition("?")
+        return head + sep + (redact_query_string(tail) or "") if sep else tok
+
+
 def redact_string(value: str) -> str:
     if not value:
         return value
     out = _PATH_PARAM_RE.sub(lambda m: m.group(1) + REDACTED, JWT_RE.sub(REDACTED, value))
+    out = redact_urls_in_text(out)
     # Only redact long hex if it looks like a secret (not in URLs as path ids alone)
     if len(value) >= 32 and LONG_HEX_RE.fullmatch(value.strip()):
         return REDACTED
@@ -247,7 +311,7 @@ def redact_string(value: str) -> str:
 def redact_header_value(name: str, value: str) -> str:
     if is_sensitive_header(name):
         return REDACTED
-    return redact_string(value)
+    return redact_string(value)  # also masks secret query values (Location, Referer, Link, ...)
 
 
 def redact_headers(headers: list[dict] | dict) -> list[dict] | dict:
@@ -261,47 +325,154 @@ def redact_headers(headers: list[dict] | dict) -> list[dict] | dict:
     return result
 
 
-def redact_json(value: Any, *, depth: int = 0, max_depth: int = 12) -> Any:
+#: JSON larger than this is never parsed for a preview (memory); it takes the text path.
+MAX_JSON_PARSE_CHARS = 8_000_000
+#: A JSON document carried inside a JSON string (double-encoded) is unwrapped up to this size.
+MAX_EMBEDDED_JSON_CHARS = 200_000
+#: Pair objects whose "name"/"key" labels the secret and whose "value" holds it (HAR params, headers).
+LABEL_KEYS = ("name", "key", "field", "header", "param", "id")
+
+
+def redact_json(value: Any, *, depth: int = 0, max_depth: int = 12, markup: bool = True) -> Any:
     if depth > max_depth:
         return "..."
     if isinstance(value, dict):
         out = {}
+        labelled = any(
+            isinstance(value.get(lk), str) and is_sensitive_key(value[lk]) for lk in LABEL_KEYS
+        )
         for k, v in value.items():
-            if is_sensitive_key(str(k)):
+            if is_sensitive_key(str(k)) or (
+                labelled and str(k).lower() == "value" and not isinstance(v, (dict, list))
+            ):
                 out[k] = REDACTED
             else:
-                out[k] = redact_json(v, depth=depth + 1, max_depth=max_depth)
+                out[k] = redact_json(v, depth=depth + 1, max_depth=max_depth, markup=markup)
         return out
     if isinstance(value, list):
         # Cap list length in redacted output
         items = value[:50]
-        redacted = [redact_json(v, depth=depth + 1, max_depth=max_depth) for v in items]
+        redacted = [redact_json(v, depth=depth + 1, max_depth=max_depth, markup=markup) for v in items]
         if len(value) > 50:
             redacted.append(f"... ({len(value) - 50} more)")
         return redacted
     if isinstance(value, str):
-        return redact_string(value)
+        stripped = value.lstrip()
+        if 2 <= len(stripped) <= MAX_EMBEDDED_JSON_CHARS and stripped[0] in "{[" and depth < max_depth:
+            try:
+                inner = safe_loads(stripped)
+            except (ValueError, RecursionError):
+                inner = None
+            if isinstance(inner, (dict, list)):  # double-encoded JSON: redact what is inside
+                return json.dumps(
+                    redact_json(inner, depth=depth + 1, max_depth=max_depth, markup=markup), ensure_ascii=False
+                )
+        text = redact_string(value)
+        return redact_form(redact_markup_text(text) if markup else text)
     return value
 
 
-def redact_body_text(text: str | None, *, max_chars: int = 4000) -> dict:
-    """Redact and optionally truncate a body string. Returns metadata dict."""
+# --- markup / script text -------------------------------------------------------------------
+
+_TAG_RE = re.compile(r"<([A-Za-z][\w:-]{0,30})\b([^<>]{1,4000})>")
+_ATTR_RE = re.compile(
+    r"""([^\s"'<>/=\\]{1,80})\s*=\s*(\\?"[^"]*?\\?"|\\?'[^']*?\\?'|[^\s"'<>\\]+)"""
+)
+_KV_RE = re.compile(
+    r"""(["']?)([A-Za-z_$][\w$.-]{0,60})\1(\s*[:=]\s*)(["'])((?:\\.|(?!\4)[^\\\n]){0,2000})\4"""
+)
+
+
+#: The same assignment inside a JSON string that was serialised again: ``\"key\": \"value\"``.
+_KV_ESC_RE = re.compile(
+    r"""\\(["'])([A-Za-z_$][\w$.-]{0,60})\\\1(\s*:\s*)\\(["'])((?:(?!\\\4)[^\n]){0,2000}?)\\\4"""
+)
+
+
+def _unquote_attr(v: str) -> tuple[str, str, str]:
+    """(opening quote, inner text, closing quote); the quotes may carry a backslash (JSON-escaped HTML)."""
+    for q in ('"', "'"):
+        for o, c in ((f"\\{q}", f"\\{q}"), (q, q)):
+            if len(v) >= len(o) + len(c) and v.startswith(o) and v.endswith(c):
+                return o, v[len(o):len(v) - len(c)], c
+    return "", v, ""
+
+
+def _redact_tag(m: re.Match) -> str:
+    attrs = m.group(2)
+    pairs = [(a.group(1), a.group(2), a.start(2), a.end(2)) for a in _ATTR_RE.finditer(attrs)]
+    if not pairs:
+        return m.group(0)
+    by_name = {n.lower(): _unquote_attr(v)[1] for n, v, _s, _e in pairs}
+    # <input name=X value=...> and <meta name=X content=...> carry the secret under another attribute.
+    label = by_name.get("name") or by_name.get("id") or ""
+    labelled = bool(label) and (is_sensitive_key(label) or by_name.get("type", "").lower() == "password")
+    out: list[str] = []
+    last = 0
+    for n, v, s, e in pairs:
+        if is_sensitive_key(n) or (labelled and n.lower() in ("value", "content")):
+            qo, inner, qc = _unquote_attr(v)
+            if inner and inner != REDACTED:
+                out.append(attrs[last:s])
+                out.append(f"{qo}{REDACTED}{qc}")
+                last = e
+    out.append(attrs[last:])
+    return f"<{m.group(1)}{''.join(out)}>"
+
+
+def _redact_kv(m: re.Match) -> str:
+    key, value = m.group(2), m.group(5)
+    if value and value != REDACTED and is_sensitive_key(key):
+        q = m.group(4)
+        return f"{m.group(1)}{key}{m.group(1)}{m.group(3)}{q}{REDACTED}{q}"
+    return m.group(0)
+
+
+def _redact_kv_esc(m: re.Match) -> str:
+    key, value = m.group(2), m.group(5)
+    if value and value != REDACTED and is_sensitive_key(key):
+        k, q = m.group(1), m.group(4)
+        return f"\\{k}{key}\\{k}{m.group(3)}\\{q}{REDACTED}\\{q}"
+    return m.group(0)
+
+
+def redact_markup_text(text: str) -> str:
+    """Mask secrets in HTML / script / loose text: sensitive form fields and attributes, and
+    ``"apiKey": "..."`` style assignments. Linear in the input (every pattern is length-bounded)."""
+    if "<" in text:
+        text = _TAG_RE.sub(_redact_tag, text)
+    if ":" in text or "=" in text:
+        text = _KV_RE.sub(_redact_kv, text)
+        if '\\"' in text or "\\'" in text:
+            text = _KV_ESC_RE.sub(_redact_kv_esc, text)
+    return text
+
+
+def redact_body_text(text: str | None, *, max_chars: int = 4000, markup: bool = True) -> dict:
+    """Redact and optionally truncate a body string. Returns metadata dict.
+
+    ``markup=False`` keeps HTML attribute / script values (the index keeps them so detectors can
+    correlate a hidden-field value with a later request); everything shown to a caller uses the
+    default ``markup=True``.
+    """
     if text is None:
         return {"text": None, "size": 0, "truncated": False}
     size = len(text)
     truncated = size > max_chars
     preview = text[:max_chars] if truncated else text
     try:
-        parsed = json.loads(preview if not truncated else text)
-        redacted = redact_json(parsed)
+        if len(text) > MAX_JSON_PARSE_CHARS:
+            raise ValueError("too large to parse for a preview")
+        parsed = safe_loads(preview if not truncated else text)
+        redacted = redact_json(parsed, markup=markup)
         out_text = json.dumps(redacted, indent=2, default=str)
         if len(out_text) > max_chars:
             out_text = out_text[:max_chars]
             truncated = True
         return {"text": out_text, "size": size, "truncated": truncated, "json": True}
-    except (json.JSONDecodeError, TypeError, ValueError):
+    except (TypeError, ValueError, RecursionError):  # not JSON, too big, or nested past the parser limit
         return {
-            "text": redact_form(redact_string(preview)),
+            "text": redact_form(redact_markup_text(redact_string(preview)) if markup else redact_string(preview)),
             "size": size,
             "truncated": truncated,
             "json": False,
@@ -313,7 +484,7 @@ _FORM_PAIR = re.compile(r"(^|&)([^&=\s]{1,200})=([^&]*)")
 
 def redact_form(text: str) -> str:
     """Redact the values of sensitive fields in a form-encoded body (``Name=x&Pwd=y``); other text is unchanged."""
-    if not text or "=" not in text or "\n" in text.strip():
+    if not text or "=" not in text or "\n" in text.strip() or text.lstrip()[:1] in ("{", "[", "<"):
         return text
     from urllib.parse import unquote_plus
 

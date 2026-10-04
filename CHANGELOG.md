@@ -10,6 +10,38 @@ All notable changes are documented here. The format follows
 - `fastmcp` is constrained to `>=4.0.10,<5` (the version the suite runs against).
 - The release workflow installs a pinned, checksum-verified `mcp-publisher`.
 
+### Security hardening (no tool, parameter or command was renamed or removed)
+- **Outbound URL guard.** Every live tool (`hardly_send_*`, catalog verify, crawl, replay, redirect and
+  ArcGIS walks) and the initial URL of the browser tools refuse non-http(s) URLs, credentials in the URL
+  and hosts that are or resolve to loopback, private, link-local (cloud metadata), CGNAT, multicast or
+  reserved addresses, `localhost`, `*.local` and `*.internal`. Every redirect hop is re-validated and the
+  connection goes to the validated address. Error code `host_not_allowed`; dry-run plans report it too.
+  Opt-out for local testing: `HARDLY_ALLOW_PRIVATE_HOSTS=1` or the new global CLI flag
+  `--allow-private-hosts` (before the group; the per-command CLI snapshot is unchanged).
+- **Write-path guard.** All writes (`hardly_write_*`, session `output_path`, `har_output_path`, capture
+  export path, screenshots, catalog and plan outputs, browser `profile`, CLI `-o`) must resolve inside the
+  current directory, the OS temp directory, `/workspace` or `HARDLY_WRITE_DIRS`; special files and
+  credential / shell-startup locations (`~/.ssh`, `~/.bashrc`, `.git`, ...) are never writable. Error code
+  `path_not_allowed`. **Behaviour change**: a path outside those directories that used to work now needs
+  `HARDLY_WRITE_DIRS`.
+- **Secret canary test and the leaks it found.** `tests/test_secret_canary.py` plants canary secrets in a
+  synthetic HAR and checks every tool, the CLI and the shareable writers. Fixed generically in
+  `core/redact.py`: secret query/fragment values inside `Location` / `Referer` / `Link` headers and URLs in
+  text, `user:pass@` URL credentials, headers named like secrets (`X-Session-Token`), double-encoded JSON,
+  JSON strings holding HTML, `{"name": ..., "value": ...}` pairs, sensitive HTML attributes and script
+  assignments (`csrf`, `xsrf`, `nonce` and `authenticity` keys count as secrets), `hardly_write_har_scrubbed`
+  (now shares these helpers and also scrubs WebSocket messages), `hardly_session_sql` (raw header values
+  hidden, text cells redacted), `hardly_entry_body_query` (regex and windows run on the redacted text),
+  `hardly_entry_build_curl` form bodies, stored initiator URLs. `hardly_entry_search(header_contains=...)`
+  matches redacted values only. A saved index no longer keeps raw header values or page-text values that
+  are redacted on display.
+- **Robustness.** HARs are read with a 4 MiB buffer (one 50 MB body: 112 s to 2.6 s), grid-signal
+  scanning samples very large HTML, untrusted JSON is parsed with a nesting cap (`input_too_deep` instead
+  of a crash), `hardly_entry_body_query` readable prefix is 2 MB of the redacted body
+  (`readable_prefix_chars`), pathological-input tests with time budgets for the detectors and redaction.
+- Docs: threat model in [SECURITY.md](SECURITY.md), troubleshooting entries for `host_not_allowed` and
+  `path_not_allowed`.
+
 ### Changed: the v1 API surface (nothing was published before this, so there are no aliases)
 - **MCP tools: 97 renamed or merged into 71.** The first word is the effect: `hardly_send_*` sends
   requests (confirm-gated), `hardly_write_*` writes a file (`overwrite=false` by default),

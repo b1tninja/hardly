@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
+from hardly.core.netguard import HostNotAllowed, blocked_reason, check_url, default_hint
 from hardly.core.redact import redact_string, redact_url
 
 CATALOG_VERSION = 1
@@ -457,6 +458,9 @@ def save(catalog: Catalog, path: str | os.PathLike[str]) -> Path:
     catalog.raise_if_invalid()
     p = Path(path)
     text = dumps(catalog, "yaml" if _is_yaml(p) else "json")
+    from hardly.core.pathguard import guard_write
+
+    guard_write(p)
     p.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=f".{p.name}.", suffix=".tmp", dir=str(p.parent))
     try:
@@ -710,9 +714,12 @@ class CatalogRunner:
             if wait > 0:
                 self._sleep(wait)
             try:
+                check_url(ep.url)
                 res = self.adapter.verify(
                     ep, target=target, confirm=True, delay_s=self.delay_s, client=self.client
                 )
+            except HostNotAllowed:
+                res = VerifyResult(error="host_not_allowed")
             except Exception as exc:  # noqa: BLE001
                 res = VerifyResult(error=type(exc).__name__)
             self._last_hit[host] = self._clock()
@@ -742,14 +749,25 @@ class CatalogRunner:
                 halted[host] = ",".join(res.gate_classes) or "stopped"
         report["summary"] = self.catalog.summary()["by_status"]
         report["next"] = _runner_next(report)
+        if any(e.get("error") == "host_not_allowed" for e in report["errors"]):
+            report["next"].append(default_hint())
         return report
 
     def plan(self, **filters: Any) -> dict[str, Any]:
         """What a run would touch (no traffic)."""
         due = [(t.id, e) for t, e in self.catalog.endpoints(**filters) if self._due(e)]
         hosts = sorted({e.host for _, e in due})
-        return {"endpoints": len(due), "hosts": hosts, "delay_s": self.delay_s,
-                "max_requests": self.max_requests}
+        out: dict[str, Any] = {"endpoints": len(due), "hosts": hosts, "delay_s": self.delay_s,
+                               "max_requests": self.max_requests}
+        blocked = []
+        for t, e in due:
+            why = blocked_reason(e.url)
+            if why:
+                blocked.append({"target": t, "role": e.role, "code": "host_not_allowed", "reason": why})
+        if blocked:
+            out["blocked"] = blocked
+            out["hint"] = default_hint()
+        return out
 
 
 def _runner_next(report: dict[str, Any]) -> list[str]:

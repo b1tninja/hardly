@@ -26,12 +26,14 @@ from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
 import httpx
 
+from hardly.core.netguard import check_url, new_client
 from hardly.core.redact import (
     REDACTED,
     classify_value_shape,
     is_sensitive_header,
     is_sensitive_key,
 )
+from hardly.core.safe_json import safe_loads
 
 try:  # sibling module is built in parallel; degrade gracefully
     from hardly.core.gates import classify_response as _classify_response
@@ -249,7 +251,7 @@ def _build_step(
         kind_guess = "raw"
         if "json" in req_ct.lower() or text.lstrip().startswith(("{", "[")):
             try:
-                parsed = json.loads(text)
+                parsed = safe_loads(text)
                 kind_guess = "json" if isinstance(parsed, dict) else "raw"
             except ValueError:
                 kind_guess = "raw"
@@ -326,7 +328,7 @@ def _kind_of(resp: httpx.Response) -> str:
         return "html"
     if head in "{[":
         try:
-            json.loads(text)
+            safe_loads(text)
             return "json"
         except ValueError:
             pass
@@ -596,8 +598,10 @@ def replay_check(
                 "requests_used": 0,
             }
 
+    for st in steps:
+        check_url(f"{st['scheme']}://{st['host']}/")
     own_client = client is None
-    cl = client or httpx.Client(timeout=20.0, follow_redirects=False)
+    cl = client or new_client(timeout=20.0, follow_redirects=False)
     runner = _Runner(cl, max_requests=max_requests, delay_s=delay_s, allow_gates=gate_ok)
     target = steps[-1]
     prior = steps[:-1]

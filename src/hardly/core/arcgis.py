@@ -11,7 +11,6 @@ are flagged, not hidden.
 
 from __future__ import annotations
 
-import json
 import re
 import sqlite3
 import time
@@ -19,6 +18,9 @@ from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
 import httpx
+
+from hardly.core.netguard import check_url, new_client
+from hardly.core.safe_json import safe_loads
 
 SERVER_KINDS = ("MapServer", "FeatureServer", "ImageServer", "GeocodeServer")
 
@@ -100,7 +102,7 @@ def flag_field(name: str, field_type: str | None = None) -> list[str]:
 def _json(obj: Any) -> dict:
     if isinstance(obj, (str, bytes)):
         try:
-            obj = json.loads(obj)
+            obj = safe_loads(obj)
         except (ValueError, TypeError):
             return {}
     return obj if isinstance(obj, dict) else {}
@@ -430,7 +432,7 @@ def summarize_session(conn: sqlite3.Connection, host: str | None = None) -> dict
             s["layer_ids_seen"].add(layer)
         params: dict = {}
         try:
-            params = json.loads(r["query_json"]) if r["query_json"] else {}
+            params = safe_loads(r["query_json"]) if r["query_json"] else {}
         except (ValueError, TypeError):
             pass
         names = {str(k) for k in params} if isinstance(params, dict) else set()
@@ -495,6 +497,7 @@ def explore(
             "hint": "Makes up to 1 service doc + 5 layer docs + 1 sample query (resultRecordCount=1) GET requests.",
         }
     url = (url or "").split("?")[0].split("#")[0].rstrip("/")
+    check_url(url)
     if not looks_like_arcgis(url):
         return {
             "error": "URL does not look like an ArcGIS REST service",
@@ -505,7 +508,7 @@ def explore(
         return {"error": "Pass the service root or a layer URL, not an operation URL"}
     own = client is None
     if own:
-        client = httpx.Client(timeout=timeout, headers={"User-Agent": USER_AGENT}, follow_redirects=False)
+        client = new_client(timeout=timeout, headers={"User-Agent": USER_AGENT}, follow_redirects=False)
     requests_made: list[str] = []
     result: dict[str, Any] = {"url": url, "requests": requests_made, "layers": []}
     result["caps"] = {

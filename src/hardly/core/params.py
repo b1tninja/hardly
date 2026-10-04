@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import parse_qsl
 
 from hardly.core.redact import is_sensitive_key
+from hardly.core.safe_json import safe_loads
 
 
 def param_variance(
@@ -52,7 +53,7 @@ def param_variance(
             continue
         if "json" in ct or text.lstrip().startswith(("{", "[")):
             try:
-                data = json.loads(text)
+                data = safe_loads(text)
             except (json.JSONDecodeError, TypeError):
                 data = None
             if isinstance(data, dict):

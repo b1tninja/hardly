@@ -6,6 +6,8 @@ import sqlite3
 from typing import Any
 from urllib.parse import urlparse
 
+from hardly.core.redact import redact_url
+
 
 def entry_tree(
     conn: sqlite3.Connection,
@@ -74,7 +76,7 @@ def _find_parent(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any] |
             """,
             (row["entry_id"],),
         ).fetchone()
-        init_url = (ref["value_raw"] or ref["value_redacted"]) if ref else None
+        init_url = redact_url(ref["value_raw"] or ref["value_redacted"]) if ref else None
         if not init_url or init_url == "***REDACTED***":
             return None
         source = "referer"
