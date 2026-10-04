@@ -173,6 +173,9 @@ def export_brief_md(
     lines.append("")
 
     path = Path(output_path)
+    from hardly.core.pathguard import guard_write
+
+    guard_write(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines), encoding="utf-8")
     return {

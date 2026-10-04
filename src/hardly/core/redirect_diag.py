@@ -21,6 +21,7 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import httpx
 
+from hardly.core.netguard import check_url, new_client
 from hardly.core.redact import redact_url
 
 _UA = (
@@ -125,7 +126,8 @@ def diagnose_redirects(
     """Explain why a URL bounces: loop shape, cookie dependence, better host."""
     budget = [_MAX_REQUESTS]
     own = client is None
-    http = client or httpx.Client(headers={"User-Agent": _UA}, timeout=timeout_s)
+    check_url(url)
+    http = client or new_client(headers={"User-Agent": _UA}, timeout=timeout_s)
     try:
         with_jar = _follow(http, url, max_hops=max_hops, keep_cookies=True, budget=budget, delay_s=delay_s)
         http.cookies.clear()

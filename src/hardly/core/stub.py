@@ -354,6 +354,9 @@ def client_stub(
     written = None
     if output_path:
         path = Path(output_path)
+        from hardly.core.pathguard import guard_write
+
+        guard_write(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(code, encoding="utf-8")
         written = str(path.resolve())

@@ -151,6 +151,7 @@ def test_bad_output_paths(tmp_path, monkeypatch):
             capture.start_capture("http://127.0.0.1:1/", bad)
 
 
+@pytest.mark.usefixtures("allow_private_hosts")
 def test_cli_bad_output_no_traceback(tmp_path, capsys, monkeypatch):
     from hardly import cli
 
@@ -163,6 +164,7 @@ def test_cli_bad_output_no_traceback(tmp_path, capsys, monkeypatch):
     assert ei.value.code == 1 and "directory" in out and "output_path" in out
 
 
+@pytest.mark.usefixtures("allow_private_hosts")
 def test_slot_timeout_passthrough(monkeypatch):
     seen = []
     monkeypatch.setattr(capture, "require_playwright", lambda **kw: {})
@@ -183,6 +185,7 @@ def test_slot_timeout_passthrough(monkeypatch):
     assert seen == [7.5, 7.5, 7.5]
 
 
+@pytest.mark.usefixtures("allow_private_hosts")
 def test_slot_timeout_error_class(tmp_path, monkeypatch):
     if slots.fcntl is None:
         pytest.skip("no fcntl")

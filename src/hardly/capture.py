@@ -35,6 +35,7 @@ from hardly.core.browser_detect import (
     scan_chromium_builds,
 )
 from hardly.core.capture_errors import TRANSIENT_NAV, with_error_class
+from hardly.core.netguard import HostNotAllowed
 from hardly.core.slots import SlotTimeoutError, acquire_slot, capture_slot
 from hardly.ephemeral import (
     INTERACTIVE_WARNING,
@@ -456,6 +457,21 @@ def apply_executable(
     return str(info["source"])
 
 
+def _guard_url(url: Any, *, relative_ok: bool = False) -> None:
+    """Outbound guard for a URL a browser is about to open (initial navigation only).
+
+    The page's own subresources and in-page redirects are not covered: see SECURITY.md.
+    """
+    from hardly.core.netguard import check_url
+
+    u = str(url or "").strip()
+    if not u or u == "about:blank":
+        return
+    if relative_ok and "://" not in u and not u.lower().startswith(("javascript:", "data:", "file:")):
+        return
+    check_url(u)
+
+
 def _precheck_output_path(har_path: str | Path | None) -> Path | None:
     """Validate ``-o`` / ``har_path`` up front; raise CaptureError, never a traceback."""
     if not har_path:
@@ -467,6 +483,9 @@ def _precheck_output_path(har_path: str | Path | None) -> Path | None:
         target = resolve_path(har_path)
     except (OSError, ValueError, RuntimeError) as exc:
         raise CaptureError(f"invalid output path {raw!r}: {exc}") from exc
+    from hardly.core.pathguard import guard_write
+
+    guard_write(target, label="har_output_path")
     if target.is_dir():
         raise CaptureError(
             f"output path {str(target)!r} is a directory; give a HAR file name, e.g. {target / 'out.har'}"
@@ -522,6 +541,11 @@ def start_capture(
     ``playwright show-trace``). Default: env ``HARDLY_CAPTURE_TRACE=1``.
     """
     pre_target = _precheck_output_path(har_path)
+    _guard_url(url)
+    if user_data_dir:
+        from hardly.core.pathguard import guard_write
+
+        guard_write(resolve_path(user_data_dir), label="profile")
     require_playwright(need_browser=True)
 
     label_key = (label or _host_label(url) or "capture").strip()
@@ -867,6 +891,7 @@ def navigate_capture(capture_id: str | None, url: str) -> dict[str, Any]:
         raise CaptureError(f"capture {cid} is not running")
     if not str(url or "").strip():
         raise CaptureError("url is required")
+    _guard_url(url)
     cmd_path = active_dir() / f"{cid}.cmd"
     with cmd_path.open("a", encoding="utf-8") as handle:
         handle.write(f"goto {str(url).strip()}\n")
@@ -992,6 +1017,7 @@ def goto_capture(
     """Navigate the active tab and wait for ``wait_until`` (synchronous, unlike ``navigate_capture``)."""
     if not str(url or "").strip():
         raise CaptureError("goto requires url")
+    _guard_url(url)
     return capture_rpc(
         capture_id,
         "goto",
@@ -1118,7 +1144,9 @@ def capture_screenshot(
     """Take a PNG screenshot of the live capture tab (path optional)."""
     args: dict[str, Any] = {"full_page": bool(full_page)}
     if path:
-        args["path"] = str(resolve_path(path))
+        from hardly.core.pathguard import guard_write
+
+        args["path"] = str(guard_write(resolve_path(path)))
     return capture_rpc(capture_id, "screenshot", **args)
 
 
@@ -1187,6 +1215,7 @@ def run_capture_recipe(
                 url = str(raw.get("url") or "").strip()
                 if not url:
                     raise CaptureError("goto requires url")
+                _guard_url(url)
                 if raw.get("wait_until") or raw.get("timeout_ms"):
                     # Synchronous navigation: honours wait_until / timeout_ms.
                     step_out["result"] = goto_capture(
@@ -1275,7 +1304,7 @@ def run_capture_recipe(
             elif op == "url":
                 step_out["result"] = capture_page_url(cid)
             step_out["ok"] = True
-        except CaptureError as exc:
+        except (CaptureError, HostNotAllowed) as exc:
             step_out["ok"] = False
             step_out["error"] = str(exc)
             with_error_class(step_out)
@@ -1514,6 +1543,7 @@ def _capture_headless_impl(
     target_url = str(url or "").strip()
     if not target_url:
         raise CaptureError("capture_headless requires url")
+    _guard_url(target_url)
 
     label_key = (label or _host_label(target_url) or "capture").strip()
     target = pre_target if pre_target else new_ephemeral_har(label_key)
@@ -2486,6 +2516,7 @@ def _run_inprocess_recipe(
                 dest = str(raw.get("url") or "").strip()
                 if not dest:
                     raise CaptureError("goto requires url")
+                _guard_url(dest)
                 _goto_with_retry(
                     page,
                     dest,
@@ -2540,6 +2571,7 @@ def _run_inprocess_recipe(
                 dest = str(raw.get("url") or "").strip()
                 if not dest:
                     raise CaptureError("fetch requires url")
+                _guard_url(dest, relative_ok=True)
                 method = str(raw.get("method") or "GET").upper()
                 headers = raw.get("headers") if isinstance(raw.get("headers"), dict) else {}
                 body = raw.get("body")
@@ -2619,6 +2651,7 @@ def discover_apis(
     target = str(url or "").strip()
     if not target:
         raise CaptureError("discover_apis requires url")
+    _guard_url(target)
     _require_output_for_no_session(har_path, open_session)
 
     use_subprocess = (os.environ.get("HARDLY_CAPTURE_SUBPROCESS") or "").strip() in {

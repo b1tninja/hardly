@@ -172,6 +172,9 @@ def export_openapi(
     security_schemes = (doc.get("components") or {}).get("securitySchemes") or {}
 
     out = Path(output_path)
+    from hardly.core.pathguard import guard_write
+
+    guard_write(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     if as_yaml or str(out).endswith((".yaml", ".yml")):
         text = _to_yaml(doc)

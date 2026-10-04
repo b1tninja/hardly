@@ -20,6 +20,7 @@ import httpx
 
 from hardly.core.explain import finish
 from hardly.core.grids import html_grid_signals
+from hardly.core.netguard import check_url, new_client
 from hardly.core.redact import REDACTED, redact_url
 from hardly.core.search_nav import page_candidates, score_link, search_form_reached
 from hardly.core.urls import path_template
@@ -289,11 +290,12 @@ def crawl(
     parts = urlsplit(start_url.strip())
     if parts.scheme not in ("http", "https") or not parts.netloc:
         return {"error": "start_url must be an absolute http(s) URL"}
+    check_url(start_url.strip())
     start = clean_url(start_url)
     home = registrable_domain(parts.hostname or "")
 
     own = client is None
-    http = client or httpx.Client(timeout=timeout_s, follow_redirects=False, headers=headers_out)
+    http = client or new_client(timeout=timeout_s, follow_redirects=False, headers=headers_out)
     hosts: dict[str, _Host] = {}
     pages: list[dict[str, Any]] = []
     robots_disallowed: list[str] = []

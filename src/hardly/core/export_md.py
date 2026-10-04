@@ -186,6 +186,9 @@ def export_markdown(
             lines.append("")
 
     out = Path(output_path)
+    from hardly.core.pathguard import guard_write
+
+    guard_write(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines), encoding="utf-8")
     return {

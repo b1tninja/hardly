@@ -20,6 +20,8 @@ from urllib.parse import parse_qsl, urlsplit
 
 import httpx
 
+from hardly.core.netguard import check_url, new_client
+
 SERVER_KINDS = ("MapServer", "FeatureServer", "ImageServer", "GeocodeServer")
 
 # Hard caps for live exploration.
@@ -495,6 +497,7 @@ def explore(
             "hint": "Makes up to 1 service doc + 5 layer docs + 1 sample query (resultRecordCount=1) GET requests.",
         }
     url = (url or "").split("?")[0].split("#")[0].rstrip("/")
+    check_url(url)
     if not looks_like_arcgis(url):
         return {
             "error": "URL does not look like an ArcGIS REST service",
@@ -505,7 +508,7 @@ def explore(
         return {"error": "Pass the service root or a layer URL, not an operation URL"}
     own = client is None
     if own:
-        client = httpx.Client(timeout=timeout, headers={"User-Agent": USER_AGENT}, follow_redirects=False)
+        client = new_client(timeout=timeout, headers={"User-Agent": USER_AGENT}, follow_redirects=False)
     requests_made: list[str] = []
     result: dict[str, Any] = {"url": url, "requests": requests_made, "layers": []}
     result["caps"] = {

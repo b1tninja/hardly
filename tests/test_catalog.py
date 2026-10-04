@@ -82,6 +82,7 @@ def test_save_load_roundtrip_atomic(tmp_path):
     assert C.load(y).to_dict() == sample().to_dict()
 
 
+@pytest.mark.usefixtures("allow_private_hosts")
 def test_runner_polite_and_stops_on_gate(tmp_path):
     sleeps: list[float] = []
     with local_site.serve() as base:
@@ -107,6 +108,7 @@ def test_runner_polite_and_stops_on_gate(tmp_path):
     assert "evad" in json.dumps(out["next"])
 
 
+@pytest.mark.usefixtures("allow_private_hosts")
 def test_runner_resume_budget_and_confirm(tmp_path):
     with local_site.serve() as base:
         cat = C.Catalog()
@@ -129,6 +131,7 @@ def test_runner_resume_budget_and_confirm(tmp_path):
     assert "<html" not in p.read_text()
 
 
+@pytest.mark.usefixtures("allow_private_hosts")
 def test_runner_request_budget():
     with local_site.serve() as base:
         cat = C.Catalog()
@@ -137,6 +140,7 @@ def test_runner_request_budget():
     assert out["stopped"] == "max_requests" and out["checked"] < 4
 
 
+@pytest.mark.usefixtures("allow_private_hosts")
 def test_adapter_subclass_discover_and_confirm_gate():
     class Mine(C.TargetAdapter):
         def discover(self, target):
@@ -155,6 +159,7 @@ def test_adapter_subclass_discover_and_confirm_gate():
     assert out["results"][0]["status"] == "verified"
 
 
+@pytest.mark.usefixtures("allow_private_hosts")
 def test_cli_and_mcp(tmp_path, capsys):
     p = str(tmp_path / "c.json")
     for argv in (

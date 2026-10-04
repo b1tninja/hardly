@@ -210,11 +210,14 @@ def _out(output_path: str | None, overwrite: bool, *, default_name: str | None =
             "write_* tools never choose a path: pass output_path=<file> (use a scratch directory).",
             "missing_argument",
         )
+    from hardly.core.pathguard import guard_write
+
     p = resolve_path(output_path)
     if p.is_dir():
         if default_name is None:
             raise sess.OutputError(f"output_path is a directory: {p}", "Give a file name.")
         p = p / default_name
+    guard_write(p)
     if p.exists() and not overwrite:
         raise sess.OutputExists(
             f"output_path already exists: {p}",
@@ -235,6 +238,7 @@ def _dry_run(plan: dict[str, Any]) -> str:
 
 
 def _entry_rows(conn, entry_ids: list[int]) -> tuple[list[dict[str, Any]], list[int]]:
+    from hardly.core.netguard import check_url
     from hardly.core.redact import redact_url
 
     rows: list[dict[str, Any]] = []
@@ -248,6 +252,7 @@ def _entry_rows(conn, entry_ids: list[int]) -> tuple[list[dict[str, Any]], list[
             missing.append(int(eid))
             continue
         url = f"{r['scheme'] or 'https'}://{r['host']}{r['path']}" + (f"?{r['query_raw']}" if r["query_raw"] else "")
+        check_url(url)  # a plan must not hide a request the live call would refuse
         rows.append({"entry_id": int(r["entry_id"]), "method": r["method"], "url": redact_url(url)})
     return rows, missing
 
@@ -679,6 +684,12 @@ def hardly_browser_capture_discover(
             "invalid_argument",
         )
     wait = float(wait_seconds) if wait_seconds is not None else (5.0 if analyze else 20.0)
+    from hardly.core.netguard import check_url
+
+    check_url(url)
+    for st in steps or []:
+        if isinstance(st, dict) and str(st.get("op") or "").lower() == "goto" and st.get("url"):
+            check_url(str(st["url"]))
     if not confirm:
         return _dry_run(
             {
@@ -1879,8 +1890,10 @@ def hardly_send_site_crawl(
     when explain=true); no bodies, URLs redacted. For needs_browser pages use
     hardly_browser_capture_discover with a find_click step.
     """
+    from hardly.core.netguard import check_url
     from hardly.core.redact import redact_url
 
+    check_url(url)
     if not confirm:
         return _dry_run(
             {
@@ -1920,8 +1933,10 @@ def hardly_send_arcgis_explore(url: str, confirm: bool = False) -> str:
     sample as field names + masked shapes, never values. Stops on 429 and on token-required
     (498/499); never guesses tokens.
     """
+    from hardly.core.netguard import check_url
     from hardly.core.redact import redact_url
 
+    check_url(url)
     if not confirm:
         return _dry_run(
             {"method": "GET", "url": redact_url(url), "max_requests": 7, "note": "1 service doc + up to 5 layer docs + 1 one-row sample query"}
@@ -1939,8 +1954,10 @@ def hardly_send_redirect_walk(url: str, confirm: bool = False, max_hops: int = 1
     URLs, cookie-dependent redirects, and whether the alternate host resolves. Redirects already in
     a capture are hardly_session_redirect_history.
     """
+    from hardly.core.netguard import check_url
     from hardly.core.redact import redact_url
 
+    check_url(url)
     hops = max(2, min(max_hops, 20))
     if not confirm:
         return _dry_run({"method": "GET", "url": redact_url(url), "max_hops": hops, "note": "two passes: with and without cookies"})

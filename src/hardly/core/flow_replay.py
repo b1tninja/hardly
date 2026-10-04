@@ -30,6 +30,7 @@ import httpx
 
 from hardly.core.ajax_delta import delta_hidden
 from hardly.core.flow_graph import env_key, flow_graph
+from hardly.core.netguard import check_url, new_client
 from hardly.core.redact import REDACTED
 from hardly.core.replay_check import _PLUMBING_HEADERS, _gate_stop, _unresolved
 
@@ -456,6 +457,8 @@ def replay_flow(
         ins = [i for i in user_inputs if i["step_entry_id"] == s["entry_id"]]
         plans.append(_plan_step(conn, s, ins, env, missing))
 
+    for p in plans:
+        check_url(f"{p['scheme']}://{p['host']}/")
     summary = [
         {"order": s["order"], "entry_id": s["entry_id"], "method": s["method"], "host": s["host"],
          "path": s["path"], "depends_on": s["depends_on"]}
@@ -473,7 +476,7 @@ def replay_flow(
 
     gate_ok = frozenset(str(g) for g in (allow_gates or []))
     own = client is None
-    cl = client or httpx.Client(timeout=20.0, follow_redirects=False)
+    cl = client or new_client(timeout=20.0, follow_redirects=False)
     live_by_id: dict[int, dict] = {}
     results: list[dict] = []
     halted: dict | None = None

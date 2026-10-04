@@ -24,6 +24,7 @@ from urllib.parse import urlparse
 import ijson
 
 from hardly.core.filters import is_noise
+from hardly.core.pathguard import guard_write
 from hardly.core.redact import (
     JWT_RE,
     REDACTED,
@@ -41,6 +42,7 @@ def _dumps(obj: Any) -> str:
 
 
 def _check_paths(src: Iterable[Path], dst: Path, overwrite: bool) -> None:
+    guard_write(dst)
     dst_r = dst.resolve()
     for s in src:
         if s.resolve() == dst_r:
@@ -70,6 +72,7 @@ def _meta(path: Path) -> dict[str, Any]:
 @contextmanager
 def _writer(dst: Path, meta: dict[str, Any], pages: list[dict] | None = None, overwrite: bool = False):
     """Yield ``emit(entry)``; writes a complete HAR to ``dst`` atomically on success."""
+    guard_write(dst)
     dst.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=dst.name + ".", suffix=".tmp", dir=str(dst.parent))
     count = [0]
@@ -181,6 +184,7 @@ def split_har(src: str | Path, by: str = "host", outdir: str | Path = ".", *, ov
     if by not in ("host", "page"):
         raise ValueError("by must be 'host' or 'page'")
     src, outdir = Path(src), Path(outdir)
+    guard_write(outdir, label="output_dir")
     outdir.mkdir(parents=True, exist_ok=True)
     meta = _meta(src)
     page_by_id = {str(p.get("id")): p for p in meta["pages"]}
