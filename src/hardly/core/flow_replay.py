@@ -30,6 +30,7 @@ import httpx
 
 from hardly.core.ajax_delta import delta_hidden
 from hardly.core.flow_graph import env_key, flow_graph
+from hardly.core.htmlsafe import defuse_html
 from hardly.core.netguard import check_url, new_client
 from hardly.core.redact import REDACTED
 from hardly.core.replay_check import _PLUMBING_HEADERS, _gate_stop, _unresolved
@@ -61,7 +62,7 @@ class _Hidden(HTMLParser):
 def hidden_fields(html: str) -> dict[str, str]:
     p = _Hidden()
     try:
-        p.feed(html)
+        p.feed(defuse_html(html))
     except Exception:  # noqa: BLE001
         pass
     return p.fields

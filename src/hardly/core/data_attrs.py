@@ -20,6 +20,7 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 from hardly.core.explain import finish
+from hardly.core.htmlsafe import defuse_html
 from hardly.core.previews import is_truncated, preview_warnings
 from hardly.core.safe_json import safe_loads
 
@@ -119,7 +120,7 @@ def extract_data_attributes(html: str, *, base_url: str = "") -> dict[str, Any]:
         return empty
     col = _Collector(base_url)
     try:
-        col.feed(html)
+        col.feed(defuse_html(html))
         col.close()
     except Exception:  # noqa: BLE001 — partial results beat none on broken HTML
         pass

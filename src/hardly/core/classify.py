@@ -10,6 +10,7 @@ import sqlite3
 from html.parser import HTMLParser
 from typing import Any
 
+from hardly.core.htmlsafe import defuse_html
 from hardly.core.safe_json import safe_loads
 
 _JSONP = re.compile(
@@ -763,7 +764,7 @@ def _classify_html(
 ) -> dict[str, Any]:
     scanner = _TableScanner()
     try:
-        scanner.feed(text[:120_000])
+        scanner.feed(defuse_html(text[:120_000]))
         scanner.close()
     except Exception:  # noqa: BLE001
         pass

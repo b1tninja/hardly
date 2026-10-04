@@ -12,6 +12,7 @@ All notable changes are documented here. The format follows
 
 ### Security hardening (no tool, parameter or command was renamed or removed)
 - **`INDEX_VERSION` is now 7.** Saved indexes written before this change are rejected with `index_outdated`; re-open the original HAR with `output_path` to rebuild.
+- **Quadratic-parser guard.** Runs of unterminated `<tag` starts (hostile or broken pages) made older `html.parser` builds, such as python.org 3.12.10, take minutes; `core/htmlsafe.py` turns such starts into text before every HTML parse, so the cost no longer depends on the Python patch level.
 - **Outbound URL guard.** Every live tool (`hardly_send_*`, catalog verify, crawl, replay, redirect and
   ArcGIS walks) and the initial URL of the browser tools refuse non-http(s) URLs, credentials in the URL
   and hosts that are or resolve to loopback, private, link-local (cloud metadata), CGNAT, multicast or

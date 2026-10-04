@@ -20,6 +20,7 @@ from urllib.parse import parse_qsl
 
 from hardly.core.ajax_delta import delta_hidden, parse_delta
 from hardly.core.grids import paging_helper_source, paging_params
+from hardly.core.htmlsafe import defuse_html
 from hardly.core.pagination import find_next, iter_follow
 from hardly.core.redact import classify_value_shape, is_sensitive_key
 from hardly.core.retry import (
@@ -480,7 +481,7 @@ def _hidden_names(html: str | None) -> set[str]:
         return set()
     p = _HiddenScan()
     try:
-        p.feed(html)
+        p.feed(defuse_html(html))
     except Exception:  # noqa: BLE001
         pass
     return p.names

@@ -11,6 +11,7 @@ from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urljoin
 
+from hardly.core.htmlsafe import defuse_html
 from hardly.core.redact import REDACTED, is_sensitive_key, redact_string, redact_url
 
 _MAX_VALUE_CHARS = 80
@@ -157,7 +158,7 @@ def extract_html_structure(html: str, *, base_url: str = "") -> dict[str, Any]:
     if interactive:
         parser = _FormParser(base_url=base_url)
         try:
-            parser.feed(html)
+            parser.feed(defuse_html(html))
             parser.close()
         except Exception:  # noqa: BLE001 — broken HTML still yields partial inventory
             pass
