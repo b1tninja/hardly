@@ -164,13 +164,40 @@ def check_url(url: str | httpx.URL, *, resolve: bool = True) -> list[str]:
     return check_host(host, parsed.port or (443 if parsed.scheme == "https" else 80), url=raw, resolve=resolve)
 
 
+def _legacy_ipv4(host: str) -> ipaddress.IPv4Address | None:
+    """``inet_aton`` forms (``2130706433``, ``0x7f.1``, ``0177.0.0.1``) that some resolvers accept and others (Windows) do not."""
+    parts = host.split(".")
+    if not 1 <= len(parts) <= 4 or not all(parts):
+        return None
+    nums = []
+    for part in parts:
+        try:
+            if part[:2].lower() == "0x":
+                nums.append(int(part[2:], 16))
+            elif part[0] == "0" and len(part) > 1:
+                nums.append(int(part, 8))
+            elif part.isdigit():
+                nums.append(int(part))
+            else:
+                return None
+        except ValueError:
+            return None
+    *head, last = nums
+    if any(n > 255 for n in head) or last >= 256 ** (4 - len(head)):
+        return None
+    value = last
+    for i, n in enumerate(head):
+        value |= n << (8 * (3 - i))
+    return ipaddress.IPv4Address(value)
+
+
 def check_host(host: str, port: int = 443, *, url: str = "", resolve: bool = True) -> list[str]:
     """The host half of :func:`check_url` (no scheme/userinfo rules, no opt-out)."""
     shown = url or host
     try:
         ip = ipaddress.ip_address(host.strip("[]").split("%", 1)[0])
     except ValueError:
-        ip = None
+        ip = _legacy_ipv4(host)
     if ip is not None:
         why = _blocked_ip(ip)
         if why:
