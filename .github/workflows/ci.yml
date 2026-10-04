@@ -64,6 +64,7 @@ jobs:
       - run: python -c "import hardly, hardly.server; print(hardly.__version__)"
       - run: hardly --help
       - name: Diagnose parser timing
+        shell: bash
         run: |
           python -VV
           python - <<'PY'
