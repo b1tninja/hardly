@@ -80,8 +80,8 @@ _JS_REDIRECT_RE = re.compile(
     r"(?:window\.|document\.|top\.)?location(?:\.href)?\s*=(?!=)|location\.(?:replace|assign)\s*\(", re.I
 )
 _NEEDS_JS_RE = re.compile(r"enable javascript|requires javascript|javascript is (?:required|disabled)", re.I)
-_SCRIPT_RE = re.compile(r"<script\b[^<>]*>(.*?)</script>", re.I | re.S)
-_STRIP_RE = re.compile(r"<(script|style|noscript)\b.*?</\1>|<!--.*?-->|<[^<>]+>", re.I | re.S)
+_SCRIPT_RE = re.compile(r"<script\b[^<>]*>(.*?)</script\b[^>]*>", re.I | re.S)
+_STRIP_RE = re.compile(r"<(script|style|noscript)\b.*?</\1\b[^>]*>|<!--.*?-->|<[^<>]+>", re.I | re.S)
 _SECOND_LEVEL = frozenset({"co", "com", "org", "gov", "net", "ac", "edu", "go", "ne", "or"})
 
 # Replaceable in tests so politeness delays never really sleep.

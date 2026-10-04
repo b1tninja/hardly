@@ -383,7 +383,7 @@ def test_every_tool_output_is_free_of_canaries(run):
     assert not bad, bad
     # the harness really exercised tools that return data
     joined = "\n".join("\n".join(o) for o in outputs.values())
-    assert "app.example.com" in joined and "***REDACTED***" in joined
+    assert re.search(r"\bapp\.example\.com\b", joined) and "***REDACTED***" in joined
 
 
 # Files that are meant to be shared (everything else a write tool makes is a raw copy by design).
