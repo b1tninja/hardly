@@ -24,8 +24,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-import ijson
-
+from hardly.core.har_io import ijson_items, ijson_parse
 from hardly.core.noise_hosts import is_noise_host
 
 SEVERITIES = ("info", "warn", "error")
@@ -352,16 +351,16 @@ def _stream_top(path: Path) -> dict[str, Any]:
     """Version, creator, browser, pages (small, usually before entries)."""
     top: dict[str, Any] = {"version": None, "creator": None, "pages": []}
     with path.open("rb") as f:
-        for prefix, event, value in ijson.parse(f, use_float=True):
+        for prefix, event, value in ijson_parse(f, use_float=True):
             if prefix == "log.version" and event == "string":
                 top["version"] = value
             elif prefix == "log.entries" and event == "start_array":
                 break
     with path.open("rb") as f:
-        for c in ijson.items(f, "log.creator", use_float=True):
+        for c in ijson_items(f, "log.creator", use_float=True):
             top["creator"] = c
     with path.open("rb") as f:
-        top["pages"] = [p for p in ijson.items(f, "log.pages.item", use_float=True)]
+        top["pages"] = [p for p in ijson_items(f, "log.pages.item", use_float=True)]
     return top
 
 
@@ -486,7 +485,7 @@ def diagnose_har(conn, har_path: str | Path, config: dict | str | Path | None = 
     host_scope = cfg["host"]
 
     with path.open("rb") as f:
-        for eid, entry in enumerate(ijson.items(f, "log.entries.item", use_float=True)):
+        for eid, entry in enumerate(ijson_items(f, "log.entries.item", use_float=True)):
             total += 1
             if not isinstance(entry, dict):
                 continue

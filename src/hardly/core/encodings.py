@@ -15,6 +15,7 @@ import re
 from typing import Any
 
 from hardly.core.redact import classify_value_shape, is_sensitive_key
+from hardly.core.safe_json import safe_loads
 
 MAX_SCAN_BYTES = 2_000_000
 _WIRE = {0: "varint", 1: "fixed64", 2: "len", 5: "fixed32"}
@@ -374,7 +375,7 @@ def summarize_sse(text: str) -> dict[str, Any] | None:
         if state["data"]:
             body = "\n".join(state["data"])
             try:
-                sh = json.dumps(json_shape(json.loads(body), max_depth=3), sort_keys=True)
+                sh = json.dumps(json_shape(safe_loads(body), max_depth=3), sort_keys=True)
             except ValueError:
                 sh = "text"
             if sh not in shapes and len(shapes) >= 5:

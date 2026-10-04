@@ -35,6 +35,7 @@ from hardly.core.browser_detect import (
     scan_chromium_builds,
 )
 from hardly.core.capture_errors import TRANSIENT_NAV, with_error_class
+from hardly.core.har_io import ijson_items
 from hardly.core.netguard import HostNotAllowed
 from hardly.core.slots import SlotTimeoutError, acquire_slot, capture_slot
 from hardly.ephemeral import (
@@ -2893,11 +2894,10 @@ def _count_har_entries(path: Path) -> int | None:
     if not path.is_file():
         return None
     try:
-        import ijson
 
         count = 0
         with path.open("rb") as handle:
-            for _ in ijson.items(handle, "log.entries.item"):
+            for _ in ijson_items(handle, "log.entries.item"):
                 count += 1
         return count
     except Exception:  # noqa: BLE001

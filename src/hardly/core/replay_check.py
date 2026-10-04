@@ -33,6 +33,7 @@ from hardly.core.redact import (
     is_sensitive_header,
     is_sensitive_key,
 )
+from hardly.core.safe_json import safe_loads
 
 try:  # sibling module is built in parallel; degrade gracefully
     from hardly.core.gates import classify_response as _classify_response
@@ -250,7 +251,7 @@ def _build_step(
         kind_guess = "raw"
         if "json" in req_ct.lower() or text.lstrip().startswith(("{", "[")):
             try:
-                parsed = json.loads(text)
+                parsed = safe_loads(text)
                 kind_guess = "json" if isinstance(parsed, dict) else "raw"
             except ValueError:
                 kind_guess = "raw"
@@ -327,7 +328,7 @@ def _kind_of(resp: httpx.Response) -> str:
         return "html"
     if head in "{[":
         try:
-            json.loads(text)
+            safe_loads(text)
             return "json"
         except ValueError:
             pass

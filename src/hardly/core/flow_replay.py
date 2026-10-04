@@ -33,6 +33,7 @@ from hardly.core.flow_graph import env_key, flow_graph
 from hardly.core.netguard import check_url, new_client
 from hardly.core.redact import REDACTED
 from hardly.core.replay_check import _PLUMBING_HEADERS, _gate_stop, _unresolved
+from hardly.core.safe_json import safe_loads
 
 SAFE_METHODS = frozenset({"GET", "HEAD"})
 
@@ -71,7 +72,7 @@ def _deep_find(obj: Any, key: str, depth: int = 0) -> Any:
         return None
     if isinstance(obj, str) and obj.lstrip()[:1] in ("{", "["):
         try:
-            obj = json.loads(obj)
+            obj = safe_loads(obj)
         except ValueError:
             return None
     if isinstance(obj, dict):
@@ -103,7 +104,7 @@ def _extract(edge: dict, live: dict, client: httpx.Client) -> str | None:
         return fields.get(name) if name else None
     if where == "response.json":
         try:
-            found = _deep_find(json.loads(text), name or "")
+            found = _deep_find(safe_loads(text), name or "")
         except ValueError:
             return None
         return None if found is None else str(found)
@@ -258,7 +259,7 @@ def _plan_step(conn, step: dict, inputs: list[dict], env: dict[str, str], missin
         parsed = None
         if "json" in ct or text.lstrip().startswith(("{", "[")):
             try:
-                parsed = json.loads(text)
+                parsed = safe_loads(text)
             except ValueError:
                 parsed = None
         if parsed is not None and isinstance(parsed, (dict, list)):
@@ -285,9 +286,9 @@ def _plan_step(conn, step: dict, inputs: list[dict], env: dict[str, str], missin
                     e = env_for("request.json", nm)
                     if e:
                         fields.append((nm, e))
-            leftover = json.loads(text)
+            leftover = safe_loads(text)
             # unresolved redaction markers that nothing supplies
-            stripped = json.loads(text)
+            stripped = safe_loads(text)
             for nm, _ in fields:
                 _set_deep(stripped, nm, "x")
             if _unresolved(stripped):
@@ -328,9 +329,9 @@ def _shape(text: str, ct: str) -> dict[str, Any]:
     t = (text or "").lstrip()
     if "json" in ct or t[:1] in ("{", "["):
         try:
-            data = json.loads(text)
+            data = safe_loads(text)
             while isinstance(data, str) and data.lstrip()[:1] in ("{", "["):
-                data = json.loads(data)
+                data = safe_loads(data)
         except ValueError:
             return {"kind": "json", "keys": None}
         if isinstance(data, dict):
@@ -531,7 +532,7 @@ def replay_flow(
             if b["kind"] == "form":
                 content = urlencode([(k, need(sp, k)) for k, sp in b["pairs"]]).encode()
             elif b["kind"] == "json":
-                tpl = json.loads(json.dumps(b["template"]))
+                tpl = safe_loads(json.dumps(b["template"]))
                 for nm, sp in b["fields"]:
                     _set_deep(tpl, nm, need(sp, nm))
                 content = json.dumps(tpl).encode()

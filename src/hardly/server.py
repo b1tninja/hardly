@@ -146,6 +146,15 @@ def _tool(fn):
             out = json.loads(_err(exc))
             out.setdefault("code", "invalid_argument")
             return _ok(out)
+        except RecursionError:  # a pathologically nested body or argument, never a crash
+            return _ok(
+                {
+                    "error": "the data is nested too deeply to process",
+                    "code": "input_too_deep",
+                    "hint": "A body or argument nests more than ~100 levels; use hardly_entry_body_query "
+                    "(jsonpath/regex) on the entry, or hardly_har_file_check to find oversized entries.",
+                }
+            )
         except Exception as exc:  # noqa: BLE001
             if type(exc).__name__ == "CaptureError":
                 return _err(exc)

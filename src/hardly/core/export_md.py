@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from hardly.core.redact import redact_body_text
+from hardly.core.safe_json import safe_loads
 from hardly.core.schema_infer import infer_schema
 
 
@@ -15,7 +16,7 @@ def _parse_json(text: str | None) -> Any | None:
     if not text:
         return None
     try:
-        return json.loads(text)
+        return safe_loads(text)
     except (json.JSONDecodeError, TypeError):
         return None
 

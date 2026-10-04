@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, unquote, unquote_plus, urlparse
 
-import ijson
-
 from hardly.core.filters import is_noise
+from hardly.core.har_io import ijson_items
+from hardly.core.safe_json import safe_loads
 from hardly.core.urls import parse_url
 
 # Values shorter than this are usually noise ("1", "true", "GET").
@@ -158,7 +158,7 @@ def _timeline_from_har(
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     with har_path.open("rb") as f:
-        for entry_id, entry in enumerate(ijson.items(f, "log.entries.item")):
+        for entry_id, entry in enumerate(ijson_items(f, "log.entries.item")):
             req = entry.get("request") or {}
             resp = entry.get("response") or {}
             method = (req.get("method") or "GET").upper()
@@ -346,10 +346,10 @@ def _json_values(
     text: str, *, where: str
 ) -> list[tuple[str, str, str | None]]:
     try:
-        data = json.loads(text)
+        data = safe_loads(text)
         # Double-encoded JSON: keep parsing while the result is a JSON string.
         while isinstance(data, str) and data.lstrip()[:1] in ("{", "["):
-            data = json.loads(data)
+            data = safe_loads(data)
     except (json.JSONDecodeError, TypeError):
         return []
     out: list[tuple[str, str, str | None]] = []

@@ -11,6 +11,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from hardly.core.safe_json import safe_loads
+
 _METHODS = {"get", "put", "post", "delete", "patch", "head", "trace"}
 
 
@@ -29,7 +31,7 @@ def _load_spec(spec: Any) -> dict:
         return merged
     text = Path(spec).read_text(encoding="utf-8")
     try:
-        return _load_spec(json.loads(text))
+        return _load_spec(safe_loads(text))
     except json.JSONDecodeError:
         try:
             import yaml  # optional

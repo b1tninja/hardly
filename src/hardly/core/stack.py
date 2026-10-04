@@ -12,7 +12,6 @@ header values and tokens are matched but never echoed.
 
 from __future__ import annotations
 
-import json
 import re
 import sqlite3
 from typing import Any
@@ -20,6 +19,7 @@ from urllib.parse import urlsplit
 
 from hardly.core.cookies import cookie_timeline
 from hardly.core.explain import finish
+from hardly.core.safe_json import safe_loads
 
 _MAX_ENTRIES = 6000
 _MAX_BODY_CHARS = 200_000
@@ -405,14 +405,14 @@ def _double_encoded(body: str) -> int:
     if len(s) < 4 or s[0] != '"':
         return 0
     try:
-        inner = json.loads(s)
+        inner = safe_loads(s)
     except ValueError:
         inner = None
     if isinstance(inner, str):
         t = inner.strip()
         if t[:1] in ("{", "["):
             try:
-                json.loads(t)
+                safe_loads(t)
                 return 3
             except ValueError:
                 return 2 if re.match(r'^[\[{]\s*[{"]', t) else 0

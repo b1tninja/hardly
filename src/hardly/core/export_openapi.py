@@ -7,6 +7,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from hardly.core.safe_json import safe_loads
 from hardly.core.schema_infer import endpoint_samples, infer_schema
 
 
@@ -14,7 +15,7 @@ def _parse_json(text: str | None) -> Any | None:
     if not text:
         return None
     try:
-        return json.loads(text)
+        return safe_loads(text)
     except (json.JSONDecodeError, TypeError):
         return None
 
@@ -290,7 +291,7 @@ def _query_parameters(conn: sqlite3.Connection, rows: list[sqlite3.Row]) -> list
     for r in rows:
         q = conn.execute("SELECT query_json FROM entries WHERE entry_id = ?", (r["entry_id"],)).fetchone()
         try:
-            data = json.loads((q["query_json"] if q else None) or "{}")
+            data = safe_loads((q["query_json"] if q else None) or "{}")
         except (json.JSONDecodeError, TypeError):
             continue
         if isinstance(data, dict):

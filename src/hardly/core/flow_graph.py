@@ -19,22 +19,21 @@ be found (``source: "index"``).
 
 from __future__ import annotations
 
-import json
 import re
 import sqlite3
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, unquote, unquote_plus, urlparse
 
-import ijson
-
 from hardly.core import correlate as _cor
+from hardly.core.har_io import ijson_items
 from hardly.core.redact import (
     REDACTED,
     classify_value_shape,
     is_sensitive_header,
     is_sensitive_key,
 )
+from hardly.core.safe_json import safe_loads
 from hardly.core.stub import _tokenish_value
 
 _MAX_STEPS = 60
@@ -75,9 +74,9 @@ def _body_inputs(post: dict) -> list[tuple[str, str, str]]:
     found: list[tuple[str, str, str]] = []
     if text.lstrip().startswith(("{", "[")):
         try:
-            data = json.loads(text)
+            data = safe_loads(text)
             while isinstance(data, str) and data.lstrip()[:1] in ("{", "["):
-                data = json.loads(data)
+                data = safe_loads(data)
         except (ValueError, TypeError):
             data = None
         pairs: list[tuple[str, str]] = []
@@ -158,7 +157,7 @@ def _node(entry_id: int, req: dict, resp: dict, *, cookie_names: list[str] | Non
 def _nodes_from_har(path: Path, upto: int) -> dict[int, dict]:
     nodes: dict[int, dict] = {}
     with path.open("rb") as f:
-        for i, entry in enumerate(ijson.items(f, "log.entries.item")):
+        for i, entry in enumerate(ijson_items(f, "log.entries.item")):
             if i > upto:
                 break
             req = entry.get("request") or {}

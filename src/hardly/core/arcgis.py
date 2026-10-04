@@ -11,7 +11,6 @@ are flagged, not hidden.
 
 from __future__ import annotations
 
-import json
 import re
 import sqlite3
 import time
@@ -21,6 +20,7 @@ from urllib.parse import parse_qsl, urlsplit
 import httpx
 
 from hardly.core.netguard import check_url, new_client
+from hardly.core.safe_json import safe_loads
 
 SERVER_KINDS = ("MapServer", "FeatureServer", "ImageServer", "GeocodeServer")
 
@@ -102,7 +102,7 @@ def flag_field(name: str, field_type: str | None = None) -> list[str]:
 def _json(obj: Any) -> dict:
     if isinstance(obj, (str, bytes)):
         try:
-            obj = json.loads(obj)
+            obj = safe_loads(obj)
         except (ValueError, TypeError):
             return {}
     return obj if isinstance(obj, dict) else {}
@@ -432,7 +432,7 @@ def summarize_session(conn: sqlite3.Connection, host: str | None = None) -> dict
             s["layer_ids_seen"].add(layer)
         params: dict = {}
         try:
-            params = json.loads(r["query_json"]) if r["query_json"] else {}
+            params = safe_loads(r["query_json"]) if r["query_json"] else {}
         except (ValueError, TypeError):
             pass
         names = {str(k) for k in params} if isinstance(params, dict) else set()

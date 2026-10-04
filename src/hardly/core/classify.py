@@ -10,6 +10,8 @@ import sqlite3
 from html.parser import HTMLParser
 from typing import Any
 
+from hardly.core.safe_json import safe_loads
+
 _JSONP = re.compile(
     r"^\s*(?:/\*.*?\*/\s*|//[^\n]*\n\s*)*"
     r"([A-Za-z_$][\w$.]*)\s*\(\s*([\s\S]*)\)\s*;?\s*$",
@@ -480,7 +482,7 @@ def _try_jsonp(text: str) -> dict[str, Any] | None:
     if callback.lower() in {"if", "while", "for", "function", "switch"}:
         return None
     try:
-        data = json.loads(inner)
+        data = safe_loads(inner)
     except (json.JSONDecodeError, TypeError):
         return None
     return _pack(
@@ -507,7 +509,7 @@ def _try_jsonl(text: str, mime: str) -> dict[str, Any] | None:
     keys: list[str] = []
     for ln in lines[:40]:
         try:
-            obj = json.loads(ln)
+            obj = safe_loads(ln)
         except (json.JSONDecodeError, TypeError):
             continue
         if isinstance(obj, (dict, list)):
@@ -537,7 +539,7 @@ def _try_json(text: str, mime: str) -> dict[str, Any] | None:
     ):
         return None
     try:
-        data = json.loads(text)
+        data = safe_loads(text)
     except (json.JSONDecodeError, TypeError):
         # Partial / truncated JSON preview
         if text.startswith(("{", "[")) or "json" in mime:

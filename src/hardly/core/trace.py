@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, unquote_plus, urlparse
 
-import ijson
-
 from hardly.core.filters import is_noise
+from hardly.core.har_io import ijson_items
+from hardly.core.safe_json import safe_loads
 from hardly.core.urls import parse_url
 
 _MAX_HITS = 50
@@ -83,7 +83,7 @@ def _from_har(
     hits: list[dict[str, Any]] = []
     name_l = name.lower() if name else None
     with har_path.open("rb") as f:
-        for entry_id, entry in enumerate(ijson.items(f, "log.entries.item")):
+        for entry_id, entry in enumerate(ijson_items(f, "log.entries.item")):
             req = entry.get("request") or {}
             resp = entry.get("response") or {}
             url = req.get("url") or ""
@@ -277,7 +277,7 @@ def _scan_body(
     stripped = text.lstrip()
     if stripped.startswith(("{", "[")):
         try:
-            data = json.loads(text)
+            data = safe_loads(text)
         except (json.JSONDecodeError, TypeError):
             data = None
         if data is not None:

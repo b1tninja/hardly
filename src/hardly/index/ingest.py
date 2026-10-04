@@ -9,7 +9,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-import ijson
+from hardly.core.har_io import ijson_items
+from hardly.core.safe_json import safe_loads
 
 
 def _num(value: Any) -> float | int | None:
@@ -367,7 +368,7 @@ def _record_body_shapes(
     # whole document (any long path/hash/class name would otherwise match).
     if stripped.startswith(("{", "[")):
         try:
-            data = json.loads(stripped)
+            data = safe_loads(stripped)
         except ValueError:
             return
         seen: set[tuple[str, str]] = set()
@@ -423,7 +424,7 @@ def ingest_into(har_path: str | Path, conn: sqlite3.Connection) -> dict[str, Any
     }
 
     with har_path.open("rb") as f:
-        for entry_id, entry in enumerate(ijson.items(f, "log.entries.item")):
+        for entry_id, entry in enumerate(ijson_items(f, "log.entries.item")):
             req = entry.get("request") or {}
             resp = entry.get("response") or {}
             method = (req.get("method") or "GET").upper()

@@ -15,6 +15,7 @@ from hardly.core.redact import (
     is_sensitive_key,
     redact_body_text,
 )
+from hardly.core.safe_json import safe_loads
 from hardly.core.schema_infer import infer_schema
 
 _SELECT_ONLY = re.compile(r"^\s*SELECT\b", re.I)
@@ -977,7 +978,7 @@ def _redact_query(query_json: str | None) -> dict[str, Any]:
     if not query_json:
         return {}
     try:
-        query = json.loads(query_json)
+        query = safe_loads(query_json)
     except (json.JSONDecodeError, TypeError):
         return {}
     if not isinstance(query, dict):
@@ -1016,7 +1017,7 @@ def compare_entries(conn: sqlite3.Connection, a_id: int, b_id: int) -> dict:
         if not text:
             return []
         try:
-            data = json.loads(text)
+            data = safe_loads(text)
         except (json.JSONDecodeError, TypeError):
             return []
         if isinstance(data, dict):

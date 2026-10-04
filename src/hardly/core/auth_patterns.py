@@ -19,10 +19,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlparse
 
-import ijson
-
 from hardly.core.credentials import _cookie_pairs
+from hardly.core.har_io import ijson_items
 from hardly.core.redact import classify_value_shape
+from hardly.core.safe_json import safe_loads
 
 KINDS = ("bearer_refresh", "oidc_pkce", "saml_post", "double_submit_csrf", "signed_requests")
 
@@ -49,7 +49,7 @@ def _params_of(req: dict) -> tuple[dict[str, str], str]:
         return {}, ""
     if "json" in mime or text.lstrip().startswith("{"):
         try:
-            data = json.loads(text)
+            data = safe_loads(text)
         except ValueError:
             return {}, ""
         if isinstance(data, dict):
@@ -63,7 +63,7 @@ def _params_of(req: dict) -> tuple[dict[str, str], str]:
 def _load(har_path: str | Path, host: str | None) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     with Path(har_path).open("rb") as f:
-        for i, e in enumerate(ijson.items(f, "log.entries.item")):
+        for i, e in enumerate(ijson_items(f, "log.entries.item")):
             req, resp = e.get("request") or {}, e.get("response") or {}
             u = urlparse(req.get("url") or "")
             if host and u.netloc.lower() != host.lower():
@@ -80,7 +80,7 @@ def _load(har_path: str | Path, host: str | None) -> list[dict[str, Any]]:
             rjson = None
             if text.lstrip()[:1] in ("{", "["):
                 try:
-                    rjson = json.loads(text)
+                    rjson = safe_loads(text)
                 except ValueError:
                     pass
             body, bkind = _params_of(req)

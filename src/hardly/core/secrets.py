@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import parse_qsl
 
 from hardly.core.redact import is_sensitive_header, is_sensitive_key
+from hardly.core.safe_json import safe_loads
 
 _MAX = 60
 
@@ -102,7 +103,7 @@ def locate_secrets(
             params,
         ):
             try:
-                query = json.loads(row["query_json"] or "{}")
+                query = safe_loads(row["query_json"] or "{}")
             except (json.JSONDecodeError, TypeError):
                 continue
             if not isinstance(query, dict):
@@ -155,7 +156,7 @@ def _body_sensitive_names(
     stripped = text.lstrip()
     if "json" in ct or stripped.startswith(("{", "[")):
         try:
-            data = json.loads(text)
+            data = safe_loads(text)
         except (json.JSONDecodeError, TypeError):
             data = None
         if data is not None:

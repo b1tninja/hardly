@@ -6,6 +6,8 @@ import json
 import re
 from typing import Any
 
+from hardly.core.safe_json import safe_loads
+
 REDACTED = "***REDACTED***"
 
 SENSITIVE_HEADER_NAMES = frozenset(
@@ -358,7 +360,7 @@ def redact_json(value: Any, *, depth: int = 0, max_depth: int = 12, markup: bool
         stripped = value.lstrip()
         if 2 <= len(stripped) <= MAX_EMBEDDED_JSON_CHARS and stripped[0] in "{[" and depth < max_depth:
             try:
-                inner = json.loads(stripped)
+                inner = safe_loads(stripped)
             except (ValueError, RecursionError):
                 inner = None
             if isinstance(inner, (dict, list)):  # double-encoded JSON: redact what is inside
@@ -461,7 +463,7 @@ def redact_body_text(text: str | None, *, max_chars: int = 4000, markup: bool = 
     try:
         if len(text) > MAX_JSON_PARSE_CHARS:
             raise ValueError("too large to parse for a preview")
-        parsed = json.loads(preview if not truncated else text)
+        parsed = safe_loads(preview if not truncated else text)
         redacted = redact_json(parsed, markup=markup)
         out_text = json.dumps(redacted, indent=2, default=str)
         if len(out_text) > max_chars:

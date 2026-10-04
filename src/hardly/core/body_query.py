@@ -17,9 +17,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-import ijson
-
 from hardly.core.encodings import json_shape, type_name
+from hardly.core.har_io import ijson_items
 from hardly.core.redact import (
     REDACTED,
     classify_value_shape,
@@ -29,6 +28,7 @@ from hardly.core.redact import (
     redact_markup_text,
     redact_string,
 )
+from hardly.core.safe_json import safe_loads
 
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 200
@@ -61,7 +61,7 @@ def load_entry_body(
     if side not in ("request", "response"):
         raise BodyQueryError("side must be 'request' or 'response'")
     with har.open("rb") as f:
-        for i, entry in enumerate(ijson.items(f, "log.entries.item")):
+        for i, entry in enumerate(ijson_items(f, "log.entries.item")):
             if i != entry_id:
                 continue
             if side == "request":
@@ -226,7 +226,7 @@ def redact_snippet(text: str) -> str:
 def _parse_json_or_lines(text: str) -> Any:
     s = text.strip().lstrip("\ufeff")
     try:
-        return json.loads(s)
+        return safe_loads(s)
     except ValueError:
         pass
     rows = []
@@ -235,7 +235,7 @@ def _parse_json_or_lines(text: str) -> Any:
         if not ln:
             continue
         try:
-            rows.append(json.loads(ln))
+            rows.append(safe_loads(ln))
         except ValueError:
             raise BodyQueryError("body is not JSON or JSON lines") from None
     if not rows:

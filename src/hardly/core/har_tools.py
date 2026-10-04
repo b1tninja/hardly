@@ -21,9 +21,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-import ijson
-
 from hardly.core.filters import is_noise
+from hardly.core.har_io import ijson_items
 from hardly.core.pathguard import guard_write
 from hardly.core.redact import (
     JWT_RE,
@@ -38,6 +37,7 @@ from hardly.core.redact import (
     redact_url,
     redact_urls_in_text,
 )
+from hardly.core.safe_json import safe_loads
 
 # --------------------------------------------------------------------------- io
 
@@ -58,7 +58,7 @@ def _check_paths(src: Iterable[Path], dst: Path, overwrite: bool) -> None:
 
 def _entries(path: Path) -> Iterator[dict]:
     with path.open("rb") as f:
-        yield from ijson.items(f, "log.entries.item", use_float=True)
+        yield from ijson_items(f, "log.entries.item", use_float=True)
 
 
 def _meta(path: Path) -> dict[str, Any]:
@@ -67,10 +67,10 @@ def _meta(path: Path) -> dict[str, Any]:
     with path.open("rb") as f:
         for key in ("version", "creator", "browser", "comment"):
             f.seek(0)
-            for v in ijson.items(f, f"log.{key}", use_float=True):
+            for v in ijson_items(f, f"log.{key}", use_float=True):
                 meta[key] = v
     with path.open("rb") as f:
-        meta["pages"] = list(ijson.items(f, "log.pages.item", use_float=True))
+        meta["pages"] = list(ijson_items(f, "log.pages.item", use_float=True))
     return meta
 
 
@@ -338,7 +338,7 @@ def _scrub_json(v: Any, depth: int = 0) -> Any:
         stripped = v.lstrip()
         if 2 <= len(stripped) <= MAX_EMBEDDED_JSON_CHARS and stripped[0] in "{[":
             try:
-                inner = json.loads(stripped)
+                inner = safe_loads(stripped)
             except (ValueError, RecursionError):
                 inner = None
             if isinstance(inner, (dict, list)):  # double-encoded JSON
@@ -356,7 +356,7 @@ def _scrub_text(text: str, mime: str) -> str:
     stripped = text.lstrip()
     if stripped[:1] in "{[" and len(text) <= MAX_JSON_PARSE_CHARS:
         try:
-            return json.dumps(_scrub_json(json.loads(text)), ensure_ascii=False)
+            return json.dumps(_scrub_json(safe_loads(text)), ensure_ascii=False)
         except (ValueError, RecursionError):
             pass
     if "urlencoded" in mime or ("=" in text and "\n" not in text.strip() and "<" not in text):
@@ -399,7 +399,7 @@ def _scrub_content(c: dict, mime: str) -> dict:
 
 def scrub_entry(e: dict) -> dict:
     """Return a scrubbed copy of one HAR entry (keeps keys, sizes and shapes)."""
-    e = json.loads(_dumps(e))
+    e = safe_loads(_dumps(e))
     req = e.get("request") or {}
     resp = e.get("response") or {}
     if req.get("url"):
