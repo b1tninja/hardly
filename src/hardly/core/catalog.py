@@ -763,7 +763,7 @@ class CatalogRunner:
         for t, e in due:
             why = blocked_reason(e.url)
             if why:
-                blocked.append({"target": t.id, "role": e.role, "code": "host_not_allowed", "reason": why})
+                blocked.append({"target": t, "role": e.role, "code": "host_not_allowed", "reason": why})
         if blocked:
             out["blocked"] = blocked
             out["hint"] = default_hint()

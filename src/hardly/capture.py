@@ -883,6 +883,7 @@ def _stop_capture_impl(
 
 
 def navigate_capture(capture_id: str | None, url: str) -> dict[str, Any]:
+    _guard_url(url)
     cid = capture_id or latest_running_id()
     if not cid:
         raise CaptureError("no running capture to navigate")
