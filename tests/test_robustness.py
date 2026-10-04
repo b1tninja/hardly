@@ -312,7 +312,7 @@ def test_100k_tiny_entries_and_one_50mb_body_ingest_in_bounded_time_and_memory(t
         t = time.time()
         info = sess.open_har({str(har)!r}, force=True)
         dt = time.time() - t
-        rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024  # MB on Linux
+        rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1024 * 1024 if sys.platform == 'darwin' else 1024)  # MB (bytes on macOS)
         print(json.dumps({{"seconds": dt, "rss_mb": rss, "entries": info.get("entries") or info.get("entry_count")}}))
         """
     )
