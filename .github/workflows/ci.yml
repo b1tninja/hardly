@@ -63,6 +63,16 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: python -c "import hardly, hardly.server; print(hardly.__version__)"
       - run: hardly --help
+      - name: Diagnose parser timing
+        run: |
+          python -VV
+          python - <<'PY'
+          import cProfile, pstats, time
+          from hardly.core import html_forms
+          t = "<a href=" * 5000
+          cProfile.run("html_forms.extract_html_structure(t, base_url='https://a.example.com/')", "p.out")
+          pstats.Stats("p.out").sort_stats("tottime").print_stats(8)
+          PY
       - run: pytest -q -m "not browser and not live"
 
   build:
