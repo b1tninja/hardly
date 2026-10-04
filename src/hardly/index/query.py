@@ -1095,6 +1095,10 @@ def _hide_raw_columns(action, arg1, arg2, _db, _source):
     return sqlite3.SQLITE_OK
 
 
+def _allow_all(*_args):
+    return sqlite3.SQLITE_OK
+
+
 def _clean_cell(value: Any) -> Any:
     """Stored text previews keep markup values for the detectors; ad-hoc SQL shows them redacted."""
     if isinstance(value, str) and len(value) > 16:
@@ -1127,7 +1131,8 @@ def run_sql(
     except sqlite3.Error as exc:
         return {"error": str(exc)}
     finally:
-        conn.set_authorizer(None)
+        # Python < 3.11 rejects None here (every later statement would be denied).
+        conn.set_authorizer(_allow_all)
     return {
         "columns": cols,
         "rows": [dict(zip(cols, (_clean_cell(v) for v in row))) for row in rows],
