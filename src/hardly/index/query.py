@@ -383,10 +383,9 @@ def search_entries(
             params.append(header_name.lower())
         if header_contains:
             clauses.append(
-                "(h.value_redacted LIKE ? OR IFNULL(h.value_raw, '') LIKE ?)"
+                "h.value_redacted LIKE ?"
             )
-            params.append(f"%{header_contains}%")
-            params.append(f"%{header_contains}%")
+            params.append(f"%{header_contains}%")  # redacted text only: no raw-value oracle
 
     join = " ".join(joins)
     where = " AND ".join(clauses)
@@ -1085,6 +1084,25 @@ def endpoint_schema(
     return out
 
 
+#: Columns that keep un-redacted values for the analysis code; ad-hoc SQL reads them as NULL.
+_RAW_COLUMNS = {("headers", "value_raw")}
+
+
+def _hide_raw_columns(action, arg1, arg2, _db, _source):
+    if action == sqlite3.SQLITE_READ and (arg1, arg2) in _RAW_COLUMNS:
+        return sqlite3.SQLITE_IGNORE
+    return sqlite3.SQLITE_OK
+
+
+def _clean_cell(value: Any) -> Any:
+    """Stored text previews keep markup values for the detectors; ad-hoc SQL shows them redacted."""
+    if isinstance(value, str) and len(value) > 16:
+        from hardly.core.redact import redact_form, redact_markup_text, redact_string
+
+        return redact_form(redact_markup_text(redact_string(value)))
+    return value
+
+
 def run_sql(
     conn: sqlite3.Connection,
     sql: str,
@@ -1100,15 +1118,18 @@ def run_sql(
     upper = sql_stripped.upper()
     if "LIMIT" not in upper:
         sql_stripped = f"{sql_stripped} LIMIT {limit}"
+    conn.set_authorizer(_hide_raw_columns)
     try:
         cur = conn.execute(sql_stripped)
         cols = [d[0] for d in cur.description] if cur.description else []
         rows = cur.fetchmany(limit)
     except sqlite3.Error as exc:
         return {"error": str(exc)}
+    finally:
+        conn.set_authorizer(None)
     return {
         "columns": cols,
-        "rows": [dict(zip(cols, row)) for row in rows],
+        "rows": [dict(zip(cols, (_clean_cell(v) for v in row))) for row in rows],
         "row_count": len(rows),
         "limit": limit,
     }

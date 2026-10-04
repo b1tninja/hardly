@@ -26,13 +26,14 @@ from hardly.core.redact import (
     is_sensitive_key,
     redact_form,
     redact_json,
+    redact_markup_text,
     redact_string,
 )
 
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 200
 MAX_PATTERN = 500
-MAX_SCAN_CHARS = 16_000_000
+MAX_REDACT_CHARS = 2_000_000  # text modes redact this prefix once, then search/window the result
 MAX_COUNT = 10_000
 MAX_OUTPUT_CHARS = 12_000
 
@@ -194,7 +195,7 @@ def _present(value: Any, path: tuple, max_chars: int) -> dict[str, Any]:
             out["shape"] = shape
             out["length"] = len(value)
         else:
-            out["value"] = _cap(redact_string(value), max_chars)
+            out["value"] = _cap(redact_json(value), max_chars)
         return out
     if isinstance(value, (dict, list)):
         red = redact_json(value)
@@ -219,7 +220,7 @@ def redact_snippet(text: str) -> str:
     def swap(m: re.Match) -> str:
         return m.group(1) + f'"{REDACTED}"' if is_sensitive_key(m.group("k")) else m.group(0)
 
-    return redact_form(redact_string(_JSON_KV.sub(swap, text)))
+    return redact_form(redact_markup_text(redact_string(_JSON_KV.sub(swap, text))))
 
 
 def _parse_json_or_lines(text: str) -> Any:
@@ -322,9 +323,10 @@ def query_body(
             rx = re.compile(regex, re.I if ignore_case else 0)
         except re.error as exc:
             raise BodyQueryError(f"bad regex: {exc}") from None
-        scan = text[:MAX_SCAN_CHARS]
-        if len(text) > MAX_SCAN_CHARS:
-            base["scan_truncated_at"] = MAX_SCAN_CHARS
+        # Search the REDACTED text: a secret value can neither match nor be cut out of context.
+        scan = redact_snippet(text[:MAX_REDACT_CHARS])
+        if len(text) > MAX_REDACT_CHARS:
+            base["scan_truncated_at"] = MAX_REDACT_CHARS
         out: list[dict[str, Any]] = []
         total = 0
         budget = MAX_OUTPUT_CHARS
@@ -333,13 +335,13 @@ def query_body(
                 a, b = m.start(), m.end()
                 hit = m.group(0)
                 shape = classify_value_shape(hit)
-                shown = f"<{shape}>" if shape else _cap(redact_snippet(hit), max_chars)
-                pre = redact_snippet(scan[max(0, a - context):a])
-                post = redact_snippet(scan[b:b + context])
+                shown = f"<{shape}>" if shape else _cap(hit, max_chars)
+                pre = scan[max(0, a - context):a]
+                post = scan[b:b + context]
                 item = {
                     "at": a, "match": shown, "before": pre, "after": post,
                     "groups": [
-                        (f"<{classify_value_shape(g)}>" if g and classify_value_shape(g) else _cap(redact_snippet(g), 80))
+                        (f"<{classify_value_shape(g)}>" if g and classify_value_shape(g) else _cap(g, 80))
                         if g is not None else None
                         for g in m.groups()[:6]
                     ],
@@ -359,12 +361,15 @@ def query_body(
 
     # Plain window: offset/limit are characters.
     size = min(limit * 100, 4000) if limit <= MAX_LIMIT else 4000
-    chunk = text[offset:offset + size]
+    shown = redact_snippet(text[:MAX_REDACT_CHARS])  # redact the whole readable prefix, then window it
+    chunk = shown[offset:offset + size]
     end = offset + len(chunk)
     base.update(
-        window=redact_snippet(chunk), offset=offset, length=len(chunk), total=len(text),
-        has_more=end < len(text), next_offset=end if end < len(text) else None,
-        note="window offset/limit are characters (limit*100, max 4000); redacted per line, "
-        "so secrets split across the window edge may be partially shown as text",
+        window=chunk, offset=offset, length=len(chunk), total=len(shown),
+        has_more=end < len(shown), next_offset=end if end < len(shown) else None,
+        note="window offset/limit are characters of the redacted text (limit*100, max 4000)",
     )
+    if len(text) > MAX_REDACT_CHARS:
+        base["readable_prefix_chars"] = MAX_REDACT_CHARS
+        base["note"] += f"; only the first {MAX_REDACT_CHARS} characters of a larger body are readable"
     return base

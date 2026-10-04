@@ -27,11 +27,16 @@ from hardly.core.filters import is_noise
 from hardly.core.pathguard import guard_write
 from hardly.core.redact import (
     JWT_RE,
+    LABEL_KEYS,
+    MAX_EMBEDDED_JSON_CHARS,
+    MAX_JSON_PARSE_CHARS,
     REDACTED,
     is_sensitive_header,
     is_sensitive_key,
     redact_form,
+    redact_markup_text,
     redact_url,
+    redact_urls_in_text,
 )
 
 # --------------------------------------------------------------------------- io
@@ -285,7 +290,7 @@ _BEARER_IN_TEXT = re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._~+/=-]{12,}")
 
 def _scrub_header(name: str, value: str) -> str:
     if not (is_sensitive_header(name) or name.lower() in ("authorization", "cookie", "set-cookie")):
-        return JWT_RE.sub(REDACTED, value)
+        return _scrub_text_plain(value)
     m = _AUTH_SCHEME_RE.match(value)
     if m:
         return m.group(1) + REDACTED
@@ -306,26 +311,53 @@ def _scrub_header(name: str, value: str) -> str:
 _COOKIE_ATTRS = {"path", "domain", "expires", "max-age", "samesite", "version", "comment"}
 
 
-def _scrub_json(v: Any) -> Any:
+def _mask_leaves(v: Any) -> Any:
+    """Keep the shape of a container, replace every scalar leaf (a secret that is itself an object)."""
     if isinstance(v, dict):
-        return {k: (REDACTED if is_sensitive_key(str(k)) and not isinstance(val, (dict, list)) else _scrub_json(val)) for k, val in v.items()}
+        return {k: _mask_leaves(x) for k, x in v.items()}
     if isinstance(v, list):
-        return [_scrub_json(x) for x in v]
+        return [_mask_leaves(x) for x in v]
+    return REDACTED if isinstance(v, str) and v else v
+
+
+def _scrub_json(v: Any, depth: int = 0) -> Any:
+    if depth > 400:  # deeper than any real document: stop descending, never recurse unboundedly
+        return REDACTED
+    if isinstance(v, dict):
+        labelled = any(isinstance(v.get(k), str) and is_sensitive_key(v[k]) for k in LABEL_KEYS)
+        out: dict[str, Any] = {}
+        for k, val in v.items():
+            if is_sensitive_key(str(k)) or (labelled and str(k).lower() == "value"):
+                out[k] = _mask_leaves(val)
+            else:
+                out[k] = _scrub_json(val, depth + 1)
+        return out
+    if isinstance(v, list):
+        return [_scrub_json(x, depth + 1) for x in v]
     if isinstance(v, str):
-        return _scrub_text_plain(v)
+        stripped = v.lstrip()
+        if 2 <= len(stripped) <= MAX_EMBEDDED_JSON_CHARS and stripped[0] in "{[":
+            try:
+                inner = json.loads(stripped)
+            except (ValueError, RecursionError):
+                inner = None
+            if isinstance(inner, (dict, list)):  # double-encoded JSON
+                return json.dumps(_scrub_json(inner, depth + 1), ensure_ascii=False)
+        return redact_form(_scrub_text_plain(v))
     return v
 
 
 def _scrub_text_plain(s: str) -> str:
-    return _BEARER_IN_TEXT.sub(lambda m: m.group(1) + REDACTED, JWT_RE.sub(REDACTED, s))
+    s = _BEARER_IN_TEXT.sub(lambda m: m.group(1) + REDACTED, JWT_RE.sub(REDACTED, s))
+    return redact_markup_text(redact_urls_in_text(s))
 
 
 def _scrub_text(text: str, mime: str) -> str:
     stripped = text.lstrip()
-    if stripped[:1] in "{[":
+    if stripped[:1] in "{[" and len(text) <= MAX_JSON_PARSE_CHARS:
         try:
             return json.dumps(_scrub_json(json.loads(text)), ensure_ascii=False)
-        except ValueError:
+        except (ValueError, RecursionError):
             pass
     if "urlencoded" in mime or ("=" in text and "\n" not in text.strip() and "<" not in text):
         text = redact_form(text)
@@ -392,6 +424,9 @@ def scrub_entry(e: dict) -> dict:
         resp["content"] = _scrub_content(resp["content"], str(resp["content"].get("mimeType") or ""))
     if isinstance(e.get("_initiator"), dict) and e["_initiator"].get("url"):
         e["_initiator"]["url"] = redact_url(e["_initiator"]["url"])
+    for msg in e.get("_webSocketMessages") or []:
+        if isinstance(msg, dict) and isinstance(msg.get("data"), str) and int(msg.get("opcode") or 1) == 1:
+            msg["data"] = _scrub_text(msg["data"], "")
     return e
 
 

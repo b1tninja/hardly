@@ -37,6 +37,7 @@ from hardly.core.redact import (
     redact_header_value,
     redact_query_dict,
     redact_query_string,
+    redact_url,
 )
 from hardly.core.urls import parse_url, path_template
 from hardly.index.atomic import persist_connection, remove_quietly, tmp_path_for
@@ -77,7 +78,7 @@ def _initiator(entry: dict) -> tuple[str | None, str | None]:
         url = str(url)[:2000]
     return (
         str(init_type) if init_type else None,
-        str(url) if url else None,
+        redact_url(str(url)) if url else None,  # a stored URL never carries a secret value
     )
 
 
@@ -229,7 +230,7 @@ def _store_body(
             if mime and "html" in str(mime).lower()
             else PREVIEW_CHARS
         )
-        redacted = redact_body_text(text, max_chars=limit)
+        redacted = redact_body_text(text, max_chars=limit, markup=False)
         preview = redacted["text"]
         if sha is None:
             sha = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
