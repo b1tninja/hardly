@@ -75,32 +75,32 @@ _DETAIL_RE = re.compile(
 
 # Label div next to value div (detailLabel-style layouts)
 _LABEL_ROW = re.compile(
-    r'<div\b[^>]*\bclass="[^"]*\bdetailLabel\b[^"]*"[^>]*>\s*(.*?)\s*</div>\s*'
-    r'<div\b[^>]*\bclass="[^"]*\b(?:formInput|listDocDetails)\b[^"]*"[^>]*>\s*(.*?)\s*</div>',
+    r'<div\b[^<>]*\bclass="[^"]*\bdetailLabel\b[^"]*"[^<>]*>\s*(.*?)\s*</div>\s*'
+    r'<div\b[^<>]*\bclass="[^"]*\b(?:formInput|listDocDetails)\b[^"]*"[^<>]*>\s*(.*?)\s*</div>',
     re.I | re.S,
 )
 _TH_TD = re.compile(
-    r"<tr\b[^>]*>\s*<th\b[^>]*>\s*(.*?)\s*</th>\s*<td\b[^>]*>\s*(.*?)\s*</td>",
+    r"<tr\b[^<>]*>\s*<th\b[^<>]*>\s*(.*?)\s*</th>\s*<td\b[^<>]*>\s*(.*?)\s*</td>",
     re.I | re.S,
 )
 _DT_DD = re.compile(
-    r"<dt\b[^>]*>\s*(.*?)\s*</dt>\s*<dd\b[^>]*>\s*(.*?)\s*</dd>",
+    r"<dt\b[^<>]*>\s*(.*?)\s*</dt>\s*<dd\b[^<>]*>\s*(.*?)\s*</dd>",
     re.I | re.S,
 )
 # Bootstrap-style detail tables: bold label cell → value cell
 _TD_BOLDER = re.compile(
-    r'<td\b[^>]*\bclass="[^"]*\bfont-weight-bolder\b[^"]*"[^>]*>\s*(.*?)\s*</td>\s*'
-    r"<td\b[^>]*>\s*(.*?)\s*</td>",
+    r'<td\b[^<>]*\bclass="[^"]*\bfont-weight-bolder\b[^"]*"[^<>]*>\s*(.*?)\s*</td>\s*'
+    r"<td\b[^<>]*>\s*(.*?)\s*</td>",
     re.I | re.S,
 )
 # Label span cells: <td><span class="base" id="fcNspan">Label:</span></td><td>value</td>
 # (ids are fc1span / fc2span / …; allow attributes in either order)
 _TD_SPAN_BASE = re.compile(
-    r"<td\b[^>]*>\s*<span\b(?=[^>]*\b(?:class=\"[^\"]*\bbase\b[^\"]*\"|id=\"fc\d+span\"))[^>]*>"
-    r"\s*(.*?)\s*</span>\s*</td>\s*<td\b[^>]*>\s*(.*?)\s*</td>",
+    r"<td\b[^<>]*>\s*<span\b(?=[^<>]*\b(?:class=\"[^\"]*\bbase\b[^\"]*\"|id=\"fc\d+span\"))[^<>]*>"
+    r"\s*(.*?)\s*</span>\s*</td>\s*<td\b[^<>]*>\s*(.*?)\s*</td>",
     re.I | re.S,
 )
-_TAG = re.compile(r"<[^>]+>")
+_TAG = re.compile(r"<[^<>]+>")
 
 _VOID = frozenset(
     {

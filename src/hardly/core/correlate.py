@@ -20,7 +20,7 @@ _MAX_CANDIDATES = 400
 _MAX_HITS = 40
 
 _HIDDEN_INPUT = re.compile(
-    r"""<input\b[^>]*\btype\s*=\s*['"]hidden['"][^>]*>""",
+    r"""<input\b[^<>]*\btype\s*=\s*['"]hidden['"][^<>]*>""",
     re.I,
 )
 _ATTR = re.compile(

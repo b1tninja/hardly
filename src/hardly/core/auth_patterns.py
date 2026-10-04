@@ -324,8 +324,8 @@ def detect_oidc_pkce(entries: list[dict]) -> dict[str, Any]:
 
 # ------------------------------------------------------------ 3. SAML POST
 
-_FORM_RE = re.compile(r"<form\b([^>]*)>(.*?)</form>", re.I | re.S)
-_INPUT_RE = re.compile(r"<input\b[^>]*>", re.I)
+_FORM_RE = re.compile(r"<form\b([^<>]*)>(.*?)</form>", re.I | re.S)
+_INPUT_RE = re.compile(r"<input\b[^<>]*>", re.I)
 
 
 def _saml_shape(v: str) -> dict[str, Any]:
@@ -373,7 +373,7 @@ def detect_saml_post(entries: list[dict]) -> dict[str, Any]:
                 if not kind:
                     continue
                 act = re.search(r"""action\s*=\s*["']([^"']*)["']""", m.group(1), re.I)
-                val = re.search(r"""name\s*=\s*["']%s["'][^>]*value\s*=\s*["']([^"']*)["']""" % kind, inputs, re.I)
+                val = re.search(r"""name\s*=\s*["']%s["'][^<>]*value\s*=\s*["']([^"']*)["']""" % kind, inputs, re.I)
                 hits.append({
                     **_where(e), "direction": "auto_post_form_in_html", "message": kind,
                     "fields": sorted(set(names)), "relay_state": "RelayState" in names,

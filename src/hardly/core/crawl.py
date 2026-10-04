@@ -72,16 +72,16 @@ _SESSION_PARAMS = frozenset(
      "cfid", "cftoken", "sessionkey", "session"}
 )
 _SESSION_PATH_RE = re.compile(r";(?:jsessionid|sid|phpsessid|sessionid)=[^/?#;]*", re.I)
-_TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
+_TITLE_RE = re.compile(r"<title[^<>]*>(.*?)</title>", re.I | re.S)
 _ROOT_DIV_RE = re.compile(
-    r"<div[^>]+id=[\"'](?:root|app|__next|__nuxt|app-root|svelte)[\"']|<app-root", re.I
+    r"<div[^<>]+id=[\"'](?:root|app|__next|__nuxt|app-root|svelte)[\"']|<app-root", re.I
 )
 _JS_REDIRECT_RE = re.compile(
     r"(?:window\.|document\.|top\.)?location(?:\.href)?\s*=(?!=)|location\.(?:replace|assign)\s*\(", re.I
 )
 _NEEDS_JS_RE = re.compile(r"enable javascript|requires javascript|javascript is (?:required|disabled)", re.I)
-_SCRIPT_RE = re.compile(r"<script\b[^>]*>(.*?)</script>", re.I | re.S)
-_STRIP_RE = re.compile(r"<(script|style|noscript)\b.*?</\1>|<!--.*?-->|<[^>]+>", re.I | re.S)
+_SCRIPT_RE = re.compile(r"<script\b[^<>]*>(.*?)</script>", re.I | re.S)
+_STRIP_RE = re.compile(r"<(script|style|noscript)\b.*?</\1>|<!--.*?-->|<[^<>]+>", re.I | re.S)
 _SECOND_LEVEL = frozenset({"co", "com", "org", "gov", "net", "ac", "edu", "go", "ne", "or"})
 
 # Replaceable in tests so politeness delays never really sleep.
@@ -191,7 +191,7 @@ def _stack(status: int, headers: dict[str, str], body: str, url: str) -> list[st
 
 def _title(html: str) -> str:
     m = _TITLE_RE.search(html)
-    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", m.group(1))).strip()[:120] if m else ""
+    return re.sub(r"\s+", " ", re.sub(r"<[^<>]+>", "", m.group(1))).strip()[:120] if m else ""
 
 
 def _needs_browser(html: str, structure: dict[str, Any]) -> str | None:

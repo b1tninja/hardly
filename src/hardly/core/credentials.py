@@ -701,7 +701,7 @@ def _field_names_in_preview(text: str) -> list[str]:
             if key:
                 names.append(key)
     for m in re.finditer(
-        r"""<(?:input|textarea)\b[^>]*\bname\s*=\s*['"]([^'"]+)['"]""",
+        r"""<(?:input|textarea)\b[^<>]*\bname\s*=\s*['"]([^'"]+)['"]""",
         text,
         re.I,
     ):
@@ -1112,7 +1112,7 @@ _BODY_CSRF_RE = re.compile(
     r"^_?(token|csrf\w*|xsrf\w*|authenticity_token|csrfmiddlewaretoken|__requestverificationtoken|nonce)$", re.I
 )
 _SPA_ROOT_RE = re.compile(
-    r"""<div[^>]+id=["'](root|app|__next|__nuxt)["']|<app-root|ng-app|__NEXT_DATA__|data-reactroot""", re.I
+    r"""<div[^<>]+id=["'](root|app|__next|__nuxt)["']|<app-root|ng-app|__NEXT_DATA__|data-reactroot""", re.I
 )
 
 

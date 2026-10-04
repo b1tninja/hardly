@@ -137,7 +137,7 @@ CATALOG: list[dict[str, Any]] = [
         "rails", "Ruby on Rails", "server_framework",
         "Re-scrape authenticity_token (or csrf-token meta) from each GET; x-request-id is per-response noise, not state.",
         B(r"authenticity_token", 3, "field:authenticity_token"),
-        B(r"""<meta[^>]+name=["']csrf-param["']""", 2, "meta:csrf-param"),
+        B(r"""<meta[^<>]+name=["']csrf-param["']""", 2, "meta:csrf-param"),
         C(r"_[\w\-]+_session", 2, "cookie:_<app>_session"),
         H(r"x-runtime:", 1, "header:X-Runtime"),
         H(r"x-csrf-token:", 1, "header:X-CSRF-Token"),
@@ -180,7 +180,7 @@ CATALOG: list[dict[str, Any]] = [
         "react", "React", "frontend",
         _JS_BUNDLE,
         B(r"data-reactroot|_reactRootContainer", 2, "data-reactroot"),
-        B(r"""<div[^>]+id=["']root["']""", 1, "root div"),
+        B(r"""<div[^<>]+id=["']root["']""", 1, "root div"),
         U(r"react(?:-dom)?[.\-][\w.\-]*js", 1, "react bundle"),
         cap="low",
     ),
@@ -190,7 +190,7 @@ CATALOG: list[dict[str, Any]] = [
         B(r"\sdata-v-[0-9a-f]{6,8}\b", 2, "attr:data-v-*"),
         B(r"data-server-rendered|__VUE__", 2, "vue SSR marker"),
         U(r"/vue(?:\.runtime)?(?:\.global)?(?:\.min)?\.js", 2, "vue.js"),
-        B(r"""<div[^>]+id=["']app["']""", 1, "app div"),
+        B(r"""<div[^<>]+id=["']app["']""", 1, "app div"),
         B(r"\sv-cloak\b", 1, "v-cloak"),
         cap="medium",
     ),
@@ -234,7 +234,7 @@ CATALOG: list[dict[str, Any]] = [
         U(r"/wp-json\b", 3, "/wp-json"),
         U(r"/wp-includes/", 3, "/wp-includes"),
         H(r"link:.*api\.w\.org", 3, "header:Link api.w.org"),
-        B(r"""<meta[^>]+generator[^>]+wordpress""", 3, "meta generator WordPress"),
+        B(r"""<meta[^<>]+generator[^<>]+wordpress""", 3, "meta generator WordPress"),
     ),
     _tech(
         "drupal", "Drupal", "cms",
@@ -367,7 +367,7 @@ _META["named-token-form"] = {
 }
 
 _COOKIE_NAME = re.compile(r"^\s*([^=;\s]+)\s*=")
-_INPUT_TAG = re.compile(r"<input\b[^>]*>", re.I)
+_INPUT_TAG = re.compile(r"<input\b[^<>]*>", re.I)
 _ATTR = re.compile(r"""([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""")
 _FIELD_NAME = re.compile(r"^[A-Za-z_][\w.\-:$]{2,79}$")
 

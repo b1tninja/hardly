@@ -16,7 +16,7 @@ from hardly.core.urls import parse_url
 
 _MAX_HITS = 50
 _HIDDEN = re.compile(
-    r"""<input\b[^>]*\btype\s*=\s*['"]hidden['"][^>]*>""",
+    r"""<input\b[^<>]*\btype\s*=\s*['"]hidden['"][^<>]*>""",
     re.I,
 )
 _ATTR = re.compile(

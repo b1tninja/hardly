@@ -35,7 +35,7 @@ _CAPTCHAS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("arkose", re.compile(r"funcaptcha|arkoselabs\.com|arkose", re.I)),
     ("geetest", re.compile(r"geetest", re.I)),
     ("friendly-captcha", re.compile(r"frc-captcha|friendlycaptcha", re.I)),
-    ("image-captcha", re.compile(r"<img[^>]+(captcha|verifycode|validatecode)", re.I)),
+    ("image-captcha", re.compile(r"<img[^<>]+(captcha|verifycode|validatecode)", re.I)),
 )
 # Only the names a form actually submits; element ids like "captcha-demo-form" are noise.
 _SITEKEY = re.compile(r"""data-sitekey\s*=\s*['"]([A-Za-z0-9_\-]{8,80})['"]""", re.I)
