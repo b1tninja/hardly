@@ -11,6 +11,7 @@ All notable changes are documented here. The format follows
 - The release workflow installs a pinned, checksum-verified `mcp-publisher`.
 
 ### Security hardening (no tool, parameter or command was renamed or removed)
+- **`INDEX_VERSION` is now 7.** Saved indexes written before this change are rejected with `index_outdated`; re-open the original HAR with `output_path` to rebuild.
 - **Outbound URL guard.** Every live tool (`hardly_send_*`, catalog verify, crawl, replay, redirect and
   ArcGIS walks) and the initial URL of the browser tools refuse non-http(s) URLs, credentials in the URL
   and hosts that are or resolve to loopback, private, link-local (cloud metadata), CGNAT, multicast or
