@@ -15,10 +15,8 @@ from hardly.core.safe_json import safe_loads
 from hardly.core.urls import parse_url
 
 _MAX_HITS = 50
-_HIDDEN = re.compile(
-    r"""<input\b[^<>]*\btype\s*=\s*['"]hidden['"][^<>]*>""",
-    re.I,
-)
+_INPUT_TAG = re.compile(r"<input\b[^<>]*>", re.I)
+_HIDDEN_TYPE = re.compile(r"""\btype\s*=\s*['"]hidden['"]""", re.I)
 _ATTR = re.compile(
     r"""\b(name|value|id)\s*=\s*['"]([^'"]*)['"]""",
     re.I,
@@ -257,7 +255,7 @@ def _scan_response(
     text = content.get("text") or ""
     if text:
         hits.extend(_scan_body(text, name_l=name_l, value=value, where="response.body"))
-        for tag in _HIDDEN.findall(text):
+        for tag in (t for t in _INPUT_TAG.findall(text) if _HIDDEN_TYPE.search(t)):
             attrs = {m.group(1).lower(): m.group(2) for m in _ATTR.finditer(tag)}
             fname = attrs.get("name") or attrs.get("id") or ""
             fval = attrs.get("value") or ""

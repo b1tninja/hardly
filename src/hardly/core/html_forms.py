@@ -560,7 +560,11 @@ class _FormParser(HTMLParser):
             return f'//*[@id="{el_id}"]'
         if not self._stack:
             return "/"
-        return "/" + "/".join(f"{name}[{idx}]" for name, idx in self._stack)
+        # Deeply nested markup: only the innermost 64 steps (a //-rooted, still valid path), so a
+        # page with thousands of unclosed elements cannot make every lookup O(depth).
+        deep = len(self._stack) > 64
+        steps = self._stack[-64:] if deep else self._stack
+        return ("//" if deep else "/") + "/".join(f"{name}[{idx}]" for name, idx in steps)
 
     def _add_field(self, field: dict[str, Any]) -> None:
         if self._form is not None:

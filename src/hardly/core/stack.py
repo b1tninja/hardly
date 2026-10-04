@@ -280,7 +280,7 @@ CATALOG: list[dict[str, Any]] = [
     _tech(
         "telerik-kendo", "Telerik / Kendo UI", "ui_toolkit",
         "Send each *_ClientState hidden JSON field back unchanged with the form; server controls validate it.",
-        B(r"\w+_ClientState\b", 3, "*_ClientState field"),
+        B(r"(?<!\w)\w+_ClientState\b", 3, "*_ClientState field"),
         U(r"Telerik\.Web\.UI", 3, "Telerik.Web.UI"),
         U(r"kendo[.\w\-]*\.js", 2, "kendo.js"),
         B(r"\bk-(?:grid|widget|input)\b", 2, "k-* css classes"),
@@ -368,7 +368,7 @@ _META["named-token-form"] = {
 
 _COOKIE_NAME = re.compile(r"^\s*([^=;\s]+)\s*=")
 _INPUT_TAG = re.compile(r"<input\b[^<>]*>", re.I)
-_ATTR = re.compile(r"""([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""")
+_ATTR = re.compile(r"""(?<![\w:-])([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""")
 _FIELD_NAME = re.compile(r"^[A-Za-z_][\w.\-:$]{2,79}$")
 
 

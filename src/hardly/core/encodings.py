@@ -203,13 +203,23 @@ def summarize_grpc(raw: bytes) -> dict[str, Any] | None:
     return out
 
 
+#: Decoded bytes examined from a base64 text body (grpc-web-text and similar).
+MAX_DECODED_BYTES = 8_000_000
+
+
 def decode_grpc_text(text: str) -> bytes | None:
     """application/grpc-web-text bodies are base64 (possibly several chunks)."""
     try:
         s = re.sub(r"\s+", "", text)
-        out = b""
+        chunks: list[bytes] = []
+        total = 0
         for part in re.findall(r"[A-Za-z0-9+/]+={0,2}", s):
-            out += base64.b64decode(part + "=" * (-len(part) % 4))
+            chunk = base64.b64decode(part + "=" * (-len(part) % 4))
+            total += len(chunk)
+            if total > MAX_DECODED_BYTES:
+                break
+            chunks.append(chunk)
+        out = b"".join(chunks)
         return out or None
     except (binascii.Error, ValueError):
         return None

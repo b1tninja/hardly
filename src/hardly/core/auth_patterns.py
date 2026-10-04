@@ -324,7 +324,31 @@ def detect_oidc_pkce(entries: list[dict]) -> dict[str, Any]:
 
 # ------------------------------------------------------------ 3. SAML POST
 
-_FORM_RE = re.compile(r"<form\b([^<>]*)>(.*?)</form>", re.I | re.S)
+#: Largest inflated SAML payload examined (bytes); a deflate stream can expand ~1000x.
+MAX_INFLATE = 2_000_000
+_FORM_OPEN = re.compile(r"<form\b([^<>]*)>", re.I)
+MAX_FORMS = 100
+MAX_FORM_CHARS = 50_000
+
+
+class _FormMatch:
+    def __init__(self, attrs: str, body: str) -> None:
+        self._g = (attrs, body)
+
+    def group(self, i: int) -> str:
+        return self._g[i - 1]
+
+
+def _iter_forms(text: str):
+    """``<form ...>body</form>`` pairs: linear, each body clipped; unclosed forms end the scan."""
+    low = text.lower()
+    n = 0
+    for m in _FORM_OPEN.finditer(text):
+        end = low.find("</form", m.end())
+        if end < 0 or n >= MAX_FORMS:
+            return
+        n += 1
+        yield _FormMatch(m.group(1), text[m.end():min(end, m.end() + MAX_FORM_CHARS)])
 _INPUT_RE = re.compile(r"<input\b[^<>]*>", re.I)
 
 
@@ -335,8 +359,8 @@ def _saml_shape(v: str) -> dict[str, Any]:
     except (binascii.Error, ValueError):
         return {**info, "encoding": "unknown"}
     candidates = [("base64", raw)]
-    try:
-        candidates.append(("base64+deflate", zlib.decompress(raw, -15)))
+    try:  # decompression-bomb safe: never inflate past MAX_INFLATE bytes
+        candidates.append(("base64+deflate", zlib.decompressobj(-15).decompress(raw, MAX_INFLATE)))
     except zlib.error:
         pass
     for enc, data in candidates:
@@ -366,7 +390,7 @@ def detect_saml_post(entries: list[dict]) -> dict[str, Any]:
                              "fields": sorted(e["query"]), "relay_state": "RelayState" in e["query"],
                              "payload": _saml_shape(e["query"][k]), "response_status": e["status"]})
         if "html" in e["mime"] and e["text"]:
-            for m in _FORM_RE.finditer(e["text"]):
+            for m in _iter_forms(e["text"]):
                 inputs = "".join(_INPUT_RE.findall(m.group(2)))
                 names = re.findall(r"""name\s*=\s*["']([^"']+)["']""", inputs, re.I)
                 kind = "SAMLRequest" if "SAMLRequest" in names else ("SAMLResponse" if "SAMLResponse" in names else None)

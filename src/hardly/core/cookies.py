@@ -11,7 +11,7 @@ from hardly.core.filters import is_noise
 from hardly.core.har_io import ijson_items
 from hardly.core.urls import parse_url
 
-_COOKIE_PAIR = re.compile(r"([^=;\s]+)\s*=\s*([^;]*)")
+_COOKIE_PAIR = re.compile(r"(?<![^=;\s])([^=;\s]+)\s*=\s*([^;]*)")
 
 
 def cookie_timeline(

@@ -19,10 +19,8 @@ _MIN_VALUE_LEN = 8
 _MAX_CANDIDATES = 400
 _MAX_HITS = 40
 
-_HIDDEN_INPUT = re.compile(
-    r"""<input\b[^<>]*\btype\s*=\s*['"]hidden['"][^<>]*>""",
-    re.I,
-)
+_INPUT_TAG = re.compile(r"<input\b[^<>]*>", re.I)
+_HIDDEN_TYPE = re.compile(r"""\btype\s*=\s*['"]hidden['"]""", re.I)
 _ATTR = re.compile(
     r"""\b(name|value|id)\s*=\s*['"]([^'"]*)['"]""",
     re.I,
@@ -333,7 +331,7 @@ def _extract_consume(
 
 def _hidden_fields(html: str) -> list[tuple[str, str, str | None]]:
     out: list[tuple[str, str, str | None]] = []
-    for tag in _HIDDEN_INPUT.findall(html):
+    for tag in (t for t in _INPUT_TAG.findall(html) if _HIDDEN_TYPE.search(t)):
         attrs = {m.group(1).lower(): m.group(2) for m in _ATTR.finditer(tag)}
         name = attrs.get("name") or attrs.get("id")
         value = attrs.get("value") or ""
