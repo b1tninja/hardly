@@ -728,6 +728,9 @@ def cmd_catalog_export(args: argparse.Namespace) -> int:
         _print({"error": str(exc)})
         return 1
     if args.output:
+        from hardly.core.pathguard import guard_write
+
+        guard_write(args.output)
         Path(args.output).write_text(text, encoding="utf-8", newline="\n")
         _print({"written": str(args.output), "format": args.format})
     else:
@@ -976,6 +979,12 @@ def build_parser() -> argparse.ArgumentParser:
         description="HAR analysis - index, query, document, and probe APIs. "
         "hardly <group> <command>: the same names as the MCP tools (hardly_session_open is "
         "`hardly session open`). See docs/cli.md.",
+    )
+    p.add_argument(
+        "--allow-private-hosts",
+        action="store_true",
+        help="Allow live commands to reach loopback/private hosts (same as HARDLY_ALLOW_PRIVATE_HOSTS=1); "
+        "put it before the group, e.g. `hardly --allow-private-hosts send entry ...`",
     )
     top = p.add_subparsers(dest="group", required=True, metavar="GROUP")
     subs: dict[str, argparse._SubParsersAction] = {}
@@ -1478,7 +1487,15 @@ def main(argv: list[str] | None = None) -> None:
     if not hasattr(args, "func"):
         args.group_parser.print_help()
         sys.exit(2)
-    code = args.func(args)
+    if getattr(args, "allow_private_hosts", False):
+        from hardly.core.netguard import allow_private_hosts
+
+        allow_private_hosts()
+    try:
+        code = args.func(args)
+    except sess.SessionError as exc:  # guard refusals and other coded errors: JSON, not a traceback
+        _print(exc.to_dict())
+        code = 1
     sys.exit(code)
 
 

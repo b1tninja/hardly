@@ -13,7 +13,6 @@ not content.
 
 from __future__ import annotations
 
-import json
 import re
 from collections import Counter, defaultdict
 from html.parser import HTMLParser
@@ -21,7 +20,9 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 from hardly.core.explain import finish
+from hardly.core.htmlsafe import defuse_html
 from hardly.core.previews import is_truncated, preview_warnings
+from hardly.core.safe_json import safe_loads
 
 _DATA = re.compile(r"^data-([a-z][a-z0-9\-_.:]*)$")
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
@@ -94,7 +95,7 @@ def classify_value(value: str) -> str:
         return "uuid"
     if v[0] in "{[" and v[-1] in "}]":
         try:
-            json.loads(v)
+            safe_loads(v)
             return "json"
         except ValueError:
             return "json_like"
@@ -119,7 +120,7 @@ def extract_data_attributes(html: str, *, base_url: str = "") -> dict[str, Any]:
         return empty
     col = _Collector(base_url)
     try:
-        col.feed(html)
+        col.feed(defuse_html(html))
         col.close()
     except Exception:  # noqa: BLE001 — partial results beat none on broken HTML
         pass
@@ -149,7 +150,7 @@ def extract_data_attributes(html: str, *, base_url: str = "") -> dict[str, Any]:
                 keys: list[str] = []
                 if kind == "json":
                     try:
-                        parsed = json.loads(value)
+                        parsed = safe_loads(value)
                         keys = sorted(parsed)[:12] if isinstance(parsed, dict) else [f"[list:{len(parsed)}]"]
                     except ValueError:
                         pass

@@ -6,6 +6,7 @@ import sqlite3
 
 import httpx
 
+from hardly.core.netguard import check_url, new_client
 from hardly.core.redact import is_sensitive_header, redact_body_text
 
 
@@ -78,8 +79,9 @@ def probe_entry(
     if row["query_raw"]:
         url = f"{url}?{row['query_raw']}"
 
+    check_url(url)
     try:
-        with httpx.Client(timeout=timeout, follow_redirects=False) as client:
+        with new_client(timeout=timeout, follow_redirects=False) as client:
             resp = client.request(
                 row["method"],
                 url,

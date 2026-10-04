@@ -28,6 +28,7 @@ import sqlite3
 from typing import Any
 
 from hardly.core.redact import REDACTED, classify_value_shape, is_sensitive_key
+from hardly.core.safe_json import safe_loads
 
 MAX_ARRAY_ITEMS = 100
 MAX_PROPERTIES = 120
@@ -264,7 +265,7 @@ def endpoint_samples(
             if not text:
                 continue
             try:
-                parsed = json.loads(text)
+                parsed = safe_loads(text)
             except (json.JSONDecodeError, TypeError):
                 continue
             if isinstance(parsed, str):

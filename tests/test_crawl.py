@@ -314,3 +314,13 @@ def test_next_advice_only_with_explain():
     assert "next" not in out
     out, _ = run(routes, explain=True)
     assert isinstance(out["next"], list)
+
+
+def test_script_and_strip_regexes_accept_odd_closing_tags():
+    """`</script >`, `</SCRIPT foo>` and `</style\t>` must close their element (CodeQL: bad HTML filtering)."""
+    from hardly.core import crawl
+
+    html = "<p>keep</p><script>var a=1;</script ><p>mid</p><SCRIPT>b</SCRIPT foo><style>x{}</style\t><p>end</p>"
+    assert [m.group(1) for m in crawl._SCRIPT_RE.finditer(html)] == ["var a=1;", "b"]
+    text = crawl._STRIP_RE.sub(" ", html)
+    assert "var a" not in text and "x{}" not in text and "keep" in text and "mid" in text and "end" in text

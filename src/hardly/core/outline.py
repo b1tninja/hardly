@@ -14,6 +14,7 @@ from html.parser import HTMLParser
 from typing import Any
 from xml.etree.ElementTree import ParseError
 
+from hardly.core.htmlsafe import defuse_html
 from hardly.core.redact import is_sensitive_key, redact_string
 
 _MAX_DEPTH = 14
@@ -351,7 +352,7 @@ class _HtmlOutlineParser(HTMLParser):
 def _parse_html_tree(html: str, *, max_depth: int) -> _Node:
     p = _HtmlOutlineParser(max_depth=max_depth)
     try:
-        p.feed(html[:250_000])
+        p.feed(defuse_html(html[:250_000]))
         p.close()
     except Exception:  # noqa: BLE001
         pass

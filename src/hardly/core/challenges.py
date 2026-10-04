@@ -11,12 +11,12 @@ token field. Token values are never returned.
 
 from __future__ import annotations
 
-import json
 import re
 import sqlite3
 from typing import Any
 
 from hardly.core.explain import finish
+from hardly.core.safe_json import safe_loads
 
 _SAFE_PARAMS = frozenset({"realm", "error", "error_description", "scope", "qop", "algorithm", "charset", "stale"})
 _SCHEME = re.compile(r"(?:^|,\s*)([A-Za-z][A-Za-z0-9\-_.~+/]*)(?=\s+[A-Za-z_]+=|\s*$|\s*,)", re.I)
@@ -35,7 +35,7 @@ _CAPTCHAS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("arkose", re.compile(r"funcaptcha|arkoselabs\.com|arkose", re.I)),
     ("geetest", re.compile(r"geetest", re.I)),
     ("friendly-captcha", re.compile(r"frc-captcha|friendlycaptcha", re.I)),
-    ("image-captcha", re.compile(r"<img[^>]+(captcha|verifycode|validatecode)", re.I)),
+    ("image-captcha", re.compile(r"<img[^<>]+(captcha|verifycode|validatecode)", re.I)),
 )
 # Only the names a form actually submits; element ids like "captcha-demo-form" are noise.
 _SITEKEY = re.compile(r"""data-sitekey\s*=\s*['"]([A-Za-z0-9_\-]{8,80})['"]""", re.I)
@@ -250,7 +250,7 @@ def _token_endpoints(
         names: list[str] = []
         if row["query_json"]:
             try:
-                q = json.loads(row["query_json"])
+                q = safe_loads(row["query_json"])
             except ValueError:
                 q = {}
             names += [str(k) for k in q] if isinstance(q, dict) else []

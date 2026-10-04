@@ -49,6 +49,38 @@ def atomic_write_text(final: Path, text: str) -> None:
         remove_quietly(tmp)
 
 
+def _scrub_saved_copy(path: Path) -> None:
+    """Remove every value from a saved index that was redacted for display.
+
+    The in-memory index keeps raw non-credential header values and HTML/script text so detectors can
+    correlate a value across requests. A copy written to disk keeps only what a caller is shown:
+    ``headers.value_raw`` is cleared wherever it differs from ``value_redacted`` and body previews
+    (and their full-text index) get the display redaction. Freed pages are overwritten.
+    """
+    from hardly.core.redact import redact_body_text
+
+    def clean(text: str | None) -> str | None:
+        if not text:
+            return text
+        return redact_body_text(text, max_chars=len(text) * 2 + 64)["text"]
+
+    c = sqlite3.connect(str(path))
+    try:
+        c.execute("PRAGMA secure_delete = ON")
+        c.create_function("scrub_text", 1, clean, deterministic=True)
+        c.execute("UPDATE headers SET value_raw = NULL WHERE value_raw IS NOT NULL AND value_raw IS NOT value_redacted")
+        c.execute("UPDATE bodies SET preview_text = scrub_text(preview_text) WHERE preview_text IS NOT NULL")
+        c.execute("DELETE FROM bodies_fts")
+        c.execute(
+            "INSERT INTO bodies_fts (entry_id, side, preview_text) "
+            "SELECT entry_id, side, preview_text FROM bodies WHERE preview_text IS NOT NULL AND preview_text != ''"
+        )
+        c.commit()
+        c.execute("VACUUM")
+    finally:
+        c.close()
+
+
 def persist_connection(conn: sqlite3.Connection, final: Path) -> int:
     """Write a compact, WAL-free copy of ``conn`` to ``final`` atomically. Returns bytes.
 
@@ -68,6 +100,7 @@ def persist_connection(conn: sqlite3.Connection, final: Path) -> int:
         finally:
             if qo:
                 conn.execute("PRAGMA query_only = ON")
+        _scrub_saved_copy(tmp)
         # Stale sidecars from an older (WAL) cache must not pair with the new file.
         for suffix in ("-wal", "-shm", "-journal"):
             with contextlib.suppress(OSError):

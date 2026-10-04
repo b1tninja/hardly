@@ -290,6 +290,9 @@ def _resolve(path: str | os.PathLike) -> Path:
 
 def _check_output(output: Path, input_path: Path, overwrite: bool, source_har: Path | None) -> None:
     """Fail fast (before ingesting or writing) when an output path cannot be used."""
+    from hardly.core.pathguard import guard_write
+
+    guard_write(output)
     if output.is_dir():
         raise OutputError(f"{OUTPUT_PARAM} is a directory: {output}", "Give a file name.")
     if output in (input_path, source_har):
@@ -538,7 +541,10 @@ def export_har(session_id: str, output_path: str | Path, *, overwrite: bool = Fa
             "code": "har_missing",
             "hint": "The index in this session is still queryable.",
         }
+    from hardly.core.pathguard import guard_write
+
     target = resolve_path(output_path).expanduser().absolute()
+    guard_write(target)
     if target.is_dir():
         return {"error": f"{OUTPUT_PARAM} is a directory: {target}", "code": "output_error"}
     if target == src.absolute():

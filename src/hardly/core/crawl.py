@@ -20,6 +20,7 @@ import httpx
 
 from hardly.core.explain import finish
 from hardly.core.grids import html_grid_signals
+from hardly.core.netguard import check_url, new_client
 from hardly.core.redact import REDACTED, redact_url
 from hardly.core.search_nav import page_candidates, score_link, search_form_reached
 from hardly.core.urls import path_template
@@ -71,16 +72,16 @@ _SESSION_PARAMS = frozenset(
      "cfid", "cftoken", "sessionkey", "session"}
 )
 _SESSION_PATH_RE = re.compile(r";(?:jsessionid|sid|phpsessid|sessionid)=[^/?#;]*", re.I)
-_TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
+_TITLE_RE = re.compile(r"<title[^<>]*>(.*?)</title>", re.I | re.S)
 _ROOT_DIV_RE = re.compile(
-    r"<div[^>]+id=[\"'](?:root|app|__next|__nuxt|app-root|svelte)[\"']|<app-root", re.I
+    r"<div[^<>]+id=[\"'](?:root|app|__next|__nuxt|app-root|svelte)[\"']|<app-root", re.I
 )
 _JS_REDIRECT_RE = re.compile(
     r"(?:window\.|document\.|top\.)?location(?:\.href)?\s*=(?!=)|location\.(?:replace|assign)\s*\(", re.I
 )
 _NEEDS_JS_RE = re.compile(r"enable javascript|requires javascript|javascript is (?:required|disabled)", re.I)
-_SCRIPT_RE = re.compile(r"<script\b[^>]*>(.*?)</script>", re.I | re.S)
-_STRIP_RE = re.compile(r"<(script|style|noscript)\b.*?</\1>|<!--.*?-->|<[^>]+>", re.I | re.S)
+_SCRIPT_RE = re.compile(r"<script\b[^<>]*>(.*?)</script\b[^>]*>", re.I | re.S)
+_STRIP_RE = re.compile(r"<(script|style|noscript)\b.*?</\1\b[^>]*>|<!--.*?-->|<[^<>]+>", re.I | re.S)
 _SECOND_LEVEL = frozenset({"co", "com", "org", "gov", "net", "ac", "edu", "go", "ne", "or"})
 
 # Replaceable in tests so politeness delays never really sleep.
@@ -190,7 +191,7 @@ def _stack(status: int, headers: dict[str, str], body: str, url: str) -> list[st
 
 def _title(html: str) -> str:
     m = _TITLE_RE.search(html)
-    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", m.group(1))).strip()[:120] if m else ""
+    return re.sub(r"\s+", " ", re.sub(r"<[^<>]+>", "", m.group(1))).strip()[:120] if m else ""
 
 
 def _needs_browser(html: str, structure: dict[str, Any]) -> str | None:
@@ -289,11 +290,12 @@ def crawl(
     parts = urlsplit(start_url.strip())
     if parts.scheme not in ("http", "https") or not parts.netloc:
         return {"error": "start_url must be an absolute http(s) URL"}
+    check_url(start_url.strip())
     start = clean_url(start_url)
     home = registrable_domain(parts.hostname or "")
 
     own = client is None
-    http = client or httpx.Client(timeout=timeout_s, follow_redirects=False, headers=headers_out)
+    http = client or new_client(timeout=timeout_s, follow_redirects=False, headers=headers_out)
     hosts: dict[str, _Host] = {}
     pages: list[dict[str, Any]] = []
     robots_disallowed: list[str] = []

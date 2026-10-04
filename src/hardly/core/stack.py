@@ -12,7 +12,6 @@ header values and tokens are matched but never echoed.
 
 from __future__ import annotations
 
-import json
 import re
 import sqlite3
 from typing import Any
@@ -20,6 +19,7 @@ from urllib.parse import urlsplit
 
 from hardly.core.cookies import cookie_timeline
 from hardly.core.explain import finish
+from hardly.core.safe_json import safe_loads
 
 _MAX_ENTRIES = 6000
 _MAX_BODY_CHARS = 200_000
@@ -137,7 +137,7 @@ CATALOG: list[dict[str, Any]] = [
         "rails", "Ruby on Rails", "server_framework",
         "Re-scrape authenticity_token (or csrf-token meta) from each GET; x-request-id is per-response noise, not state.",
         B(r"authenticity_token", 3, "field:authenticity_token"),
-        B(r"""<meta[^>]+name=["']csrf-param["']""", 2, "meta:csrf-param"),
+        B(r"""<meta[^<>]+name=["']csrf-param["']""", 2, "meta:csrf-param"),
         C(r"_[\w\-]+_session", 2, "cookie:_<app>_session"),
         H(r"x-runtime:", 1, "header:X-Runtime"),
         H(r"x-csrf-token:", 1, "header:X-CSRF-Token"),
@@ -180,7 +180,7 @@ CATALOG: list[dict[str, Any]] = [
         "react", "React", "frontend",
         _JS_BUNDLE,
         B(r"data-reactroot|_reactRootContainer", 2, "data-reactroot"),
-        B(r"""<div[^>]+id=["']root["']""", 1, "root div"),
+        B(r"""<div[^<>]+id=["']root["']""", 1, "root div"),
         U(r"react(?:-dom)?[.\-][\w.\-]*js", 1, "react bundle"),
         cap="low",
     ),
@@ -190,7 +190,7 @@ CATALOG: list[dict[str, Any]] = [
         B(r"\sdata-v-[0-9a-f]{6,8}\b", 2, "attr:data-v-*"),
         B(r"data-server-rendered|__VUE__", 2, "vue SSR marker"),
         U(r"/vue(?:\.runtime)?(?:\.global)?(?:\.min)?\.js", 2, "vue.js"),
-        B(r"""<div[^>]+id=["']app["']""", 1, "app div"),
+        B(r"""<div[^<>]+id=["']app["']""", 1, "app div"),
         B(r"\sv-cloak\b", 1, "v-cloak"),
         cap="medium",
     ),
@@ -234,7 +234,7 @@ CATALOG: list[dict[str, Any]] = [
         U(r"/wp-json\b", 3, "/wp-json"),
         U(r"/wp-includes/", 3, "/wp-includes"),
         H(r"link:.*api\.w\.org", 3, "header:Link api.w.org"),
-        B(r"""<meta[^>]+generator[^>]+wordpress""", 3, "meta generator WordPress"),
+        B(r"""<meta[^<>]+generator[^<>]+wordpress""", 3, "meta generator WordPress"),
     ),
     _tech(
         "drupal", "Drupal", "cms",
@@ -280,7 +280,7 @@ CATALOG: list[dict[str, Any]] = [
     _tech(
         "telerik-kendo", "Telerik / Kendo UI", "ui_toolkit",
         "Send each *_ClientState hidden JSON field back unchanged with the form; server controls validate it.",
-        B(r"\w+_ClientState\b", 3, "*_ClientState field"),
+        B(r"(?<!\w)\w+_ClientState\b", 3, "*_ClientState field"),
         U(r"Telerik\.Web\.UI", 3, "Telerik.Web.UI"),
         U(r"kendo[.\w\-]*\.js", 2, "kendo.js"),
         B(r"\bk-(?:grid|widget|input)\b", 2, "k-* css classes"),
@@ -367,8 +367,8 @@ _META["named-token-form"] = {
 }
 
 _COOKIE_NAME = re.compile(r"^\s*([^=;\s]+)\s*=")
-_INPUT_TAG = re.compile(r"<input\b[^>]*>", re.I)
-_ATTR = re.compile(r"""([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""")
+_INPUT_TAG = re.compile(r"<input\b[^<>]*>", re.I)
+_ATTR = re.compile(r"""(?<![\w:-])([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""")
 _FIELD_NAME = re.compile(r"^[A-Za-z_][\w.\-:$]{2,79}$")
 
 
@@ -405,14 +405,14 @@ def _double_encoded(body: str) -> int:
     if len(s) < 4 or s[0] != '"':
         return 0
     try:
-        inner = json.loads(s)
+        inner = safe_loads(s)
     except ValueError:
         inner = None
     if isinstance(inner, str):
         t = inner.strip()
         if t[:1] in ("{", "["):
             try:
-                json.loads(t)
+                safe_loads(t)
                 return 3
             except ValueError:
                 return 2 if re.match(r'^[\[{]\s*[{"]', t) else 0

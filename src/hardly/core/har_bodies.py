@@ -12,6 +12,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from hardly.core.safe_json import safe_loads
+
 # Cap per body so a runaway download cannot balloon the HAR.
 MAX_BODY_CHARS = 2_000_000
 
@@ -59,7 +61,7 @@ def merge_bodies_into_har(
         stats["unmatched"] = len(bodies)
         return stats
 
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = safe_loads(path.read_text(encoding="utf-8"))
     entries = (data.get("log") or {}).get("entries") or []
     stats["entries"] = len(entries)
 
