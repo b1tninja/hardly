@@ -6,6 +6,10 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Packaging and release
+- `fastmcp` is constrained to `>=4.0.10,<5` (the version the suite runs against).
+- The release workflow installs a pinned, checksum-verified `mcp-publisher`.
+
 ### Changed: the v1 API surface (nothing was published before this, so there are no aliases)
 - **MCP tools: 97 renamed or merged into 71.** The first word is the effect: `hardly_send_*` sends
   requests (confirm-gated), `hardly_write_*` writes a file (`overwrite=false` by default),
