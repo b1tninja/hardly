@@ -99,6 +99,27 @@ _ESCUELA_LOGIN = {
     "body": {"email": "john@mail.com", "password": "changeme"},
 }
 
+_BOOKER_AUTH = {
+    "op": "fetch",
+    "url": "https://restful-booker.herokuapp.com/auth",
+    "method": "POST",
+    "headers": {"content-type": "application/json"},
+    # Published demo credentials from restful-booker docs.
+    "body": {"username": "admin", "password": "password123"},
+}
+
+_PARABANK_LOGIN = (
+    {"op": "fill", "css": "input[name='username']", "value": "john"},
+    {
+        "op": "fill",
+        "css": "input[name='password']",
+        "value": "demo",
+        "allow_login": True,
+    },
+    {"op": "click", "css": "input[type='submit']"},
+    {"op": "wait", "ms": 2500},
+)
+
 
 TARGETS: tuple[LiveTarget, ...] = (
     LiveTarget(
@@ -199,6 +220,32 @@ TARGETS: tuple[LiveTarget, ...] = (
         expect_json=True,
     ),
     LiveTarget(
+        id="booker-auth",
+        # Same-origin fetch (CORS blocks bootstrap-from-example.com).
+        url="https://restful-booker.herokuapp.com/",
+        tech=("login", "json", "token"),
+        description="Restful Booker /auth — opaque token JSON via recipe fetch",
+        wait_seconds=1.5,
+        recipe=(_BOOKER_AUTH, {"op": "wait", "ms": 500}),
+        expect_host="herokuapp",
+        min_entries=2,
+        expect_json=True,
+    ),
+    LiveTarget(
+        id="parabank-login",
+        url="https://parabank.parasoft.com/parabank/index.htm",
+        tech=("login", "html_form", "password", "session"),
+        description="ParaBank form login (john/demo) → overview + JSESSIONID",
+        wait_seconds=2.0,
+        recipe=_PARABANK_LOGIN,
+        expect_host="parasoft",
+        min_entries=2,
+        expect_forms=True,
+        expect_password=True,
+        expect_path_contains="overview",
+        expect_session_cookie=True,
+    ),
+    LiveTarget(
         id="datatables-ajax",
         url="https://datatables.net/examples/data_sources/ajax.html",
         tech=("datatables", "ajax", "table", "json"),
@@ -221,6 +268,17 @@ TARGETS: tuple[LiveTarget, ...] = (
         expect_json=True,
     ),
     LiveTarget(
+        id="datatables-ssp",
+        url="https://datatables.net/examples/server_side/simple.html",
+        tech=("datatables", "ajax", "server_side", "table", "json"),
+        description="DataTables server-side processing (draw/start/length XHR)",
+        wait_seconds=4.0,
+        expect_host="datatables",
+        min_entries=3,
+        expect_table=True,
+        expect_json=True,
+    ),
+    LiveTarget(
         id="scrape-ajax",
         url="https://www.scrapethissite.com/pages/ajax-javascript/#2015",
         tech=("ajax", "table", "json"),
@@ -230,6 +288,26 @@ TARGETS: tuple[LiveTarget, ...] = (
         expect_host="scrapethissite",
         min_entries=2,
         expect_table=True,
+        expect_json=True,
+    ),
+    LiveTarget(
+        id="books-detail",
+        url="https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html",
+        tech=("html_table",),
+        description="books.toscrape product detail with striped HTML table",
+        wait_seconds=2.5,
+        expect_host="toscrape",
+        min_entries=1,
+        expect_table=True,
+    ),
+    LiveTarget(
+        id="httpbingo",
+        url="https://httpbingo.org/get",
+        tech=("json", "http"),
+        description="httpbingo JSON echo GET",
+        wait_seconds=2.0,
+        expect_host="httpbingo",
+        min_entries=1,
         expect_json=True,
     ),
     LiveTarget(

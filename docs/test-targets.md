@@ -30,27 +30,32 @@ These are live soak ids (hard unless noted). Signals are what the soak asserts.
 | `scrape-ajax` | jQuery AJAX → JSON → table | `expect_table`, `expect_json` |
 | `reqres-login` | JSON login → token body | `expect_json`, recipe `fetch` |
 | `escuela-auth` | JSON login → access + refresh | `expect_json`, recipe `fetch` |
+| `booker-auth` | Opaque token JSON (`/auth`) | `expect_json`, same-origin recipe `fetch` |
+| `datatables-ssp` | DataTables server-side XHR | `expect_table`, `expect_json` |
+| `books-detail` | Product HTML table | `expect_table` |
+| `httpbingo` | JSON echo GET | `expect_json` |
+| `parabank-login` | Form → overview + session | `expect_password`, `expect_path_contains`, `expect_session_cookie` |
 | `saucedemo-login` | SPA login (JS-hydrated) | `soft=True` (preferred_host can drift to telemetry) |
 | `the-internet-login` | Password form (no submit) | `expect_forms`, `expect_password` |
 | `local-webforms` / `local-token-login` | Loopback VIEWSTATE / token | offline deterministic |
 
 ## Next candidates (fanout research, not yet catalogued)
 
-Verified reachable (2026-10-10) but not yet soaked into `TARGETS`:
+Still open after wave-3 probes (2026-10-10):
 
 | Candidate | Pattern | Notes |
 |-----------|---------|-------|
-| DataTables `server_side/simple.html` | server-side XHR draws | Distinct from ajax/objects; start `soft=True` |
 | Tabulator AJAX example | click → `/exampledata/ajax.json` | Needs button-click recipe |
+| Kendo remote grid / search panel | vendor DataSource XHR | Telerik demos; optional filter recipe |
 | `spa1.scrape.center` | SPA REST movie grid | Paginate once for extra entries |
-| `books.toscrape.com` product detail | `table.table-striped` | Scraping sandbox |
-| ParaBank (`john`/`demo`) | form → `JSESSIONID` | Strong form_session next |
 | Expand Testing `/login` | form → `/secure` | Soft until cookie jar confirmed |
-| `restful-booker` `/auth` | opaque token (not JWT) | Host up; wire recipe carefully |
-| `httpbingo.org` / `postman-echo.com` | JSON echo + auth challenges | Light hard GET soaks |
+| nopCommerce admin | ASP.NET Core antiforgery | `admin@yourstore.com` / `admin` |
+| Altoro/testfire | form → `JSESSIONID` | Creds flaky in headless (`doLogin` without bank redirect) |
+| `postman-echo.com` | JSON echo + signed auth | Pair with httpbingo challenges |
 | `quotes.toscrape.com/search.aspx` | ASP.NET ViewState filter | Needs fill recipe; no table on bare load |
-| Duende `demo.duendesoftware.com` | OIDC multi-hop | Soft; browser recipe required |
+| Duende `demo.duendesoftware.com` | OIDC multi-hop (`alice`/`alice`) | Soft; browser recipe required |
 | `testaspnet.vulnweb.com` | ASP.NET WebForms | **HTTP only** (HTTPS times out) |
+| OpenCart demo | — | **403** from static probe; skip |
 
 ## Priority shortlist (still research)
 
