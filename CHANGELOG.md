@@ -12,10 +12,11 @@ All notable changes are documented here. The format follows
   `scrape-ajax`, `books-detail`, `tabulator-ajax`, `kendo-remote-grid`,
   `spa1-movies`, `quotes-viewstate`, `testaspnet-webforms`, `quotes-login`,
   `practice-login`, `expand-login`, `parabank-login`, `dummyjson`, `httpbingo`,
-  `reqres-login`, `escuela-auth`, `booker-auth`, and soft `saucedemo-login` /
-  `kendo-remote-grid`, with soak asserts for tables, path redirects, and session
-  cookies. `preferred_host` also skips Backtrace / heap / mixpanel-style product
-  telemetry hosts.
+  `postman-echo`, `reqres-login`, `escuela-auth`, `booker-auth`, and soft
+  `saucedemo-login` / `kendo-remote-grid` / `orangehrm-login` /
+  `duende-account-login`, with soak asserts for tables, path redirects, and
+  session cookies. `preferred_host` also skips Backtrace / heap / mixpanel-style
+  product telemetry hosts.
 
 ### Changed: the v1 API surface (nothing was published before this, so there are no aliases)
 - **MCP tools: 97 renamed or merged into 71.** The first word is the effect: `hardly_send_*` sends

@@ -133,6 +133,38 @@ _EXPAND_LOGIN = (
     {"op": "wait", "ms": 2000},
 )
 
+# Published Postman Echo demo Basic creds (postman:password).
+_POSTMAN_BASIC = {
+    "op": "fetch",
+    "url": "https://postman-echo.com/basic-auth",
+    "method": "GET",
+    "headers": {"authorization": "Basic cG9zdG1hbjpwYXNzd29yZA=="},
+}
+
+_ORANGEHRM_LOGIN = (
+    {"op": "fill", "css": "input[name='username']", "value": "Admin"},
+    {
+        "op": "fill",
+        "css": "input[name='password']",
+        "value": "admin123",
+        "allow_login": True,
+    },
+    {"op": "click", "css": "button[type='submit']"},
+    {"op": "wait", "ms": 4000},
+)
+
+_DUENDE_LOGIN = (
+    {"op": "fill", "css": "#Input_Username", "value": "alice"},
+    {
+        "op": "fill",
+        "css": "#Input_Password",
+        "value": "alice",
+        "allow_login": True,
+    },
+    {"op": "click", "css": "button.btn-primary"},
+    {"op": "wait", "ms": 3000},
+)
+
 
 TARGETS: tuple[LiveTarget, ...] = (
     LiveTarget(
@@ -393,6 +425,19 @@ TARGETS: tuple[LiveTarget, ...] = (
         expect_json=True,
     ),
     LiveTarget(
+        # Bootstrap on /get (root redirects to postman.com SPA). Same-origin
+        # fetch then hits /basic-auth with published demo Basic credentials.
+        id="postman-echo",
+        url="https://postman-echo.com/get",
+        tech=("json", "http", "basic_auth"),
+        description="Postman Echo JSON GET + recipe Basic-auth hop",
+        wait_seconds=1.5,
+        recipe=(_POSTMAN_BASIC, {"op": "wait", "ms": 500}),
+        expect_host="postman-echo",
+        min_entries=2,
+        expect_json=True,
+    ),
+    LiveTarget(
         id="internet-tables",
         url="https://the-internet.herokuapp.com/tables",
         tech=("html_table",),
@@ -461,6 +506,33 @@ TARGETS: tuple[LiveTarget, ...] = (
         expect_password=True,
         expect_path_contains="secure",
         expect_session_cookie=True,
+    ),
+    LiveTarget(
+        id="orangehrm-login",
+        url="https://opensource-demo.orangehrmlive.com/web/index.php/auth/login",
+        tech=("login", "spa", "json"),
+        description="OrangeHRM demo login (Admin/admin123) → dashboard + API JSON",
+        wait_seconds=2.0,
+        recipe=_ORANGEHRM_LOGIN,
+        expect_host="orangehrmlive",
+        min_entries=3,
+        expect_password=True,
+        expect_path_contains="dashboard",
+        expect_json=True,
+        soft=True,
+    ),
+    LiveTarget(
+        # Local account login only — not a full OIDC authorize→callback→token stitch.
+        id="duende-account-login",
+        url="https://demo.duendesoftware.com/Account/Login",
+        tech=("login", "html_form", "oidc_idp"),
+        description="Duende demo IdP account login (alice/alice); soft local-login soak",
+        wait_seconds=2.0,
+        recipe=_DUENDE_LOGIN,
+        expect_host="duendesoftware",
+        min_entries=2,
+        expect_password=True,
+        soft=True,
     ),
     LiveTarget(
         id="saucedemo-login",

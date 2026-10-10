@@ -36,6 +36,9 @@ These are live soak ids (hard unless noted). Signals are what the soak asserts.
 | `httpbingo` | JSON echo GET | `expect_json` |
 | `parabank-login` | Form → overview + session | `expect_password`, `expect_path_contains`, `expect_session_cookie` |
 | `expand-login` | Form → `/secure` | `expect_password`, `expect_path_contains`, `expect_session_cookie` |
+| `postman-echo` | JSON GET + Basic-auth hop | `expect_json`, recipe `fetch` (not root URL) |
+| `orangehrm-login` | SPA form → dashboard + API | `expect_password`, `expect_path_contains`, `expect_json`, `soft=True` |
+| `duende-account-login` | IdP local account login | `expect_password`, `soft=True` (not full OIDC stitch) |
 | `tabulator-ajax` | Tabulator AJAX JSON (div grid) | `expect_json`, `soft=True`, click “Load Data via AJAX” |
 | `kendo-remote-grid` | Kendo + OData JSON (div grid) | `expect_json`, `soft=True` (no HTML table) |
 | `spa1-movies` | SPA REST movie list | `expect_json`, `soft=True` |
@@ -47,19 +50,17 @@ These are live soak ids (hard unless noted). Signals are what the soak asserts.
 
 ## Next candidates (fanout research, not yet catalogued)
 
-Fit pass + headless probe (2026-10-10). Catalogued GOs: `tabulator-ajax`,
-`kendo-remote-grid` (soft), `spa1-movies`, `quotes-viewstate`,
-`testaspnet-webforms`, `expand-login`.
+Remaining after login-eval wave (2026-10-10). Catalogued: `postman-echo`,
+`orangehrm-login`, `duende-account-login` (plus prior grid/login GOs).
 
 | Candidate | Fit | Notes |
 |-----------|-----|-------|
 | Kendo search panel | HOLD | Same stack as `kendo-remote-grid`; brittle toolbar fill |
 | AG Grid finance | soft-only later | Div grid + heavy HAR; 403-prone on some egress; no `expect_table` |
-| nopCommerce admin | **DROP** | IWR **403** / headless challenge shell — no login fields |
-| Altoro/testfire | DROP | Expired TLS + flaky `/doLogin` without bank redirect |
-| `postman-echo.com/get` | SKIP | Redundant with `httpbingo`; keep basic-auth/digest for later |
-| Duende OIDC | soft later | Multi-hop; high value for `oidc_pkce` when recipe is ready |
-| OrangeHRM / RBP admin / zero.webappsecurity | HOLD | SPA flaky / HTTP quirks — not in this wave |
+| Duende full OIDC authorize→token | soft later | Account login is `duende-account-login`; multi-hop stitch still open |
+| automationintesting `/admin` UI | SKIP | UI login 401; same-origin fetch overlaps `booker-auth` |
+| zero.webappsecurity | DROP | Published demo creds fail in headless |
+| Altoro/testfire / nopCommerce | DROP | `/doLogin` 500; Cloudflare Turnstile |
 | MusicBrainz / OpenCart | DROP | Production catalog (+ etiquette) / 403 |
 
 ## Priority shortlist (still research)
