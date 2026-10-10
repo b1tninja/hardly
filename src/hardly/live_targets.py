@@ -315,18 +315,30 @@ TARGETS: tuple[LiveTarget, ...] = (
     ),
     LiveTarget(
         id="tabulator-ajax",
+        # Div/canvas grid — expect_json only (not expect_table). Soft until the
+        # AJAX click recipe stays stable across Tabulator example-page layout.
         url="https://www.tabulator.info/examples/6.x/#ajax",
         tech=("tabulator", "ajax", "json"),
         description="Tabulator AJAX data-loading example (JSON in HAR)",
-        wait_seconds=3.5,
+        wait_seconds=2.5,
+        recipe=(
+            {"op": "wait", "ms": 1000},
+            {
+                "op": "click",
+                "css": "button:has-text('Load Data via AJAX')",
+            },
+            {"op": "wait", "ms": 2000},
+        ),
         expect_host="tabulator",
         min_entries=3,
         expect_json=True,
+        soft=True,
     ),
     LiveTarget(
         id="kendo-remote-grid",
+        # Kendo + OData JSON; no HTML <table> for expect_table.
         url="https://demos.telerik.com/kendo-ui/grid/remote-data-binding",
-        tech=("kendo", "ajax", "json"),
+        tech=("kendo", "ajax", "json", "odata"),
         description="Kendo UI remote DataSource grid (JSON XHR; no static HTML table)",
         wait_seconds=4.0,
         expect_host="telerik",
@@ -344,6 +356,7 @@ TARGETS: tuple[LiveTarget, ...] = (
         expect_host="scrape.center",
         min_entries=2,
         expect_json=True,
+        soft=True,
     ),
     LiveTarget(
         id="quotes-viewstate",

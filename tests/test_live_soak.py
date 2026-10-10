@@ -50,6 +50,9 @@ def test_live_target_catalog_shape():
     assert "escuela-auth" in ids
     assert "booker-auth" in ids
     assert target_by_id("kendo-remote-grid").soft
+    assert target_by_id("tabulator-ajax").soft
+    assert target_by_id("spa1-movies").soft
+    assert not target_by_id("tabulator-ajax").expect_table
     assert target_by_id("expand-login").expect_path_contains == "secure"
     rows = catalog_summary()
     assert all("url" in r and "tech" in r for r in rows)

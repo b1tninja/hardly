@@ -36,9 +36,9 @@ These are live soak ids (hard unless noted). Signals are what the soak asserts.
 | `httpbingo` | JSON echo GET | `expect_json` |
 | `parabank-login` | Form → overview + session | `expect_password`, `expect_path_contains`, `expect_session_cookie` |
 | `expand-login` | Form → `/secure` | `expect_password`, `expect_path_contains`, `expect_session_cookie` |
-| `tabulator-ajax` | Tabulator AJAX JSON | `expect_json` |
-| `kendo-remote-grid` | Kendo remote DataSource | `expect_json`, `soft=True` (no HTML table) |
-| `spa1-movies` | SPA REST movie list | `expect_json` |
+| `tabulator-ajax` | Tabulator AJAX JSON (div grid) | `expect_json`, `soft=True`, click “Load Data via AJAX” |
+| `kendo-remote-grid` | Kendo + OData JSON (div grid) | `expect_json`, `soft=True` (no HTML table) |
+| `spa1-movies` | SPA REST movie list | `expect_json`, `soft=True` |
 | `quotes-viewstate` | ASP.NET ViewState search | `expect_aspnet`, `expect_forms` |
 | `testaspnet-webforms` | Live VIEWSTATE + table (HTTP) | `expect_aspnet`, `expect_forms`, `expect_table` |
 | `saucedemo-login` | SPA login (JS-hydrated) | `soft=True` (preferred_host can drift to telemetry) |
@@ -53,13 +53,14 @@ Fit pass + headless probe (2026-10-10). Catalogued GOs: `tabulator-ajax`,
 
 | Candidate | Fit | Notes |
 |-----------|-----|-------|
-| Kendo search panel | HOLD | Overlaps `kendo-remote-grid`; add only if fill→filter XHR is distinct |
+| Kendo search panel | HOLD | Same stack as `kendo-remote-grid`; brittle toolbar fill |
+| AG Grid finance | soft-only later | Div grid + heavy HAR; 403-prone on some egress; no `expect_table` |
 | nopCommerce admin | **DROP** | IWR **403** / headless challenge shell — no login fields |
 | Altoro/testfire | DROP | Expired TLS + flaky `/doLogin` without bank redirect |
 | `postman-echo.com/get` | SKIP | Redundant with `httpbingo`; keep basic-auth/digest for later |
 | Duende OIDC | soft later | Multi-hop; high value for `oidc_pkce` when recipe is ready |
 | OrangeHRM / RBP admin / zero.webappsecurity | HOLD | SPA flaky / HTTP quirks — not in this wave |
-| AG Grid finance / MusicBrainz / OpenCart | DROP | 403 / production catalog / 403 |
+| MusicBrainz / OpenCart | DROP | Production catalog (+ etiquette) / 403 |
 
 ## Priority shortlist (still research)
 
