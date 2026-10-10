@@ -21,7 +21,7 @@ from hardly.live_targets import TARGETS, catalog_summary, list_targets, target_b
 
 
 def test_live_target_catalog_shape():
-    assert len(TARGETS) >= 22
+    assert len(TARGETS) >= 28
     ids = {t.id for t in TARGETS}
     assert "local-webforms" in ids
     assert "example" in ids
@@ -35,14 +35,22 @@ def test_live_target_catalog_shape():
     assert "scrape-forms" in ids
     assert "scrape-ajax" in ids
     assert "books-detail" in ids
+    assert "tabulator-ajax" in ids
+    assert "kendo-remote-grid" in ids
+    assert "spa1-movies" in ids
+    assert "quotes-viewstate" in ids
+    assert "testaspnet-webforms" in ids
     assert "quotes-login" in ids
     assert "practice-login" in ids
+    assert "expand-login" in ids
     assert "parabank-login" in ids
     assert "dummyjson" in ids
     assert "httpbingo" in ids
     assert "reqres-login" in ids
     assert "escuela-auth" in ids
     assert "booker-auth" in ids
+    assert target_by_id("kendo-remote-grid").soft
+    assert target_by_id("expand-login").expect_path_contains == "secure"
     rows = catalog_summary()
     assert all("url" in r and "tech" in r for r in rows)
     assert target_by_id("local-webforms") is not None

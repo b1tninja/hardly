@@ -120,6 +120,19 @@ _PARABANK_LOGIN = (
     {"op": "wait", "ms": 2500},
 )
 
+_EXPAND_LOGIN = (
+    {"op": "fill", "css": "#username", "value": "practice"},
+    {
+        "op": "fill",
+        "css": "#password",
+        "value": "SuperSecretPassword!",
+        "allow_login": True,
+    },
+    # Generic ``button`` can miss the submit control; ``button.btn`` posts /authenticate.
+    {"op": "click", "css": "button.btn"},
+    {"op": "wait", "ms": 2000},
+)
+
 
 TARGETS: tuple[LiveTarget, ...] = (
     LiveTarget(
@@ -301,6 +314,62 @@ TARGETS: tuple[LiveTarget, ...] = (
         expect_table=True,
     ),
     LiveTarget(
+        id="tabulator-ajax",
+        url="https://www.tabulator.info/examples/6.x/#ajax",
+        tech=("tabulator", "ajax", "json"),
+        description="Tabulator AJAX data-loading example (JSON in HAR)",
+        wait_seconds=3.5,
+        expect_host="tabulator",
+        min_entries=3,
+        expect_json=True,
+    ),
+    LiveTarget(
+        id="kendo-remote-grid",
+        url="https://demos.telerik.com/kendo-ui/grid/remote-data-binding",
+        tech=("kendo", "ajax", "json"),
+        description="Kendo UI remote DataSource grid (JSON XHR; no static HTML table)",
+        wait_seconds=4.0,
+        expect_host="telerik",
+        min_entries=3,
+        expect_json=True,
+        soft=True,
+    ),
+    LiveTarget(
+        id="spa1-movies",
+        url="https://spa1.scrape.center/",
+        tech=("spa", "rest", "json"),
+        description="spa1.scrape.center movie list SPA (/api/movie/ JSON)",
+        wait_seconds=3.0,
+        recipe=({"op": "wait", "ms": 2000},),
+        expect_host="scrape.center",
+        min_entries=2,
+        expect_json=True,
+    ),
+    LiveTarget(
+        id="quotes-viewstate",
+        url="https://quotes.toscrape.com/search.aspx",
+        tech=("aspnet", "viewstate", "html_form"),
+        description="quotes.toscrape ASP.NET ViewState search page",
+        wait_seconds=2.5,
+        expect_host="toscrape",
+        min_entries=1,
+        expect_aspnet=True,
+        expect_forms=True,
+    ),
+    LiveTarget(
+        id="testaspnet-webforms",
+        # HTTPS times out; intentional vulnweb demo speaks HTTP.
+        url="http://testaspnet.vulnweb.com/",
+        tech=("aspnet", "viewstate", "html_table"),
+        description="Acunetix testaspnet — live VIEWSTATE WebForms + HTML table",
+        wait_seconds=3.0,
+        expect_host="vulnweb",
+        min_entries=1,
+        expect_aspnet=True,
+        expect_forms=True,
+        expect_table=True,
+    ),
+    LiveTarget(
         id="httpbingo",
         url="https://httpbingo.org/get",
         tech=("json", "http"),
@@ -366,6 +435,19 @@ TARGETS: tuple[LiveTarget, ...] = (
         expect_host="practicetestautomation",
         min_entries=2,
         expect_path_contains="logged-in-successfully",
+    ),
+    LiveTarget(
+        id="expand-login",
+        url="https://practice.expandtesting.com/login",
+        tech=("login", "html_form", "redirect", "session"),
+        description="Expand Testing login (practice/…) → /secure",
+        wait_seconds=2.0,
+        recipe=_EXPAND_LOGIN,
+        expect_host="expandtesting",
+        min_entries=2,
+        expect_password=True,
+        expect_path_contains="secure",
+        expect_session_cookie=True,
     ),
     LiveTarget(
         id="saucedemo-login",

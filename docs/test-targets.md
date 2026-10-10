@@ -35,27 +35,31 @@ These are live soak ids (hard unless noted). Signals are what the soak asserts.
 | `books-detail` | Product HTML table | `expect_table` |
 | `httpbingo` | JSON echo GET | `expect_json` |
 | `parabank-login` | Form → overview + session | `expect_password`, `expect_path_contains`, `expect_session_cookie` |
+| `expand-login` | Form → `/secure` | `expect_password`, `expect_path_contains`, `expect_session_cookie` |
+| `tabulator-ajax` | Tabulator AJAX JSON | `expect_json` |
+| `kendo-remote-grid` | Kendo remote DataSource | `expect_json`, `soft=True` (no HTML table) |
+| `spa1-movies` | SPA REST movie list | `expect_json` |
+| `quotes-viewstate` | ASP.NET ViewState search | `expect_aspnet`, `expect_forms` |
+| `testaspnet-webforms` | Live VIEWSTATE + table (HTTP) | `expect_aspnet`, `expect_forms`, `expect_table` |
 | `saucedemo-login` | SPA login (JS-hydrated) | `soft=True` (preferred_host can drift to telemetry) |
 | `the-internet-login` | Password form (no submit) | `expect_forms`, `expect_password` |
 | `local-webforms` / `local-token-login` | Loopback VIEWSTATE / token | offline deterministic |
 
 ## Next candidates (fanout research, not yet catalogued)
 
-Still open after wave-3 probes (2026-10-10):
+Fit pass + headless probe (2026-10-10). Catalogued GOs: `tabulator-ajax`,
+`kendo-remote-grid` (soft), `spa1-movies`, `quotes-viewstate`,
+`testaspnet-webforms`, `expand-login`.
 
-| Candidate | Pattern | Notes |
-|-----------|---------|-------|
-| Tabulator AJAX example | click → `/exampledata/ajax.json` | Needs button-click recipe |
-| Kendo remote grid / search panel | vendor DataSource XHR | Telerik demos; optional filter recipe |
-| `spa1.scrape.center` | SPA REST movie grid | Paginate once for extra entries |
-| Expand Testing `/login` | form → `/secure` | Soft until cookie jar confirmed |
-| nopCommerce admin | ASP.NET Core antiforgery | `admin@yourstore.com` / `admin` |
-| Altoro/testfire | form → `JSESSIONID` | Creds flaky in headless (`doLogin` without bank redirect) |
-| `postman-echo.com` | JSON echo + signed auth | Pair with httpbingo challenges |
-| `quotes.toscrape.com/search.aspx` | ASP.NET ViewState filter | Needs fill recipe; no table on bare load |
-| Duende `demo.duendesoftware.com` | OIDC multi-hop (`alice`/`alice`) | Soft; browser recipe required |
-| `testaspnet.vulnweb.com` | ASP.NET WebForms | **HTTP only** (HTTPS times out) |
-| OpenCart demo | — | **403** from static probe; skip |
+| Candidate | Fit | Notes |
+|-----------|-----|-------|
+| Kendo search panel | HOLD | Overlaps `kendo-remote-grid`; add only if fill→filter XHR is distinct |
+| nopCommerce admin | **DROP** | IWR **403** / headless challenge shell — no login fields |
+| Altoro/testfire | DROP | Expired TLS + flaky `/doLogin` without bank redirect |
+| `postman-echo.com/get` | SKIP | Redundant with `httpbingo`; keep basic-auth/digest for later |
+| Duende OIDC | soft later | Multi-hop; high value for `oidc_pkce` when recipe is ready |
+| OrangeHRM / RBP admin / zero.webappsecurity | HOLD | SPA flaky / HTTP quirks — not in this wave |
+| AG Grid finance / MusicBrainz / OpenCart | DROP | 403 / production catalog / 403 |
 
 ## Priority shortlist (still research)
 
