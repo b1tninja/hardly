@@ -185,7 +185,9 @@ _CDN_SEED_RE = re.compile(
     r"bing\.com|twimg|ytimg|youtube|vimeocdn|typekit|gravatar|"
     r"fontawesome|bootstrapcdn|jsdelivr|unpkg|cdnjs|jquery\.com|"
     r"hcaptcha|recaptcha|px-cloud|px-cdn|perimeterx|captcha-delivery|datadome|"
-    r"google\.com|gstatic\.com"
+    r"google\.com|gstatic\.com|"
+    # Product analytics / crash telemetry (e.g. SauceDemo → events.backtrace.io).
+    r"backtrace\.io|browser-intake|heap\.io|mixpanel|amplitude|bugsnag|logrocket"
     r")(\.|$)"
 )
 

@@ -6,17 +6,31 @@ Research notes for growing hardly's soak catalog (`hardly.live_targets`) and
 unit-test fixtures. Everything here is a *generic technology demo*; hardly
 never encodes site-specific logic for any of them.
 
-> **Status: unverified.** This list was compiled with the egress proxy blocking
-> every candidate host, so stacks, endpoints, cookie names, demo credentials,
-> rate limits and terms come from search snippets and memory, not from fetching
-> the sites. Before adding a target: (1) read the owner's stated testing policy,
-> (2) run `hardly browser capture-discover <url> --analyze --confirm` and confirm the signals
-> below, (3) keep it `soft=True` in the catalog until it has proven stable.
+> Before adding a target: (1) read the owner's stated testing policy,
+> (2) run `hardly browser capture-discover <url> --analyze --confirm` (or
+> `python -m hardly.soak_live --ids …`) and confirm the signals below,
+> (3) keep it `soft=True` in the catalog until it has proven stable.
 > Never script against a service that requires an account you don't own or
 > that forbids automation. Demo credentials are not recorded here; use the
 > owner's published ones from their page.
 
-## Priority shortlist
+## Verified in catalog (`hardly.live_targets`)
+
+These are live soak ids (hard unless noted). Signals are what the soak asserts.
+
+| Id | Pattern | Asserts |
+|----|---------|---------|
+| `datatables-ajax` | DataTables AJAX grid + JSON | `expect_table`, `expect_json` |
+| `internet-tables` | Static HTML data tables | `expect_table` |
+| `scrape-forms` | Form search → results table | `expect_forms`, `expect_table`, recipe fill/click |
+| `quotes-login` | Form login → session cookie | `expect_password`, `expect_session_cookie`, recipe |
+| `practice-login` | Form login → redirect path | `expect_path_contains`, recipe |
+| `dummyjson` | REST JSON catalog | `expect_json` |
+| `saucedemo-login` | SPA login (JS-hydrated) | `soft=True` (preferred_host can drift to telemetry) |
+| `the-internet-login` | Password form (no submit) | `expect_forms`, `expect_password` |
+| `local-webforms` / `local-token-login` | Loopback VIEWSTATE / token | offline deterministic |
+
+## Priority shortlist (still research)
 
 | Target | Pattern it would exercise | What hardly should report |
 |--------|---------------------------|---------------------------|

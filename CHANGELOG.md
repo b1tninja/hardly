@@ -6,6 +6,13 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Live soak catalog targets for AJAX/HTML tables and form logins: `datatables-ajax`,
+  `internet-tables`, `scrape-forms`, `quotes-login`, `practice-login`, `dummyjson`,
+  and soft `saucedemo-login`, with soak asserts for tables, path redirects, and
+  session cookies. `preferred_host` also skips Backtrace / heap / mixpanel-style
+  product telemetry hosts.
+
 ### Changed: the v1 API surface (nothing was published before this, so there are no aliases)
 - **MCP tools: 97 renamed or merged into 71.** The first word is the effect: `hardly_send_*` sends
   requests (confirm-gated), `hardly_write_*` writes a file (`overwrite=false` by default),

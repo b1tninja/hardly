@@ -29,6 +29,11 @@ class LiveTarget:
     expect_password: bool = False
     expect_graphql: bool = False
     expect_json: bool = False
+    expect_table: bool = False
+    # After a login recipe, at least one path should contain this substring.
+    expect_path_contains: str | None = None
+    # After login / session work, at least one session-ish cookie name.
+    expect_session_cookie: bool = False
     soft: bool = False  # soft failures do not fail the soak exit code
 
 
@@ -48,6 +53,33 @@ _GQLZERO_GQL = {
     "headers": {"content-type": "application/json"},
     "body": {"query": "{ __typename }"},
 }
+
+_SAUCE_LOGIN = (
+    {"op": "fill", "css": "#user-name", "value": "standard_user"},
+    {"op": "fill", "css": "#password", "value": "secret_sauce", "allow_login": True},
+    {"op": "click", "css": "#login-button"},
+    {"op": "wait", "ms": 2000},
+)
+
+_PRACTICE_LOGIN = (
+    {"op": "fill", "css": "#username", "value": "student"},
+    {"op": "fill", "css": "#password", "value": "Password123", "allow_login": True},
+    {"op": "click", "css": "#submit"},
+    {"op": "wait", "ms": 2000},
+)
+
+_QUOTES_LOGIN = (
+    {"op": "fill", "css": "#username", "value": "admin"},
+    {"op": "fill", "css": "#password", "value": "admin", "allow_login": True},
+    {"op": "click", "css": 'input[type="submit"]'},
+    {"op": "wait", "ms": 1500},
+)
+
+_SCRAPE_TEAM_SEARCH = (
+    {"op": "fill", "css": "#q", "value": "Boston"},
+    {"op": "click", "css": 'input[type="submit"]'},
+    {"op": "wait", "ms": 1500},
+)
 
 
 TARGETS: tuple[LiveTarget, ...] = (
@@ -115,6 +147,49 @@ TARGETS: tuple[LiveTarget, ...] = (
         expect_json=True,
     ),
     LiveTarget(
+        id="dummyjson",
+        url="https://dummyjson.com/products",
+        tech=("json", "rest", "catalog"),
+        description="DummyJSON products catalog API",
+        wait_seconds=2.0,
+        expect_host="dummyjson",
+        min_entries=1,
+        expect_json=True,
+    ),
+    LiveTarget(
+        id="datatables-ajax",
+        url="https://datatables.net/examples/data_sources/ajax.html",
+        tech=("datatables", "ajax", "table", "json"),
+        description="DataTables AJAX-sourced grid (loads arrays.txt JSON)",
+        wait_seconds=4.0,
+        expect_host="datatables",
+        min_entries=3,
+        expect_table=True,
+        expect_json=True,
+    ),
+    LiveTarget(
+        id="internet-tables",
+        url="https://the-internet.herokuapp.com/tables",
+        tech=("html_table",),
+        description="the-internet sortable HTML data tables",
+        wait_seconds=2.0,
+        expect_host="herokuapp",
+        min_entries=1,
+        expect_table=True,
+    ),
+    LiveTarget(
+        id="scrape-forms",
+        url="https://www.scrapethissite.com/pages/forms/",
+        tech=("lookup", "html_table", "form_search"),
+        description="Scrape This Site hockey teams — search form + results table",
+        wait_seconds=2.0,
+        recipe=_SCRAPE_TEAM_SEARCH,
+        expect_host="scrapethissite",
+        min_entries=2,
+        expect_forms=True,
+        expect_table=True,
+    ),
+    LiveTarget(
         id="the-internet-login",
         url="https://the-internet.herokuapp.com/login",
         tech=("login", "html_form", "password"),
@@ -124,6 +199,41 @@ TARGETS: tuple[LiveTarget, ...] = (
         min_entries=1,
         expect_forms=True,
         expect_password=True,
+    ),
+    LiveTarget(
+        id="quotes-login",
+        url="https://quotes.toscrape.com/login",
+        tech=("login", "html_form", "password", "session"),
+        description="quotes.toscrape login (admin/admin) → session cookie",
+        wait_seconds=1.5,
+        recipe=_QUOTES_LOGIN,
+        expect_host="toscrape",
+        min_entries=2,
+        expect_forms=True,
+        expect_password=True,
+        expect_session_cookie=True,
+    ),
+    LiveTarget(
+        id="practice-login",
+        url="https://practicetestautomation.com/practice-test-login/",
+        tech=("login", "html_form", "redirect"),
+        description="Practice Test Automation login (student/Password123)",
+        wait_seconds=2.0,
+        recipe=_PRACTICE_LOGIN,
+        expect_host="practicetestautomation",
+        min_entries=2,
+        expect_path_contains="logged-in-successfully",
+    ),
+    LiveTarget(
+        id="saucedemo-login",
+        url="https://www.saucedemo.com/",
+        tech=("login", "spa"),
+        description="Sauce Demo SPA login recipe (standard_user/secret_sauce); JS-hydrated shell",
+        wait_seconds=2.0,
+        recipe=_SAUCE_LOGIN,
+        expect_host="saucedemo",
+        min_entries=2,
+        soft=True,
     ),
     LiveTarget(
         id="quotes",
@@ -209,6 +319,9 @@ def catalog_summary() -> list[dict[str, Any]]:
             "expect_password": t.expect_password,
             "expect_graphql": t.expect_graphql,
             "expect_json": t.expect_json,
+            "expect_table": t.expect_table,
+            "expect_path_contains": t.expect_path_contains,
+            "expect_session_cookie": t.expect_session_cookie,
             "soft": t.soft,
             "recipe_ops": [str(s.get("op")) for s in t.recipe if isinstance(s, dict)],
         }

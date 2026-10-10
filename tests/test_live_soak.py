@@ -21,19 +21,35 @@ from hardly.live_targets import TARGETS, catalog_summary, list_targets, target_b
 
 
 def test_live_target_catalog_shape():
-    assert len(TARGETS) >= 8
+    assert len(TARGETS) >= 14
     ids = {t.id for t in TARGETS}
     assert "local-webforms" in ids
     assert "example" in ids
     assert "countries-gql" in ids
     assert "jsonplaceholder" in ids
     assert "petstore-openapi" in ids
+    assert "datatables-ajax" in ids
+    assert "internet-tables" in ids
+    assert "scrape-forms" in ids
+    assert "quotes-login" in ids
+    assert "practice-login" in ids
+    assert "dummyjson" in ids
     rows = catalog_summary()
     assert all("url" in r and "tech" in r for r in rows)
     assert target_by_id("local-webforms") is not None
     assert list_targets(ids=["example"])[0].id == "example"
     gql = target_by_id("countries-gql")
     assert gql and any(s.get("op") == "fetch" for s in gql.recipe)
+    dt = target_by_id("datatables-ajax")
+    assert dt and dt.expect_table and dt.expect_json
+    pl = target_by_id("practice-login")
+    assert pl and pl.expect_path_contains == "logged-in-successfully"
+    ql = target_by_id("quotes-login")
+    assert ql and ql.expect_session_cookie and any(
+        s.get("op") == "fill" for s in ql.recipe
+    )
+    sauce = target_by_id("saucedemo-login")
+    assert sauce and sauce.soft
 
 
 def test_live_target_ids_unique():

@@ -28,6 +28,10 @@ def test_preferred_host_skips_beacon_cdns(tmp_path, monkeypatch):
     entries = [_entry(1, "https://shop.example.com/login", "<form></form>")]
     entries += [_entry(i + 2, f"https://static.cloudflareinsights.com/beacon.min.js?{i}", "x", "text/javascript") for i in range(4)]
     entries += [_entry(i + 8, f"https://298279967.log.optimizely.com/event?{i}", "{}", "application/json") for i in range(4)]
+    entries += [
+        _entry(i + 20, f"https://events.backtrace.io/api/submit?{i}", "{}", "application/json")
+        for i in range(6)
+    ]
     path = tmp_path / "p.har"
     path.write_text(json.dumps({"log": {"version": "1.2", "creator": {"name": "t", "version": "1"}, "entries": entries}}))
     monkeypatch.setenv("HARDLY_RUNTIME_DIR", str(tmp_path / "cache"))
