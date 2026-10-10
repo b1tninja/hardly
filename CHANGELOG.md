@@ -8,7 +8,8 @@ All notable changes are documented here. The format follows
 
 ### Added
 - Live soak catalog targets for AJAX/HTML tables and form logins: `datatables-ajax`,
-  `internet-tables`, `scrape-forms`, `quotes-login`, `practice-login`, `dummyjson`,
+  `datatables-objects`, `internet-tables`, `scrape-forms`, `scrape-ajax`,
+  `quotes-login`, `practice-login`, `dummyjson`, `reqres-login`, `escuela-auth`,
   and soft `saucedemo-login`, with soak asserts for tables, path redirects, and
   session cookies. `preferred_host` also skips Backtrace / heap / mixpanel-style
   product telemetry hosts.

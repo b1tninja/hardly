@@ -21,7 +21,7 @@ from hardly.live_targets import TARGETS, catalog_summary, list_targets, target_b
 
 
 def test_live_target_catalog_shape():
-    assert len(TARGETS) >= 14
+    assert len(TARGETS) >= 18
     ids = {t.id for t in TARGETS}
     assert "local-webforms" in ids
     assert "example" in ids
@@ -29,11 +29,15 @@ def test_live_target_catalog_shape():
     assert "jsonplaceholder" in ids
     assert "petstore-openapi" in ids
     assert "datatables-ajax" in ids
+    assert "datatables-objects" in ids
     assert "internet-tables" in ids
     assert "scrape-forms" in ids
+    assert "scrape-ajax" in ids
     assert "quotes-login" in ids
     assert "practice-login" in ids
     assert "dummyjson" in ids
+    assert "reqres-login" in ids
+    assert "escuela-auth" in ids
     rows = catalog_summary()
     assert all("url" in r and "tech" in r for r in rows)
     assert target_by_id("local-webforms") is not None

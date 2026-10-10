@@ -81,6 +81,24 @@ _SCRAPE_TEAM_SEARCH = (
     {"op": "wait", "ms": 1500},
 )
 
+_REQRES_LOGIN = {
+    "op": "fetch",
+    "url": "https://reqres.in/api/login",
+    "method": "POST",
+    "headers": {"content-type": "application/json"},
+    # Published demo credentials from https://reqres.in/
+    "body": {"email": "eve.holt@reqres.in", "password": "cityslicka"},
+}
+
+_ESCUELA_LOGIN = {
+    "op": "fetch",
+    "url": "https://api.escuelajs.co/api/v1/auth/login",
+    "method": "POST",
+    "headers": {"content-type": "application/json"},
+    # Published demo credentials from the Fake Store API docs.
+    "body": {"email": "john@mail.com", "password": "changeme"},
+}
+
 
 TARGETS: tuple[LiveTarget, ...] = (
     LiveTarget(
@@ -157,6 +175,30 @@ TARGETS: tuple[LiveTarget, ...] = (
         expect_json=True,
     ),
     LiveTarget(
+        id="reqres-login",
+        # API login via in-page fetch so the HAR records the token JSON.
+        url="https://reqres.in/",
+        tech=("login", "json", "token"),
+        description="ReqRes JSON login (eve.holt@reqres.in) — recipe fetch POST",
+        wait_seconds=1.5,
+        recipe=(_REQRES_LOGIN, {"op": "wait", "ms": 500}),
+        expect_host="reqres",
+        min_entries=2,
+        expect_json=True,
+    ),
+    LiveTarget(
+        id="escuela-auth",
+        # CORS-open Fake Store API; bootstrap from example.com like countries-gql.
+        url="https://example.com/",
+        tech=("login", "json", "jwt", "refresh"),
+        description="EscuelaJS auth login — access + refresh tokens via recipe fetch",
+        wait_seconds=1.5,
+        recipe=(_ESCUELA_LOGIN, {"op": "wait", "ms": 500}),
+        expect_host="example.com",
+        min_entries=2,
+        expect_json=True,
+    ),
+    LiveTarget(
         id="datatables-ajax",
         url="https://datatables.net/examples/data_sources/ajax.html",
         tech=("datatables", "ajax", "table", "json"),
@@ -164,6 +206,29 @@ TARGETS: tuple[LiveTarget, ...] = (
         wait_seconds=4.0,
         expect_host="datatables",
         min_entries=3,
+        expect_table=True,
+        expect_json=True,
+    ),
+    LiveTarget(
+        id="datatables-objects",
+        url="https://datatables.net/examples/ajax/objects.html",
+        tech=("datatables", "ajax", "table", "json"),
+        description="DataTables AJAX grid with object-shaped JSON rows",
+        wait_seconds=4.0,
+        expect_host="datatables",
+        min_entries=3,
+        expect_table=True,
+        expect_json=True,
+    ),
+    LiveTarget(
+        id="scrape-ajax",
+        url="https://www.scrapethissite.com/pages/ajax-javascript/#2015",
+        tech=("ajax", "table", "json"),
+        description="Scrape This Site Oscar wins — jQuery AJAX year → JSON → table",
+        wait_seconds=2.0,
+        recipe=({"op": "wait", "ms": 2500},),
+        expect_host="scrapethissite",
+        min_entries=2,
         expect_table=True,
         expect_json=True,
     ),

@@ -26,9 +26,31 @@ These are live soak ids (hard unless noted). Signals are what the soak asserts.
 | `quotes-login` | Form login → session cookie | `expect_password`, `expect_session_cookie`, recipe |
 | `practice-login` | Form login → redirect path | `expect_path_contains`, recipe |
 | `dummyjson` | REST JSON catalog | `expect_json` |
+| `datatables-objects` | DataTables object-row AJAX | `expect_table`, `expect_json` |
+| `scrape-ajax` | jQuery AJAX → JSON → table | `expect_table`, `expect_json` |
+| `reqres-login` | JSON login → token body | `expect_json`, recipe `fetch` |
+| `escuela-auth` | JSON login → access + refresh | `expect_json`, recipe `fetch` |
 | `saucedemo-login` | SPA login (JS-hydrated) | `soft=True` (preferred_host can drift to telemetry) |
 | `the-internet-login` | Password form (no submit) | `expect_forms`, `expect_password` |
 | `local-webforms` / `local-token-login` | Loopback VIEWSTATE / token | offline deterministic |
+
+## Next candidates (fanout research, not yet catalogued)
+
+Verified reachable (2026-10-10) but not yet soaked into `TARGETS`:
+
+| Candidate | Pattern | Notes |
+|-----------|---------|-------|
+| DataTables `server_side/simple.html` | server-side XHR draws | Distinct from ajax/objects; start `soft=True` |
+| Tabulator AJAX example | click → `/exampledata/ajax.json` | Needs button-click recipe |
+| `spa1.scrape.center` | SPA REST movie grid | Paginate once for extra entries |
+| `books.toscrape.com` product detail | `table.table-striped` | Scraping sandbox |
+| ParaBank (`john`/`demo`) | form → `JSESSIONID` | Strong form_session next |
+| Expand Testing `/login` | form → `/secure` | Soft until cookie jar confirmed |
+| `restful-booker` `/auth` | opaque token (not JWT) | Host up; wire recipe carefully |
+| `httpbingo.org` / `postman-echo.com` | JSON echo + auth challenges | Light hard GET soaks |
+| `quotes.toscrape.com/search.aspx` | ASP.NET ViewState filter | Needs fill recipe; no table on bare load |
+| Duende `demo.duendesoftware.com` | OIDC multi-hop | Soft; browser recipe required |
+| `testaspnet.vulnweb.com` | ASP.NET WebForms | **HTTP only** (HTTPS times out) |
 
 ## Priority shortlist (still research)
 
