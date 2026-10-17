@@ -181,8 +181,11 @@ ruff check .
 ```
 
 Live soak against public demo sites (no private HARs): `hardly soak live --list`, then
-`hardly soak live`. See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md); release notes
-in [CHANGELOG.md](CHANGELOG.md).
+`hardly soak live` (or `--ids datatables-ajax,quotes-login,…`). Catalog covers loopback
+WebForms/token login, HTML/AJAX tables, form logins, GraphQL, and JSON/OpenAPI — see
+`hardly.live_targets` and [docs/test-targets.md](docs/test-targets.md).
+[CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md); release notes in
+[CHANGELOG.md](CHANGELOG.md).
 
 ## Security
 

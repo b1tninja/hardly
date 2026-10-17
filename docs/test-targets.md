@@ -6,17 +6,64 @@ Research notes for growing hardly's soak catalog (`hardly.live_targets`) and
 unit-test fixtures. Everything here is a *generic technology demo*; hardly
 never encodes site-specific logic for any of them.
 
-> **Status: unverified.** This list was compiled with the egress proxy blocking
-> every candidate host, so stacks, endpoints, cookie names, demo credentials,
-> rate limits and terms come from search snippets and memory, not from fetching
-> the sites. Before adding a target: (1) read the owner's stated testing policy,
-> (2) run `hardly browser capture-discover <url> --analyze --confirm` and confirm the signals
-> below, (3) keep it `soft=True` in the catalog until it has proven stable.
+> Before adding a target: (1) read the owner's stated testing policy,
+> (2) run `hardly browser capture-discover <url> --analyze --confirm` (or
+> `python -m hardly.soak_live --ids …`) and confirm the signals below,
+> (3) keep it `soft=True` in the catalog until it has proven stable.
 > Never script against a service that requires an account you don't own or
 > that forbids automation. Demo credentials are not recorded here; use the
 > owner's published ones from their page.
 
-## Priority shortlist
+## Verified in catalog (`hardly.live_targets`)
+
+These are live soak ids (hard unless noted). Signals are what the soak asserts.
+
+| Id | Pattern | Asserts |
+|----|---------|---------|
+| `datatables-ajax` | DataTables AJAX grid + JSON | `expect_table`, `expect_json` |
+| `internet-tables` | Static HTML data tables | `expect_table` |
+| `scrape-forms` | Form search → results table | `expect_forms`, `expect_table`, recipe fill/click |
+| `quotes-login` | Form login → session cookie | `expect_password`, `expect_session_cookie`, recipe |
+| `practice-login` | Form login → redirect path | `expect_path_contains`, recipe |
+| `dummyjson` | REST JSON catalog | `expect_json` |
+| `datatables-objects` | DataTables object-row AJAX | `expect_table`, `expect_json` |
+| `scrape-ajax` | jQuery AJAX → JSON → table | `expect_table`, `expect_json` |
+| `reqres-login` | JSON login → token body | `expect_json`, recipe `fetch` |
+| `escuela-auth` | JSON login → access + refresh | `expect_json`, recipe `fetch` |
+| `booker-auth` | Opaque token JSON (`/auth`) | `expect_json`, same-origin recipe `fetch` |
+| `datatables-ssp` | DataTables server-side XHR | `expect_table`, `expect_json` |
+| `books-detail` | Product HTML table | `expect_table` |
+| `httpbingo` | JSON echo GET | `expect_json` |
+| `parabank-login` | Form → overview + session | `expect_password`, `expect_path_contains`, `expect_session_cookie` |
+| `expand-login` | Form → `/secure` | `expect_password`, `expect_path_contains`, `expect_session_cookie` |
+| `postman-echo` | JSON GET + Basic-auth hop | `expect_json`, recipe `fetch` (not root URL) |
+| `orangehrm-login` | SPA form → dashboard + API | `expect_password`, `expect_path_contains`, `expect_json`, `soft=True` |
+| `duende-account-login` | IdP local account login | `expect_password`, `soft=True` (not full OIDC stitch) |
+| `tabulator-ajax` | Tabulator AJAX JSON (div grid) | `expect_json`, `soft=True`, click “Load Data via AJAX” |
+| `kendo-remote-grid` | Kendo + OData JSON (div grid) | `expect_json`, `soft=True` (no HTML table) |
+| `spa1-movies` | SPA REST movie list | `expect_json`, `soft=True` |
+| `quotes-viewstate` | ASP.NET ViewState search | `expect_aspnet`, `expect_forms` |
+| `testaspnet-webforms` | Live VIEWSTATE + table (HTTP) | `expect_aspnet`, `expect_forms`, `expect_table` |
+| `saucedemo-login` | SPA login (JS-hydrated) | `soft=True` (preferred_host can drift to telemetry) |
+| `the-internet-login` | Password form (no submit) | `expect_forms`, `expect_password` |
+| `local-webforms` / `local-token-login` | Loopback VIEWSTATE / token | offline deterministic |
+
+## Next candidates (fanout research, not yet catalogued)
+
+Remaining after login-eval wave (2026-10-10). Catalogued: `postman-echo`,
+`orangehrm-login`, `duende-account-login` (plus prior grid/login GOs).
+
+| Candidate | Fit | Notes |
+|-----------|-----|-------|
+| Kendo search panel | HOLD | Same stack as `kendo-remote-grid`; brittle toolbar fill |
+| AG Grid finance | soft-only later | Div grid + heavy HAR; 403-prone on some egress; no `expect_table` |
+| Duende full OIDC authorize→token | soft later | Account login is `duende-account-login`; multi-hop stitch still open |
+| automationintesting `/admin` UI | SKIP | UI login 401; same-origin fetch overlaps `booker-auth` |
+| zero.webappsecurity | DROP | Published demo creds fail in headless |
+| Altoro/testfire / nopCommerce | DROP | `/doLogin` 500; Cloudflare Turnstile |
+| MusicBrainz / OpenCart | DROP | Production catalog (+ etiquette) / 403 |
+
+## Priority shortlist (still research)
 
 | Target | Pattern it would exercise | What hardly should report |
 |--------|---------------------------|---------------------------|

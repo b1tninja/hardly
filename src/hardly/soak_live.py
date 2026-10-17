@@ -121,7 +121,7 @@ def run_target(target: LiveTarget) -> dict[str, Any]:
         + by_kind.get("jsonl", 0)
         + by_kind.get("jsonp", 0)
     )
-    # Tiny single-entry JSON captures sometimes land as mime-only.
+    # Tiny single-entry JSON captures sometimes land as mime-only / text/plain.
     if json_hits == 0:
         json_hits = int(
             conn.execute(
@@ -130,11 +130,55 @@ def run_target(target: LiveTarget) -> dict[str, Any]:
                 LEFT JOIN bodies b ON b.entry_id = e.entry_id AND b.side = 'response'
                 WHERE lower(IFNULL(e.mime, '')) LIKE '%json%'
                    OR lower(IFNULL(b.content_type, '')) LIKE '%json%'
-                   OR IFNULL(b.preview_text, '') LIKE '{%'
-                   OR IFNULL(b.preview_text, '') LIKE '[%'
+                   OR TRIM(IFNULL(b.preview_text, '')) LIKE '{%'
+                   OR TRIM(IFNULL(b.preview_text, '')) LIKE '[%'
                 """
             ).fetchone()["n"]
             or 0
+        )
+
+    table_count = 0
+    if target.expect_table:
+        from hardly.core.tables import scan_session
+
+        tables = scan_session(conn, host=host, limit=80)
+        table_count = int(tables.get("table_count") or 0)
+        # AJAX grids may land table HTML on a sibling host; rescan unscoped.
+        if table_count < 1:
+            tables = scan_session(conn, host=None, limit=120)
+            table_count = int(tables.get("table_count") or 0)
+
+    path_hit = False
+    if target.expect_path_contains:
+        needle = target.expect_path_contains.lower()
+        path_hit = bool(
+            conn.execute(
+                """
+                SELECT 1 AS ok FROM entries
+                WHERE lower(IFNULL(path, '')) LIKE ?
+                LIMIT 1
+                """,
+                (f"%{needle}%",),
+            ).fetchone()
+        )
+
+    session_cookies = len(
+        [
+            n
+            for n in (cred.get("session_cookies") or [])
+            if "(redacted" not in str(n).lower()
+        ]
+    )
+    if target.expect_session_cookie and session_cookies < 1:
+        # Ephemeral live captures often omit har_path, so Set-Cookie values are
+        # redacted in the index and names cannot be classified. Count set events.
+        from hardly.core.cookies import cookie_timeline
+
+        ct = cookie_timeline(
+            conn, har_path=sess.get_har_path(str(sid)), host=host, limit=40
+        )
+        session_cookies = sum(
+            1 for e in (ct.get("events") or []) if e.get("event") == "set"
         )
 
     out["preferred_host"] = host
@@ -145,6 +189,9 @@ def run_target(target: LiveTarget) -> dict[str, Any]:
     out["password_fields"] = cred.get("password_field_count")
     out["graphql_ops"] = gql.get("operation_count")
     out["json_entries"] = json_hits
+    out["table_count"] = table_count
+    out["path_hit"] = path_hit
+    out["session_cookies"] = session_cookies
     out["brief_host"] = (captured.get("brief") or {}).get("host")
     out["label_rows"] = sum(
         int(e.get("label_count") or 0) for e in forms.get("entries") or []
@@ -170,6 +217,14 @@ def run_target(target: LiveTarget) -> dict[str, Any]:
         failures.append("expected GraphQL operations")
     if target.expect_json and json_hits < 1:
         failures.append("expected JSON response bodies")
+    if target.expect_table and table_count < 1:
+        failures.append("expected HTML data table")
+    if target.expect_path_contains and not path_hit:
+        failures.append(
+            f"expected path containing {target.expect_path_contains!r}"
+        )
+    if target.expect_session_cookie and session_cookies < 1:
+        failures.append("expected session cookie after login")
 
     out["failures"] = failures
     out["ok"] = not failures
