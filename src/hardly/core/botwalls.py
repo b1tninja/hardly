@@ -260,8 +260,8 @@ def _compiled(v: Vendor) -> dict[str, list[tuple[re.Pattern[str], int]]]:
     return v._re
 
 
-_SCRIPT_SRC = re.compile(r"""<script[^>]+\bsrc\s*=\s*['"]([^'"]+)['"]""", re.I)
-_IFRAME_SRC = re.compile(r"""<iframe[^>]+\bsrc\s*=\s*['"]([^'"]+)['"]""", re.I)
+_SCRIPT_SRC = re.compile(r"""<script[^<>]+\bsrc\s*=\s*['"]([^'"]+)['"]""", re.I)
+_IFRAME_SRC = re.compile(r"""<iframe[^<>]+\bsrc\s*=\s*['"]([^'"]+)['"]""", re.I)
 
 
 def detect_bot_protection(

@@ -112,10 +112,10 @@ _TERMS_CONTEXT = re.compile(
 )
 _TERMS_PATH = re.compile(r"(?:^|[/_.-])(disclaimer|termaccept|accept-?terms|tos|terms-?accept)(?:$|[/_.?-])", re.I)
 _ACCEPT_CONTROL = re.compile(
-    r"<input[^>]+type\s*=\s*['\"]?(?:submit|button|image)[^>]*(?:value|name|id)\s*=\s*['\"][^'\"]*(?:accept|agree)[^'\"]*['\"]|"
-    r"<input[^>]+(?:value|name|id)\s*=\s*['\"][^'\"]*(?:accept|agree)[^'\"]*['\"][^>]*type\s*=\s*['\"]?(?:submit|button|image)|"
-    r"<button[^>]*>[^<]{0,40}(?:i\s+)?(?:accept|agree)[^<]{0,40}</button>|"
-    r"<input[^>]+type\s*=\s*['\"]?checkbox[^>]*(?:name|id)\s*=\s*['\"][^'\"]*(?:accept|agree|terms)[^'\"]*['\"]",
+    r"<input[^<>]+type\s*=\s*['\"]?(?:submit|button|image)[^<>]*(?:value|name|id)\s*=\s*['\"][^'\"]*(?:accept|agree)[^'\"]*['\"]|"
+    r"<input[^<>]+(?:value|name|id)\s*=\s*['\"][^'\"]*(?:accept|agree)[^'\"]*['\"][^<>]*type\s*=\s*['\"]?(?:submit|button|image)|"
+    r"<button[^<>]*>[^<]{0,40}(?:i\s+)?(?:accept|agree)[^<]{0,40}</button>|"
+    r"<input[^<>]+type\s*=\s*['\"]?checkbox[^<>]*(?:name|id)\s*=\s*['\"][^'\"]*(?:accept|agree|terms)[^'\"]*['\"]",
     re.I,
 )
 _AUTOMATION_WORDS = r"(?:automated|scrap\w*|crawl\w*|spider\w*|robots?|\bbots?\b|harvest\w*|data[- ]mining|screen[- ]scrap\w*)"
@@ -128,7 +128,7 @@ _FORBIDS_AUTOMATION = re.compile(
     re.I,
 )
 
-_PASSWORD_FIELD = re.compile(r"<input[^>]+type\s*=\s*['\"]?password", re.I)
+_PASSWORD_FIELD = re.compile(r"<input[^<>]+type\s*=\s*['\"]?password", re.I)
 
 _PRICE_STRONG = re.compile(
     r"\$\s?\d[\d,]*(?:\.\d{2})?\s*(?:/|a|an|per|each)\s*(?:day|week|month|year|page|document|copy|search|view|record|hour)\b|"

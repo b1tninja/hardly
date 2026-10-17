@@ -7,12 +7,11 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-import ijson
-
 from hardly.core.filters import is_noise
+from hardly.core.har_io import ijson_items
 from hardly.core.urls import parse_url
 
-_COOKIE_PAIR = re.compile(r"([^=;\s]+)\s*=\s*([^;]*)")
+_COOKIE_PAIR = re.compile(r"(?<![^=;\s])([^=;\s]+)\s*=\s*([^;]*)")
 
 
 def cookie_timeline(
@@ -88,7 +87,7 @@ def _har_path(conn: sqlite3.Connection) -> Path | None:
 def _from_har(har_path: Path, *, host: str | None) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     with har_path.open("rb") as f:
-        for entry_id, entry in enumerate(ijson.items(f, "log.entries.item")):
+        for entry_id, entry in enumerate(ijson_items(f, "log.entries.item")):
             req = entry.get("request") or {}
             resp = entry.get("response") or {}
             url = req.get("url") or ""
@@ -186,7 +185,7 @@ def _cookie_flags_from_har(
     out: list[dict[str, Any]] = []
     seen: set[tuple[Any, ...]] = set()
     with har_path.open("rb") as f:
-        for entry_id, entry in enumerate(ijson.items(f, "log.entries.item")):
+        for entry_id, entry in enumerate(ijson_items(f, "log.entries.item")):
             req = entry.get("request") or {}
             resp = entry.get("response") or {}
             url = req.get("url") or ""

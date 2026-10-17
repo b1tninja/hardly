@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from hardly.core.safe_json import safe_loads
+
 # Bodies larger than this are not worth re-parsing for the wrapper check.
 _MAX_CHARS = 8_000_000
 
@@ -28,7 +30,7 @@ def unwrap_json_string(text: str | None, max_depth: int = 3) -> tuple[Any, int]:
     layers = 0
     while True:
         try:
-            value = json.loads(cur)
+            value = safe_loads(cur)
         except (json.JSONDecodeError, TypeError, ValueError, RecursionError):
             break
         if not isinstance(value, str):

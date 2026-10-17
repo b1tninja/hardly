@@ -7,6 +7,8 @@ import re
 import sqlite3
 from typing import Any
 
+from hardly.core.safe_json import safe_loads
+
 _OP_NAME = re.compile(
     r"\b(query|mutation|subscription)\s+([A-Za-z_][A-Za-z0-9_]*)",
     re.I,
@@ -89,7 +91,7 @@ def _parse_graphql(
     data = None
     if "json" in ct or stripped.startswith(("{", "[")):
         try:
-            data = json.loads(text)
+            data = safe_loads(text)
         except (json.JSONDecodeError, TypeError):
             return None
     if not isinstance(data, dict):

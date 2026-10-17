@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import shlex
 import sqlite3
 
@@ -58,13 +57,9 @@ def entry_to_curl(
     if body_row and body_row["preview_text"]:
         body = body_row["preview_text"]
         if redact:
-            try:
-                from hardly.core.redact import redact_json
+            from hardly.core.redact import redact_body_text
 
-                data = json.loads(body)
-                body = json.dumps(redact_json(data))
-            except (json.JSONDecodeError, TypeError):
-                pass
+            body = redact_body_text(body, max_chars=max(len(body), 1))["text"] or ""
         parts.extend(["--data-raw", shlex.quote(body)])
 
     return {

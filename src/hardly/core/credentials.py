@@ -9,17 +9,17 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlparse
 
-import ijson
-
 from hardly.core.auth import AUTH_PATH_RE, detect_auth
 from hardly.core.cookies import cookie_timeline
 from hardly.core.explain import finish
 from hardly.core.filters import is_noise
+from hardly.core.har_io import ijson_items
 from hardly.core.redact import (
     classify_value_shape,
     is_sensitive_header,
     is_sensitive_key,
 )
+from hardly.core.safe_json import safe_loads
 from hardly.core.secrets import locate_secrets
 from hardly.core.urls import parse_url
 
@@ -243,7 +243,7 @@ def _query_secret_names(
     seen: set[tuple[Any, ...]] = set()
     for row in rows:
         try:
-            query = json.loads(row["query_json"] or "{}")
+            query = safe_loads(row["query_json"] or "{}")
         except (json.JSONDecodeError, TypeError):
             continue
         if not isinstance(query, dict):
@@ -432,7 +432,7 @@ def _shapes_from_har(
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     with har_path.open("rb") as f:
-        for entry_id, entry in enumerate(ijson.items(f, "log.entries.item")):
+        for entry_id, entry in enumerate(ijson_items(f, "log.entries.item")):
             req = entry.get("request") or {}
             resp = entry.get("response") or {}
             url = req.get("url") or ""
@@ -687,7 +687,7 @@ def _field_names_in_preview(text: str) -> list[str]:
     stripped = text.lstrip()
     if stripped.startswith(("{", "[")):
         try:
-            data = json.loads(text)
+            data = safe_loads(text)
         except (json.JSONDecodeError, TypeError):
             data = None
         if data is not None:
@@ -701,7 +701,7 @@ def _field_names_in_preview(text: str) -> list[str]:
             if key:
                 names.append(key)
     for m in re.finditer(
-        r"""<(?:input|textarea)\b[^>]*\bname\s*=\s*['"]([^'"]+)['"]""",
+        r"""<(?:input|textarea)\b[^<>]*\bname\s*=\s*['"]([^'"]+)['"]""",
         text,
         re.I,
     ):
@@ -762,7 +762,7 @@ def _oauth_signals(
     ]
     for r in rows:
         try:
-            query = json.loads(r["query_json"] or "{}")
+            query = safe_loads(r["query_json"] or "{}")
         except (json.JSONDecodeError, TypeError):
             continue
         if not isinstance(query, dict):
@@ -1112,7 +1112,7 @@ _BODY_CSRF_RE = re.compile(
     r"^_?(token|csrf\w*|xsrf\w*|authenticity_token|csrfmiddlewaretoken|__requestverificationtoken|nonce)$", re.I
 )
 _SPA_ROOT_RE = re.compile(
-    r"""<div[^>]+id=["'](root|app|__next|__nuxt)["']|<app-root|ng-app|__NEXT_DATA__|data-reactroot""", re.I
+    r"""<div[^<>]+id=["'](root|app|__next|__nuxt)["']|<app-root|ng-app|__NEXT_DATA__|data-reactroot""", re.I
 )
 
 
@@ -1127,7 +1127,7 @@ def _request_field_names(conn: sqlite3.Connection, entry_id: int) -> list[str]:
         return []
     if text.startswith("{"):
         try:
-            data = json.loads(text)
+            data = safe_loads(text)
         except ValueError:
             return re.findall(r'"([^"\\]{1,60})"\s*:', text[:2000])[:40]
         return [str(k) for k in data][:40] if isinstance(data, dict) else []

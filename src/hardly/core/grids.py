@@ -18,10 +18,11 @@ from urllib.parse import parse_qsl
 
 from hardly.core.explain import finish
 from hardly.core.previews import is_truncated, preview_warnings
+from hardly.core.safe_json import safe_loads
 
 # --- HTML grid libraries: (name, regex on markup/scripts) -------------------
 _HTML_GRIDS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("datatables", re.compile(r"dataTables_wrapper|jquery\.dataTables|\bnew\s+DataTable\s*\(|\.DataTable\s*\(|cdn\.datatables\.net|dataTables(\.[\w-]+)*\.(min\.)?(js|css)|class=\"[^\"]*\bdataTable\b|\bdt-(container|layout-row|paging|search)\b", re.I)),
+    ("datatables", re.compile(r"dataTables_wrapper|jquery\.dataTables|\bnew\s+DataTable\s*\(|\.DataTable\s*\(|cdn\.datatables\.net|dataTables(\.[\w-]+)*\.(min\.)?(js|css)|class=\"[^\"]{0,300}\bdataTable\b|\bdt-(container|layout-row|paging|search)\b", re.I)),
     ("jqgrid", re.compile(r"ui-jqgrid|jqGrid\s*\(|\bjqgrow\b", re.I)),
     ("ag-grid", re.compile(r"\bag-root\b|ag-grid|ag-theme-", re.I)),
     ("kendo-grid", re.compile(r"\bk-grid\b|kendoGrid\s*\(|kendo\.(all|web)(\.min)?\.js", re.I)),
@@ -30,7 +31,7 @@ _HTML_GRIDS: tuple[tuple[str, re.Pattern[str]], ...] = (
     # case-sensitive on purpose: the host name js.devexpress.com must not match
     ("devexpress-aspx", re.compile(r"\bdxgvControl|\bdxgvTable|ASPxGridView")),
     ("syncfusion", re.compile(r"\be-grid\b|\bejGrid\b", re.I)),
-    ("aspnet-gridview", re.compile(r"id=\"[^\"]*GridView[^\"]*\"|__doPostBack\(\s*'[^']*GridView[^']*'", re.I)),
+    ("aspnet-gridview", re.compile(r"id=\"[^\"]{0,200}GridView[^\"]{0,200}\"|__doPostBack\(\s*'[^']{0,200}GridView[^']{0,200}'", re.I)),
     ("tabulator", re.compile(r"\btabulator\b", re.I)),
     ("handsontable", re.compile(r"handsontable|\bht_master\b", re.I)),
     ("bootstrap-table", re.compile(r"bootstrap-table|data-toggle=\"table\"|data-bs-toggle=\"table\"", re.I)),
@@ -249,8 +250,16 @@ def detect_grids(
 
 
 
+#: Larger bodies are sampled (start and end, where scripts and stylesheets are linked): the signal
+#: search runs ~50 patterns and must stay bounded on a 50 MB response.
+GRID_SCAN_HEAD = 1_500_000
+GRID_SCAN_TAIL = 500_000
+
+
 def html_grid_signals(text: str) -> list[str]:
-    """Grid library names found anywhere in a (possibly very large) HTML body."""
+    """Grid library names found in an HTML body (the first 1.5 MB and last 0.5 MB of a very large one)."""
+    if len(text) > GRID_SCAN_HEAD + GRID_SCAN_TAIL:
+        text = text[:GRID_SCAN_HEAD] + "\n" + text[-GRID_SCAN_TAIL:]
     text = html.unescape(text)
     return [name for name, pat in _HTML_GRIDS if pat.search(text)]
 
@@ -258,7 +267,7 @@ def html_grid_signals(text: str) -> list[str]:
 def _top_keys(text: str) -> frozenset[str]:
     """Top-level-ish JSON keys from a possibly truncated preview."""
     try:
-        data = json.loads(text)
+        data = safe_loads(text)
     except (json.JSONDecodeError, ValueError):
         # Truncated preview: take keys seen in the first level of text.
         return frozenset(m.group(1) for m in _JSON_KEY.finditer(text[:4000]))

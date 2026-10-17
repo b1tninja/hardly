@@ -15,6 +15,7 @@ import sqlite3
 from html.parser import HTMLParser
 from typing import Any
 
+from hardly.core.htmlsafe import defuse_html
 from hardly.core.previews import is_truncated, preview_warnings
 
 _MASK_MAX = 24
@@ -383,7 +384,7 @@ def extract_tables(html: str | None, *, max_tables: int = 8) -> list[dict[str, A
         return []
     parser = _Parser()
     try:
-        parser.feed(html)
+        parser.feed(defuse_html(html))
         parser.close()
     except Exception:  # noqa: BLE001 - malformed markup must never raise
         pass

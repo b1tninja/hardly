@@ -9,7 +9,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-import ijson
+from hardly.core.har_io import ijson_items
+from hardly.core.safe_json import safe_loads
 
 
 def _num(value: Any) -> float | int | None:
@@ -37,6 +38,7 @@ from hardly.core.redact import (
     redact_header_value,
     redact_query_dict,
     redact_query_string,
+    redact_url,
 )
 from hardly.core.urls import parse_url, path_template
 from hardly.index.atomic import persist_connection, remove_quietly, tmp_path_for
@@ -45,7 +47,7 @@ from hardly.index.schema import connect_ingest, connect_memory, init_db
 PREVIEW_CHARS = 8000
 # Bump when ingest output changes meaning (redaction, shapes, signals) so cached
 # indexes built by older versions are rebuilt instead of reused.
-INDEX_VERSION = 6
+INDEX_VERSION = 7
 # HTML portals often bury forms after scripts/CSS; keep more for hardly_page_forms.
 HTML_PREVIEW_CHARS = 64_000
 
@@ -77,7 +79,7 @@ def _initiator(entry: dict) -> tuple[str | None, str | None]:
         url = str(url)[:2000]
     return (
         str(init_type) if init_type else None,
-        str(url) if url else None,
+        redact_url(str(url)) if url else None,  # a stored URL never carries a secret value
     )
 
 
@@ -229,7 +231,7 @@ def _store_body(
             if mime and "html" in str(mime).lower()
             else PREVIEW_CHARS
         )
-        redacted = redact_body_text(text, max_chars=limit)
+        redacted = redact_body_text(text, max_chars=limit, markup=False)
         preview = redacted["text"]
         if sha is None:
             sha = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
@@ -366,7 +368,7 @@ def _record_body_shapes(
     # whole document (any long path/hash/class name would otherwise match).
     if stripped.startswith(("{", "[")):
         try:
-            data = json.loads(stripped)
+            data = safe_loads(stripped)
         except ValueError:
             return
         seen: set[tuple[str, str]] = set()
@@ -422,7 +424,7 @@ def ingest_into(har_path: str | Path, conn: sqlite3.Connection) -> dict[str, Any
     }
 
     with har_path.open("rb") as f:
-        for entry_id, entry in enumerate(ijson.items(f, "log.entries.item")):
+        for entry_id, entry in enumerate(ijson_items(f, "log.entries.item")):
             req = entry.get("request") or {}
             resp = entry.get("response") or {}
             method = (req.get("method") or "GET").upper()

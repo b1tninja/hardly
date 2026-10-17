@@ -9,16 +9,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, unquote_plus, urlparse
 
-import ijson
-
 from hardly.core.filters import is_noise
+from hardly.core.har_io import ijson_items
+from hardly.core.safe_json import safe_loads
 from hardly.core.urls import parse_url
 
 _MAX_HITS = 50
-_HIDDEN = re.compile(
-    r"""<input\b[^>]*\btype\s*=\s*['"]hidden['"][^>]*>""",
-    re.I,
-)
+_INPUT_TAG = re.compile(r"<input\b[^<>]*>", re.I)
+_HIDDEN_TYPE = re.compile(r"""\btype\s*=\s*['"]hidden['"]""", re.I)
 _ATTR = re.compile(
     r"""\b(name|value|id)\s*=\s*['"]([^'"]*)['"]""",
     re.I,
@@ -83,7 +81,7 @@ def _from_har(
     hits: list[dict[str, Any]] = []
     name_l = name.lower() if name else None
     with har_path.open("rb") as f:
-        for entry_id, entry in enumerate(ijson.items(f, "log.entries.item")):
+        for entry_id, entry in enumerate(ijson_items(f, "log.entries.item")):
             req = entry.get("request") or {}
             resp = entry.get("response") or {}
             url = req.get("url") or ""
@@ -257,7 +255,7 @@ def _scan_response(
     text = content.get("text") or ""
     if text:
         hits.extend(_scan_body(text, name_l=name_l, value=value, where="response.body"))
-        for tag in _HIDDEN.findall(text):
+        for tag in (t for t in _INPUT_TAG.findall(text) if _HIDDEN_TYPE.search(t)):
             attrs = {m.group(1).lower(): m.group(2) for m in _ATTR.finditer(tag)}
             fname = attrs.get("name") or attrs.get("id") or ""
             fval = attrs.get("value") or ""
@@ -277,7 +275,7 @@ def _scan_body(
     stripped = text.lstrip()
     if stripped.startswith(("{", "[")):
         try:
-            data = json.loads(text)
+            data = safe_loads(text)
         except (json.JSONDecodeError, TypeError):
             data = None
         if data is not None:

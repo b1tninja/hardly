@@ -51,13 +51,17 @@ two model tiers.
 | D (first hybrid) | 58 | 82% |
 | B (noun-first) | 97 | 84% |
 | C (verb-first) | 97 | 88% |
-| D2 (second hybrid, tested) | 70 | 88% |
+| D2 (second hybrid) | 70 | 88% |
+| **Shipped (D2 + three name fixes)** | **71** | **89%** |
 
-The shipped surface (71 tools) is D2 plus three name changes made after its last test: forms and UI
+The shipped surface is D2 plus three name changes made from the per-scenario results: forms and UI
 labels are separate tools again, the gate tool says bot protection, and the timed browser capture
-says discover. Those three were chosen from the per-scenario results and were **not re-measured**.
-Runs per scheme: 4 for A, B, C and the current names; 8 for D and D2. Differences of a few points
-between B, C and D2 are within noise; all four beat the current names by 11 points or more.
+says discover. A final round measured it: the bot-protection scenario rose from 40% to 90%, the
+discover scenario from 40% to 90%, and the UI-labels scenario from 20% to 60%. The last is still the
+weakest page tool (`page_ui` is confused with `page_forms`); the page-content family is the lowest of
+the families at 72%. Runs per scheme: 4 for A, B, C and the current names; 8 for D, D2 and the shipped
+surface. Differences of a few points between B, C, D2 and the shipped surface are within noise; all of
+them beat the current names by 11 points or more.
 
 With a one-line description beside each name, every scheme reached about 100%: names matter most
 for the first guess, descriptions repair the rest. Lessons that shaped the final scheme:

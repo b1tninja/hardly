@@ -10,6 +10,7 @@ from urllib.parse import parse_qsl
 
 from hardly.core.classify import classify_response
 from hardly.core.html_forms import extract_html_structure
+from hardly.core.safe_json import safe_loads
 
 _ROLE_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("disclaimer", re.compile(r"disclaimer", re.I)),
@@ -237,7 +238,7 @@ def _body_keys(body: str | None, content_type: str | None) -> list[str]:
 
 def _json_top_keys(text: str) -> list[str]:
     try:
-        data = json.loads(text)
+        data = safe_loads(text)
     except (json.JSONDecodeError, TypeError):
         return []
     if isinstance(data, dict):

@@ -7,6 +7,8 @@ import re
 import sqlite3
 from typing import Any
 
+from hardly.core.safe_json import safe_loads
+
 AUTH_PATH_RE = re.compile(
     r"(login|log-in|signin|sign-in|auth|oauth|token|2fa|mfa|otp|sso|session|logout)",
     re.I,
@@ -46,7 +48,7 @@ def _json_keys(text: str | None) -> set[str]:
     if not text:
         return set()
     try:
-        data = json.loads(text)
+        data = safe_loads(text)
     except (json.JSONDecodeError, TypeError):
         return set()
     keys: set[str] = set()

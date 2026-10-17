@@ -30,8 +30,11 @@ import httpx
 
 from hardly.core.ajax_delta import delta_hidden
 from hardly.core.flow_graph import env_key, flow_graph
+from hardly.core.htmlsafe import defuse_html
+from hardly.core.netguard import check_url, new_client
 from hardly.core.redact import REDACTED
 from hardly.core.replay_check import _PLUMBING_HEADERS, _gate_stop, _unresolved
+from hardly.core.safe_json import safe_loads
 
 SAFE_METHODS = frozenset({"GET", "HEAD"})
 
@@ -59,7 +62,7 @@ class _Hidden(HTMLParser):
 def hidden_fields(html: str) -> dict[str, str]:
     p = _Hidden()
     try:
-        p.feed(html)
+        p.feed(defuse_html(html))
     except Exception:  # noqa: BLE001
         pass
     return p.fields
@@ -70,7 +73,7 @@ def _deep_find(obj: Any, key: str, depth: int = 0) -> Any:
         return None
     if isinstance(obj, str) and obj.lstrip()[:1] in ("{", "["):
         try:
-            obj = json.loads(obj)
+            obj = safe_loads(obj)
         except ValueError:
             return None
     if isinstance(obj, dict):
@@ -102,7 +105,7 @@ def _extract(edge: dict, live: dict, client: httpx.Client) -> str | None:
         return fields.get(name) if name else None
     if where == "response.json":
         try:
-            found = _deep_find(json.loads(text), name or "")
+            found = _deep_find(safe_loads(text), name or "")
         except ValueError:
             return None
         return None if found is None else str(found)
@@ -257,7 +260,7 @@ def _plan_step(conn, step: dict, inputs: list[dict], env: dict[str, str], missin
         parsed = None
         if "json" in ct or text.lstrip().startswith(("{", "[")):
             try:
-                parsed = json.loads(text)
+                parsed = safe_loads(text)
             except ValueError:
                 parsed = None
         if parsed is not None and isinstance(parsed, (dict, list)):
@@ -284,9 +287,9 @@ def _plan_step(conn, step: dict, inputs: list[dict], env: dict[str, str], missin
                     e = env_for("request.json", nm)
                     if e:
                         fields.append((nm, e))
-            leftover = json.loads(text)
+            leftover = safe_loads(text)
             # unresolved redaction markers that nothing supplies
-            stripped = json.loads(text)
+            stripped = safe_loads(text)
             for nm, _ in fields:
                 _set_deep(stripped, nm, "x")
             if _unresolved(stripped):
@@ -327,9 +330,9 @@ def _shape(text: str, ct: str) -> dict[str, Any]:
     t = (text or "").lstrip()
     if "json" in ct or t[:1] in ("{", "["):
         try:
-            data = json.loads(text)
+            data = safe_loads(text)
             while isinstance(data, str) and data.lstrip()[:1] in ("{", "["):
-                data = json.loads(data)
+                data = safe_loads(data)
         except ValueError:
             return {"kind": "json", "keys": None}
         if isinstance(data, dict):
@@ -456,6 +459,8 @@ def replay_flow(
         ins = [i for i in user_inputs if i["step_entry_id"] == s["entry_id"]]
         plans.append(_plan_step(conn, s, ins, env, missing))
 
+    for p in plans:
+        check_url(f"{p['scheme']}://{p['host']}/")
     summary = [
         {"order": s["order"], "entry_id": s["entry_id"], "method": s["method"], "host": s["host"],
          "path": s["path"], "depends_on": s["depends_on"]}
@@ -473,7 +478,7 @@ def replay_flow(
 
     gate_ok = frozenset(str(g) for g in (allow_gates or []))
     own = client is None
-    cl = client or httpx.Client(timeout=20.0, follow_redirects=False)
+    cl = client or new_client(timeout=20.0, follow_redirects=False)
     live_by_id: dict[int, dict] = {}
     results: list[dict] = []
     halted: dict | None = None
@@ -528,7 +533,7 @@ def replay_flow(
             if b["kind"] == "form":
                 content = urlencode([(k, need(sp, k)) for k, sp in b["pairs"]]).encode()
             elif b["kind"] == "json":
-                tpl = json.loads(json.dumps(b["template"]))
+                tpl = safe_loads(json.dumps(b["template"]))
                 for nm, sp in b["fields"]:
                     _set_deep(tpl, nm, need(sp, nm))
                 content = json.dumps(tpl).encode()

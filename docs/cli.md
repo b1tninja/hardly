@@ -32,7 +32,10 @@ hardly <group> <command> [HAR] [positionals] [--flags]
    JSON file (`--steps FILE`, `browser run-steps FILE`).
 6. **Live commands use one spelling: `--confirm`.** Every `send` command and
    `browser capture-discover` prints only a plan (`"sent": false`, exit 0) without it.
-   There is no `--yes`.
+   There is no `--yes`. Live commands and browser URLs refuse loopback, private and metadata
+   hosts (`host_not_allowed`); for your own test target put the global flag before the group:
+   `hardly --allow-private-hosts send entry HAR 3 --confirm` (same as `HARDLY_ALLOW_PRIVATE_HOSTS=1`).
+   Writes stay in the working directory, the temp directory or `HARDLY_WRITE_DIRS` (`path_not_allowed`).
 7. **Output.** JSON on stdout; errors are JSON with `error` (and `code`/`hint` where known) and
    exit 1. `session report --format md` and `entry outline --markdown-only` print text.
 8. **Exit codes.** 0 success; 1 the command reported an error; 2 invalid usage (argparse) and

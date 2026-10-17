@@ -594,6 +594,9 @@ def write_report(report: dict[str, Any], path: str | Path, *, har_path: str | Pa
     if target.is_dir():
         stem = Path(str(har_path)).stem if har_path else "hardly"
         target = target / f"{stem}.report.md"
+    from hardly.core.pathguard import guard_write
+
+    guard_write(target)
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.suffix.lower() == ".json":
         target.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
