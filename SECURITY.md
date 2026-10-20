@@ -99,7 +99,9 @@ browser `profile` directory, CLI `-o`) goes through one check on the real path (
   `*`: `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.azure`, `~/.kube`, `~/.docker`, `~/.config/gcloud`,
   `~/.config/gh`, `~/.config/fish`, shell startup files (`.bashrc`, `.zshrc`, `.profile`, ...),
   `.netrc`, `.npmrc`, `.pypirc`, `.gitconfig`, or anything inside a `.git` directory;
-- existing files are still refused unless `overwrite=true`.
+- existing files are still refused unless `overwrite` is the boolean `true`. The strings `"false"`,
+  `"0"` and any other truthy value do not replace a file. The same rule applies to `confirm` on
+  live tools: only a real boolean `true` sends traffic.
 
 Refusals are `path_not_allowed` with a hint naming the variable and the allowed roots. A server
 started by an MCP client usually has the client's working directory: set `HARDLY_WRITE_DIRS` in the
@@ -112,7 +114,8 @@ who can swap a path component for a symlink inside that window is not stopped.
 
 Redaction keeps accidental disclosure out of results: secret-named fields, credential headers and
 cookies, secret query and fragment values (also inside URLs found in free text), `user:pass@`
-credentials, JWT-shaped values, JSON strings that hold more JSON, sensitive HTML attributes and
+credentials (the password is not stored in `host`), `;jsessionid` path parameters, JWT-shaped values,
+JSON strings that hold more JSON, sensitive HTML attributes and
 script assignments are masked, and tools report names and shapes instead of values. It is not an
 access-control boundary: a determined agent can still use search predicates as an oracle, replay
 requests that carry the secrets, or read the HAR path directly. Raw copies are raw on purpose:

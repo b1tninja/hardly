@@ -32,6 +32,7 @@ from hardly.core.ajax_delta import delta_hidden
 from hardly.core.flow_graph import env_key, flow_graph
 from hardly.core.htmlsafe import defuse_html
 from hardly.core.netguard import check_url, new_client
+from hardly.core.optin import is_explicit_true
 from hardly.core.redact import REDACTED
 from hardly.core.replay_check import _PLUMBING_HEADERS, _gate_stop, _unresolved
 from hardly.core.safe_json import safe_loads
@@ -467,7 +468,7 @@ def replay_flow(
         for s in steps
     ]
     base = {"target": {"entry_id": tid}, "source": graph["source"], "steps": summary}
-    if not confirm:
+    if not is_explicit_true(confirm):
         return {**base, "confirmed": False, "sent": False, "requests_planned": len(steps),
                 "missing_inputs": missing,
                 "note": "Dry run: nothing was sent. Re-run with confirm=true to execute live."}

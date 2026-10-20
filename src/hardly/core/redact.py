@@ -80,6 +80,25 @@ URL_SECRET_PARAMS = frozenset(
 )
 _PATH_PARAM_RE = re.compile(r"(;(?:jsessionid|sid|phpsessid|sessionid)=)[^/?#;&\"'\s<>]+", re.I)
 
+
+def redact_path(path: str | None) -> str:
+    """Mask ``;jsessionid=`` style matrix parameters. The parameter name stays."""
+    if not path:
+        return path or ""
+    return _PATH_PARAM_RE.sub(lambda m: m.group(1) + REDACTED, path)
+
+
+def path_param_shapes(path: str | None) -> list[tuple[str, str | None]]:
+    """``(name, shape)`` for matrix session parameters. The value is not returned."""
+    if not path or ";" not in path:
+        return []
+    out: list[tuple[str, str | None]] = []
+    for match in _PATH_PARAM_RE.finditer(path):
+        name = match.group(1).strip(";=")
+        value = match.group(0)[len(match.group(1)):]
+        out.append((name, classify_value_shape(value)))
+    return out
+
 JWT_RE = re.compile(
     r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"
 )
