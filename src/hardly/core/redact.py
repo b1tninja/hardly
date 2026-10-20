@@ -79,21 +79,41 @@ URL_SECRET_PARAMS = frozenset(
     }
 )
 _PATH_PARAM_RE = re.compile(r"(;(?:jsessionid|sid|phpsessid|sessionid)=)[^/?#;&\"'\s<>]+", re.I)
+#: Any ``;name=value`` matrix parameter inside a URL *path* (``urlparse`` used to drop the last
+#: segment's; the name tells nothing about whether the value is a secret, so all are masked).
+_MATRIX_PARAM_RE = re.compile(r"(;[A-Za-z0-9_.~%-]{1,64}=)[^/?#;&\"'\s<>]*")
 
 
 def redact_path(path: str | None) -> str:
-    """Mask ``;jsessionid=`` style matrix parameters. The parameter name stays."""
+    """Mask the value of every ``;name=value`` matrix parameter in a path. The name stays."""
     if not path:
         return path or ""
-    return _PATH_PARAM_RE.sub(lambda m: m.group(1) + REDACTED, path)
+    return _MATRIX_PARAM_RE.sub(lambda m: m.group(1) + REDACTED, path)
+
+
+def _redact_url_path(url: str) -> str:
+    """``redact_path`` on the path part of a URL only (a ``;`` in the query is left alone)."""
+    cut = len(url)
+    for ch in "?#":
+        i = url.find(ch)
+        if i != -1:
+            cut = min(cut, i)
+    head, tail = url[:cut], url[cut:]
+    scheme_end = head.find("://")
+    if scheme_end != -1:
+        slash = head.find("/", scheme_end + 3)
+        if slash == -1:
+            return url
+        return head[:slash] + redact_path(head[slash:]) + tail
+    return redact_path(head) + tail
 
 
 def path_param_shapes(path: str | None) -> list[tuple[str, str | None]]:
-    """``(name, shape)`` for matrix session parameters. The value is not returned."""
+    """``(name, shape)`` for matrix parameters. The value is not returned."""
     if not path or ";" not in path:
         return []
     out: list[tuple[str, str | None]] = []
-    for match in _PATH_PARAM_RE.finditer(path):
+    for match in _MATRIX_PARAM_RE.finditer(path):
         name = match.group(1).strip(";=")
         value = match.group(0)[len(match.group(1)):]
         out.append((name, classify_value_shape(value)))
@@ -238,7 +258,7 @@ def redact_url(url: str) -> str:
     """
     if not url:
         return url
-    out = _PATH_PARAM_RE.sub(lambda m: m.group(1) + REDACTED, url)
+    out = _PATH_PARAM_RE.sub(lambda m: m.group(1) + REDACTED, _redact_url_path(url))
     out = _USERINFO_RE.sub(r"\1" + REDACTED + "@", out, count=1)
     if "?" not in out and "#" not in out:
         return out

@@ -19,6 +19,7 @@ from contextlib import contextmanager
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from hardly.core.filters import is_noise
 from hardly.core.har_io import ijson_items
@@ -38,7 +39,6 @@ from hardly.core.redact import (
     redact_urls_in_text,
 )
 from hardly.core.safe_json import safe_loads
-from hardly.core.urls import parse_url
 
 # --------------------------------------------------------------------------- io
 
@@ -110,8 +110,10 @@ def _writer(dst: Path, meta: dict[str, Any], pages: list[dict] | None = None, ov
 
 def _host(entry: dict) -> str:
     """Registrable host for grouping. Userinfo is not part of the host."""
-    url = (entry.get("request") or {}).get("url") if isinstance(entry.get("request"), dict) else ""
-    return parse_url(url if isinstance(url, str) else "")["host"]
+    req = entry.get("request")
+    url = req.get("url") if isinstance(req, dict) else ""
+    netloc = urlsplit(url if isinstance(url, str) else "").netloc
+    return netloc.rsplit("@", 1)[-1].lower()
 
 
 def _any(value: str, globs: Iterable[str]) -> bool:

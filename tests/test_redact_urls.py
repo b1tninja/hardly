@@ -22,6 +22,11 @@ def test_redact_url_path_params():
     assert redact_url("/plain/path?page=2") == "/plain/path?page=2"
 
 
+def test_redact_url_masks_any_matrix_param_in_the_path_only():
+    assert redact_url("https://h.example.com/a/b;token=SECRET1234") == f"https://h.example.com/a/b;token={REDACTED}"
+    assert redact_url("/a;x=1/b;key=ZZZ?c=d;e=f") == f"/a;x={REDACTED}/b;key={REDACTED}?c=d;e=f"
+
+
 def test_forms_do_not_leak_path_session_ids():
     html = '<form action="/bank/login.htm;jsessionid=ABCDEF1234567890" method="post"><input name="u"></form>'
     out = extract_html_structure(html, base_url="https://x.example/")

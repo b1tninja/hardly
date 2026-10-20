@@ -142,9 +142,7 @@ def _node(entry_id: int, req: dict, resp: dict, *, cookie_names: list[str] | Non
             produce.append({"where": "response.header", "name": str(h.get("name")), "value": value})
 
     content = resp.get("content") or {}
-    netloc = parsed.netloc
-    if "@" in netloc:
-        netloc = netloc.rsplit("@", 1)[1]
+    netloc = parsed.netloc.rsplit("@", 1)[-1]
     return {
         "entry_id": entry_id,
         "method": method,

@@ -79,7 +79,7 @@ def _sqlite_int(value: Any, default: int | None = 0, *, lo: int | None = None, h
 PREVIEW_CHARS = 8000
 # Bump when ingest output changes meaning (redaction, shapes, signals) so cached
 # indexes built by older versions are rebuilt instead of reused.
-INDEX_VERSION = 8
+INDEX_VERSION = 9
 # HTML portals often bury forms after scripts/CSS; keep more for hardly_page_forms.
 HTML_PREVIEW_CHARS = 64_000
 
@@ -561,7 +561,7 @@ def ingest_into(har_path: str | Path, conn: sqlite3.Connection) -> dict[str, Any
             mime = content.get("mimeType") if isinstance(content.get("mimeType"), str) else None
             post = req.get("postData") if isinstance(req.get("postData"), dict) else None
 
-            noise = is_noise(method=method, url=url if isinstance(url, str) else "", status=status, mime=mime)
+            noise = is_noise(method=method, url=url, status=status, mime=mime)
 
             req_text, req_mime, req_size = _body_text(post)
             resp_text, resp_mime, resp_size = _body_text(content)
