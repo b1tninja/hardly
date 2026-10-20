@@ -23,6 +23,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from hardly.core.optin import is_explicit_true
 from hardly.index.atomic import persist_connection, remove_quietly, replace_file, tmp_path_for
 from hardly.index.ingest import INDEX_VERSION, ingest_memory
 from hardly.index.schema import open_readonly, seal
@@ -297,7 +298,7 @@ def _check_output(output: Path, input_path: Path, overwrite: bool, source_har: P
         raise OutputError(f"{OUTPUT_PARAM} is a directory: {output}", "Give a file name.")
     if output in (input_path, source_har):
         raise OutputError(f"Refusing to write over the input itself: {output}")
-    if output.exists() and not overwrite:
+    if output.exists() and not is_explicit_true(overwrite):
         raise OutputExists(
             f"{OUTPUT_PARAM} already exists: {output}",
             "Pass overwrite=true to replace it (written atomically via temp + rename), or "
@@ -549,7 +550,7 @@ def export_har(session_id: str, output_path: str | Path, *, overwrite: bool = Fa
         return {"error": f"{OUTPUT_PARAM} is a directory: {target}", "code": "output_error"}
     if target == src.absolute():
         return {"error": "Refusing to write over the source HAR.", "code": "output_error"}
-    if target.exists() and not overwrite:
+    if target.exists() and not is_explicit_true(overwrite):
         return {
             "error": f"{OUTPUT_PARAM} already exists: {target}",
             "code": "output_exists",

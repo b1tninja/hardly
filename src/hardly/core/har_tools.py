@@ -19,10 +19,10 @@ from contextlib import contextmanager
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 from hardly.core.filters import is_noise
 from hardly.core.har_io import ijson_items
+from hardly.core.optin import is_explicit_true
 from hardly.core.pathguard import guard_write
 from hardly.core.redact import (
     JWT_RE,
@@ -38,6 +38,7 @@ from hardly.core.redact import (
     redact_urls_in_text,
 )
 from hardly.core.safe_json import safe_loads
+from hardly.core.urls import parse_url
 
 # --------------------------------------------------------------------------- io
 
@@ -52,7 +53,7 @@ def _check_paths(src: Iterable[Path], dst: Path, overwrite: bool) -> None:
     for s in src:
         if s.resolve() == dst_r:
             raise ValueError(f"refusing to write in place: {s}")
-    if dst.exists() and not overwrite:
+    if dst.exists() and not is_explicit_true(overwrite):
         raise FileExistsError(f"{dst} exists (pass overwrite=True to replace it)")
 
 
@@ -96,7 +97,7 @@ def _writer(dst: Path, meta: dict[str, Any], pages: list[dict] | None = None, ov
 
             yield emit
             out.write("]}}")
-        if dst.exists() and not overwrite:
+        if dst.exists() and not is_explicit_true(overwrite):
             raise FileExistsError(str(dst))
         os.replace(tmp, dst)
     except BaseException:
@@ -108,7 +109,9 @@ def _writer(dst: Path, meta: dict[str, Any], pages: list[dict] | None = None, ov
 
 
 def _host(entry: dict) -> str:
-    return urlparse(str((entry.get("request") or {}).get("url") or "")).netloc.lower()
+    """Registrable host for grouping. Userinfo is not part of the host."""
+    url = (entry.get("request") or {}).get("url") if isinstance(entry.get("request"), dict) else ""
+    return parse_url(url if isinstance(url, str) else "")["host"]
 
 
 def _any(value: str, globs: Iterable[str]) -> bool:

@@ -54,3 +54,13 @@ def test_capabilities_match_registered_tools():
     live = {n for n, f in vars(server).items() if n.startswith("hardly_") and callable(f)}
     assert live == set(TOOLS)
     assert all(re.fullmatch(r"hardly_[a-z]+(_[a-z]+){0,2}", n) for n in TOOLS)
+
+
+def test_live_registry_matches_tools():
+    """Source regexes miss a tool registered under a different name, or never registered."""
+    import asyncio
+
+    listed = asyncio.run(server.mcp.list_tools())
+    names = {tool.name for tool in listed}
+    assert names == set(TOOLS)
+    assert len(FEATURES) == len(set(FEATURES))

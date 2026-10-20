@@ -20,6 +20,7 @@ from urllib.parse import parse_qsl, urlsplit
 import httpx
 
 from hardly.core.netguard import check_url, new_client
+from hardly.core.optin import is_explicit_true
 from hardly.core.safe_json import safe_loads
 
 SERVER_KINDS = ("MapServer", "FeatureServer", "ImageServer", "GeocodeServer")
@@ -491,7 +492,7 @@ def explore(
     timeout: float = 20.0,
 ) -> dict:
     """Confirm-gated, capped live exploration of an ArcGIS REST service or layer URL."""
-    if not confirm:
+    if not is_explicit_true(confirm):
         return {
             "error": "explore requires confirm=true",
             "hint": "Makes up to 1 service doc + 5 layer docs + 1 sample query (resultRecordCount=1) GET requests.",

@@ -56,8 +56,9 @@ robots.txt and per-host delays. Secrets for probes come only from explicit overr
 
 ## Redaction model
 
-- Redaction happens at **ingest** (secret query values) and again at **output** (`core/redact.py`),
-  so nothing downstream can echo a raw credential.
+- Redaction happens at **ingest** (secret query values, URL userinfo, and `;jsessionid` / `;sid`
+  matrix parameters) and again at **output** (`core/redact.py`), so nothing downstream can echo a
+  raw credential.
 - Credential tools report **names and shapes** (jwt, hex, base64, lengths), cookie flags and
   roles, never values.
 - Generated stubs use placeholders and carry server-issued tokens forward at runtime from earlier
