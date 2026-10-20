@@ -9,26 +9,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from hardly.core.har_io import ijson_items
-from hardly.core.safe_json import safe_loads
-
-
-def _num(value: Any) -> float | int | None:
-    """Coerce ijson Decimals / numbers to SQLite-friendly types."""
-    if value is None:
-        return None
-    if isinstance(value, Decimal):
-        if value == value.to_integral_value():
-            return int(value)
-        return float(value)
-    if isinstance(value, (int, float)):
-        return value
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
 from hardly.core.filters import is_noise
+from hardly.core.har_io import ijson_items
 from hardly.core.redact import (
     JWT_RE,
     classify_value_shape,
@@ -40,22 +22,115 @@ from hardly.core.redact import (
     redact_query_string,
     redact_url,
 )
+from hardly.core.safe_json import safe_loads
 from hardly.core.urls import parse_url, path_template
 from hardly.index.atomic import persist_connection, remove_quietly, tmp_path_for
 from hardly.index.schema import connect_ingest, connect_memory, init_db
 
+
+def _num(value: Any) -> float | int | None:
+    """Coerce ijson Decimals / numbers to SQLite-friendly types.
+
+    Booleans, NaN and infinities are not numbers a HAR field can usefully be.
+    A non-finite Decimal used to raise when later coerced with ``int()`` and
+    abort the whole import.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, Decimal):
+        if not value.is_finite():
+            return None
+        if value == value.to_integral_value():
+            try:
+                return int(value)
+            except (OverflowError, ValueError):
+                return None
+        return float(value)
+    if isinstance(value, float):
+        if value != value or value in (float("inf"), float("-inf")):
+            return None
+        return value
+    if isinstance(value, int):
+        return value
+    try:
+        return float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _sqlite_int(value: Any, default: int | None = 0, *, lo: int | None = None, hi: int | None = None) -> int | None:
+    """An integer SQLite can store, or ``default`` when the HAR value is nonsense."""
+    n = _num(value)
+    if n is None:
+        return default
+    try:
+        i = int(n)
+    except (OverflowError, ValueError, ArithmeticError):
+        return default
+    if i > 2**62 or i < -(2**62):
+        return default
+    if lo is not None and i < lo:
+        return default
+    if hi is not None and i > hi:
+        return default
+    return i
+
+
 PREVIEW_CHARS = 8000
 # Bump when ingest output changes meaning (redaction, shapes, signals) so cached
 # indexes built by older versions are rebuilt instead of reused.
-INDEX_VERSION = 7
+INDEX_VERSION = 8
 # HTML portals often bury forms after scripts/CSS; keep more for hardly_page_forms.
 HTML_PREVIEW_CHARS = 64_000
 
 
 def _header_list(headers: list | None) -> list[dict]:
-    if not headers:
+    if not isinstance(headers, list):
         return []
-    return [{"name": h.get("name", ""), "value": h.get("value", "")} for h in headers]
+    out = []
+    for h in headers:
+        if not isinstance(h, dict):
+            continue
+        name = h.get("name", "")
+        value = h.get("value", "")
+        out.append({
+            "name": name if isinstance(name, str) else str(name or ""),
+            "value": value if isinstance(value, str) else ("" if value is None else str(value)),
+        })
+    return out
+
+
+def _header_present(headers: Any, name: str) -> bool:
+    if not isinstance(headers, list):
+        return False
+    want = name.lower()
+    return any(
+        isinstance(h, dict) and str(h.get("name") or "").lower() == want for h in headers
+    )
+
+
+def _cookie_pairs(cookies: Any) -> list[tuple[str, str]]:
+    """Name/value pairs from a HAR ``cookies`` array. Values stay in memory for shape classification only."""
+    if not isinstance(cookies, list):
+        return []
+    out: list[tuple[str, str]] = []
+    for item in cookies:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        if not isinstance(name, str) or not name.strip():
+            continue
+        value = item.get("value")
+        out.append((name.strip(), "" if value is None else str(value)))
+        if len(out) >= 200:
+            break
+    return out
+
+
+def _note_cookies(conn, entry_id: int, side: str, pairs: list[tuple[str, str]]) -> None:
+    """Record cookie names (and value shapes) when the HAR had no Cookie / Set-Cookie header."""
+    for name, value in pairs:
+        _record_shape(conn, entry_id, side, "cookie", classify_value_shape(value) or "cookie", name)
 
 
 def _initiator(entry: dict) -> tuple[str | None, str | None]:
@@ -111,17 +186,22 @@ def _decode_base64_text(text: str | None) -> str | None:
 
 def _body_text(content: dict | None) -> tuple[str | None, str | None, int]:
     """Return (text, mime, size) from HAR content/postData."""
-    if not content:
+    if not isinstance(content, dict):
         return None, None, 0
-    mime = content.get("mimeType") or content.get("mime_type")
+    mime_v = content.get("mimeType") or content.get("mime_type")
+    mime = mime_v if isinstance(mime_v, str) else None
     text = content.get("text")
-    size = _num(content.get("size"))
+    if text is not None and not isinstance(text, str):
+        text = json.dumps(text, default=str) if not isinstance(text, (bytes, bytearray)) else None
+    size = _sqlite_int(content.get("size"), default=None, lo=-(2**62), hi=2**62)
     if text is None:
         # multipart params — summarize
         params = content.get("params")
-        if params:
+        if isinstance(params, list) and params:
             summary = []
             for p in params:
+                if not isinstance(p, dict):
+                    continue
                 name = p.get("name", "")
                 if p.get("fileName"):
                     summary.append(
@@ -391,6 +471,45 @@ def _record_body_shapes(
         walk(data, None, 0)
 
 
+def _fill_query(parsed: dict[str, Any], req: dict) -> dict[str, Any]:
+    """Use ``request.queryString`` when the URL itself has no query.
+
+    Some exporters leave the query only in the array. When the URL already has
+    one, that is the wire form and wins.
+    """
+    if parsed.get("query_raw"):
+        return parsed
+    items = req.get("queryString")
+    if not isinstance(items, list) or not items:
+        return parsed
+    flat: dict[str, Any] = {}
+    pieces: list[str] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        if not isinstance(name, str) or name == "":
+            continue
+        value = item.get("value")
+        text = "" if value is None else str(value)
+        prev = flat.get(name)
+        if prev is None:
+            flat[name] = text
+        elif isinstance(prev, list):
+            prev.append(text)
+        else:
+            flat[name] = [prev, text]
+        pieces.append(f"{name}={text}")
+        if len(pieces) >= 2000:
+            break
+    if not pieces:
+        return parsed
+    out = dict(parsed)
+    out["query"] = flat
+    out["query_raw"] = "&".join(pieces)
+    return out
+
+
 def ingest_into(har_path: str | Path, conn: sqlite3.Connection) -> dict[str, Any]:
     """Parse HAR at har_path into an empty database behind ``conn``. Leaves ``conn`` open."""
     har_path = Path(har_path).resolve()
@@ -416,6 +535,7 @@ def ingest_into(har_path: str | Path, conn: sqlite3.Connection) -> dict[str, Any
 
     counts = {
         "entries": 0,
+        "skipped": 0,
         "noise": 0,
         "api": 0,
         "hosts": {},
@@ -425,19 +545,23 @@ def ingest_into(har_path: str | Path, conn: sqlite3.Connection) -> dict[str, Any
 
     with har_path.open("rb") as f:
         for entry_id, entry in enumerate(ijson_items(f, "log.entries.item")):
-            req = entry.get("request") or {}
-            resp = entry.get("response") or {}
-            method = (req.get("method") or "GET").upper()
-            url = req.get("url") or ""
-            parsed = parse_url(url)
-            status = _num(resp.get("status"))
-            if status is not None:
-                status = int(status)
-            content = resp.get("content") or {}
-            mime = content.get("mimeType")
-            post = req.get("postData")
+            if not isinstance(entry, dict):
+                counts["skipped"] += 1
+                continue
+            req = entry.get("request") if isinstance(entry.get("request"), dict) else {}
+            resp = entry.get("response") if isinstance(entry.get("response"), dict) else {}
+            raw_method = req.get("method")
+            method = raw_method.strip().upper() if isinstance(raw_method, str) and raw_method.strip() else "GET"
+            method = method[:40]
+            raw_url = req.get("url")
+            url = raw_url if isinstance(raw_url, str) else ""
+            parsed = _fill_query(parse_url(url), req)
+            status = _sqlite_int(resp.get("status"), default=None, lo=-1, hi=9999)
+            content = resp.get("content") if isinstance(resp.get("content"), dict) else {}
+            mime = content.get("mimeType") if isinstance(content.get("mimeType"), str) else None
+            post = req.get("postData") if isinstance(req.get("postData"), dict) else None
 
-            noise = is_noise(method=method, url=url, status=status, mime=mime)
+            noise = is_noise(method=method, url=url if isinstance(url, str) else "", status=status, mime=mime)
 
             req_text, req_mime, req_size = _body_text(post)
             resp_text, resp_mime, resp_size = _body_text(content)
@@ -467,12 +591,12 @@ def ingest_into(har_path: str | Path, conn: sqlite3.Connection) -> dict[str, Any
                     redact_query_string(parsed["query_raw"]) or None,
                     status,
                     mime,
-                    entry.get("startedDateTime"),
+                    entry.get("startedDateTime") if isinstance(entry.get("startedDateTime"), str) else None,
                     time_ms,
                     1 if noise else 0,
                     1 if req_text else 0,
                     1 if resp_text else 0,
-                    entry.get("pageref") or None,
+                    entry.get("pageref") if isinstance(entry.get("pageref"), str) else None,
                     init_type,
                     init_url,
                 ),
@@ -480,9 +604,25 @@ def ingest_into(har_path: str | Path, conn: sqlite3.Connection) -> dict[str, Any
 
             _store_headers(conn, entry_id, "request", _header_list(req.get("headers")))
             _store_headers(conn, entry_id, "response", _header_list(resp.get("headers")))
-            _store_body(conn, entry_id, "request", req_text, req_mime or (post or {}).get("mimeType"), req_size)
+            if parsed.get("userinfo"):
+                _record_shape(conn, entry_id, "request", "url", "basic_auth", "userinfo")
+            for item in parsed.get("path_params") or []:
+                _record_shape(conn, entry_id, "request", "path", item["shape"], item["name"])
+            if not _header_present(req.get("headers"), "cookie"):
+                _note_cookies(conn, entry_id, "request", _cookie_pairs(req.get("cookies")))
+            if not _header_present(resp.get("headers"), "set-cookie"):
+                _note_cookies(conn, entry_id, "response", _cookie_pairs(resp.get("cookies")))
+            _store_body(
+                conn, entry_id, "request", req_text,
+                req_mime or (post.get("mimeType") if isinstance(post, dict) else None),
+                req_size,
+            )
             _store_body(conn, entry_id, "response", resp_text, mime, resp_size)
-            _detect_streams(conn, entry_id, "request", req_mime or (post or {}).get("mimeType"), parsed["path"], req_text, post)
+            _detect_streams(
+                conn, entry_id, "request",
+                req_mime or (post.get("mimeType") if isinstance(post, dict) else None),
+                parsed["path"], req_text, post,
+            )
             _detect_streams(conn, entry_id, "response", mime, parsed["path"], resp_text, content)
             _store_websocket(conn, entry_id, entry)
             _record_query_shapes(conn, entry_id, parsed.get("query"))
@@ -506,11 +646,16 @@ def ingest_into(har_path: str | Path, conn: sqlite3.Connection) -> dict[str, Any
         "INSERT INTO meta (key, value) VALUES (?, ?)",
         ("entry_count", str(counts["entries"])),
     )
+    conn.execute(
+        "INSERT INTO meta (key, value) VALUES (?, ?)",
+        ("skipped_entries", str(counts["skipped"])),
+    )
     conn.commit()
 
     return {
         "har_path": str(har_path),
         "entries": counts["entries"],
+        "skipped": counts["skipped"],
         "noise": counts["noise"],
         "api": counts["api"],
         "hosts": dict(sorted(counts["hosts"].items(), key=lambda x: -x[1])),

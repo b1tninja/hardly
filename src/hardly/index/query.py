@@ -1091,9 +1091,29 @@ def endpoint_schema(
 _RAW_COLUMNS = {("headers", "value_raw")}
 
 
-def _hide_raw_columns(action, arg1, arg2, _db, _source):
+# Reads, plus the one internal pragma FTS5 issues while matching. Everything else
+# (including ``PRAGMA query_only=OFF``) is denied, so a keyword slip cannot write.
+_READ_ACTIONS = frozenset({
+    sqlite3.SQLITE_READ,
+    sqlite3.SQLITE_SELECT,
+    sqlite3.SQLITE_FUNCTION,
+    sqlite3.SQLITE_RECURSIVE,
+})
+_SAFE_PRAGMAS = frozenset({"data_version"})
+_DENIED_FUNCTIONS = frozenset({
+    "load_extension", "writefile", "readfile", "edit", "fts3_tokenizer",
+})
+
+
+def _guard_sql(action, arg1, arg2, _db, _source):
     if action == sqlite3.SQLITE_READ and (arg1, arg2) in _RAW_COLUMNS:
         return sqlite3.SQLITE_IGNORE
+    if action == sqlite3.SQLITE_PRAGMA and arg1 in _SAFE_PRAGMAS:
+        return sqlite3.SQLITE_OK
+    if action == sqlite3.SQLITE_FUNCTION and str(arg2 or "").lower() in _DENIED_FUNCTIONS:
+        return sqlite3.SQLITE_DENY
+    if action not in _READ_ACTIONS:
+        return sqlite3.SQLITE_DENY
     return sqlite3.SQLITE_OK
 
 
@@ -1102,12 +1122,28 @@ def _allow_all(*_args):
 
 
 def _clean_cell(value: Any) -> Any:
-    """Stored text previews keep markup values for the detectors; ad-hoc SQL shows them redacted."""
-    if isinstance(value, str) and len(value) > 16:
+    """Stored text previews keep markup values for the detectors; ad-hoc SQL shows them redacted.
+
+    Length is not a safe cutoff: ``password=x`` is short and still a secret.
+    """
+    if isinstance(value, str) and value:
         from hardly.core.redact import redact_form, redact_markup_text, redact_string
 
         return redact_form(redact_markup_text(redact_string(value)))
     return value
+
+
+def _bounded_limit(limit: object) -> int:
+    """``LIMIT`` is interpolated, so only a small integer may reach the statement."""
+    if isinstance(limit, bool):
+        return 100
+    if isinstance(limit, int):
+        n = limit
+    elif isinstance(limit, str) and limit.strip().lstrip("-").isdigit():
+        n = int(limit.strip())
+    else:
+        return 100
+    return min(500, max(1, n))
 
 
 def run_sql(
@@ -1121,11 +1157,12 @@ def run_sql(
         return {"error": "Only SELECT statements are allowed"}
     if _FORBIDDEN.search(sql_stripped):
         return {"error": "Forbidden keyword in SQL"}
-    # Enforce limit
+    limit = _bounded_limit(limit)
+    # Enforce limit. ``limit`` is an int in 1..500; it is never taken from the caller's text.
     upper = sql_stripped.upper()
     if "LIMIT" not in upper:
         sql_stripped = f"{sql_stripped} LIMIT {limit}"
-    conn.set_authorizer(_hide_raw_columns)
+    conn.set_authorizer(_guard_sql)
     try:
         cur = conn.execute(sql_stripped)
         cols = [d[0] for d in cur.description] if cur.description else []

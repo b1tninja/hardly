@@ -30,6 +30,7 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from hardly.core.netguard import HostNotAllowed, blocked_reason, check_url, default_hint
+from hardly.core.optin import is_explicit_true
 from hardly.core.redact import redact_string, redact_url
 
 CATALOG_VERSION = 1
@@ -531,7 +532,7 @@ class TargetAdapter(abc.ABC):
         delay_s: float = 1.0,
         client: Any = None,
     ) -> VerifyResult:
-        if not confirm:
+        if not is_explicit_true(confirm):
             return VerifyResult(error="verify performs live GET requests: pass confirm=True")
         from hardly.core.crawl import crawl
 
@@ -674,7 +675,7 @@ class CatalogRunner:
 
     def run(self, **filters: Any) -> dict[str, Any]:
         """Verify every due endpoint matching ``filters`` (see :meth:`Catalog.select`)."""
-        if not self.confirm:
+        if not is_explicit_true(self.confirm):
             return {
                 "error": "catalog verify performs live GET requests: pass confirm=True",
                 "planned": self.plan(**filters),

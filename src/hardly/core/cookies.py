@@ -88,21 +88,27 @@ def _from_har(har_path: Path, *, host: str | None) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     with har_path.open("rb") as f:
         for entry_id, entry in enumerate(ijson_items(f, "log.entries.item")):
-            req = entry.get("request") or {}
-            resp = entry.get("response") or {}
-            url = req.get("url") or ""
+            if not isinstance(entry, dict):
+                continue
+            req = entry.get("request") if isinstance(entry.get("request"), dict) else {}
+            resp = entry.get("response") if isinstance(entry.get("response"), dict) else {}
+            url = req.get("url") if isinstance(req.get("url"), str) else ""
             parsed = parse_url(url)
             if host and parsed["host"].lower() != host.lower():
                 continue
-            method = (req.get("method") or "GET").upper()
-            mime = (resp.get("content") or {}).get("mimeType")
+            raw_method = req.get("method")
+            method = raw_method.strip().upper() if isinstance(raw_method, str) and raw_method.strip() else "GET"
+            content = resp.get("content") if isinstance(resp.get("content"), dict) else {}
+            mime = content.get("mimeType") if isinstance(content.get("mimeType"), str) else None
             if is_noise(
                 method=method, url=url, status=resp.get("status"), mime=mime
             ):
                 continue
+            saw_cookie = False
             for h in req.get("headers") or []:
-                if (h.get("name") or "").lower() != "cookie":
+                if not isinstance(h, dict) or (h.get("name") or "").lower() != "cookie":
                     continue
+                saw_cookie = True
                 for name in _cookie_names(str(h.get("value") or "")):
                     events.append(
                         {
@@ -113,9 +119,22 @@ def _from_har(har_path: Path, *, host: str | None) -> list[dict[str, Any]]:
                             "method": method,
                         }
                     )
+            if not saw_cookie:
+                for name, _value in _pairs_from_array(req.get("cookies")):
+                    events.append(
+                        {
+                            "entry_id": entry_id,
+                            "event": "send",
+                            "name": name,
+                            "path": parsed["path"],
+                            "method": method,
+                        }
+                    )
+            saw_set = False
             for h in resp.get("headers") or []:
-                if (h.get("name") or "").lower() != "set-cookie":
+                if not isinstance(h, dict) or (h.get("name") or "").lower() != "set-cookie":
                     continue
+                saw_set = True
                 names = _cookie_names(str(h.get("value") or "").split(";", 1)[0])
                 for name in names:
                     events.append(
@@ -127,7 +146,33 @@ def _from_har(har_path: Path, *, host: str | None) -> list[dict[str, Any]]:
                             "status": resp.get("status"),
                         }
                     )
+            if not saw_set:
+                for name, _value in _pairs_from_array(resp.get("cookies")):
+                    events.append(
+                        {
+                            "entry_id": entry_id,
+                            "event": "set",
+                            "name": name,
+                            "path": parsed["path"],
+                            "status": resp.get("status"),
+                        }
+                    )
     return events
+
+
+def _pairs_from_array(cookies: Any) -> list[tuple[str, str]]:
+    """HAR ``cookies`` objects. Used when the capture has no Cookie / Set-Cookie header."""
+    if not isinstance(cookies, list):
+        return []
+    out: list[tuple[str, str]] = []
+    for item in cookies:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        if not isinstance(name, str) or not name.strip():
+            continue
+        out.append((name.strip(), "" if item.get("value") is None else str(item.get("value"))))
+    return out
 
 
 def _from_db(conn: sqlite3.Connection, *, host: str | None) -> list[dict[str, Any]]:
@@ -161,6 +206,37 @@ def _from_db(conn: sqlite3.Connection, *, host: str | None) -> list[dict[str, An
                 "status": row["status"],
             }
         )
+    # Names recorded at ingest from a cookies array (no Cookie header to re-read).
+    try:
+        shaped = conn.execute(
+            f"""
+            SELECT e.entry_id, e.method, e.path, e.status, v.side, v.name
+            FROM value_shapes v
+            JOIN entries e ON e.entry_id = v.entry_id
+            WHERE v.where_kind = 'cookie' AND {where}
+            ORDER BY e.entry_id ASC
+            """,
+            params,
+        ).fetchall()
+    except sqlite3.Error:
+        shaped = []
+    seen = {(e["entry_id"], e["event"], e["name"]) for e in events}
+    for row in shaped:
+        event = "set" if row["side"] == "response" else "send"
+        name = row["name"]
+        if not name or (row["entry_id"], event, name) in seen:
+            continue
+        seen.add((row["entry_id"], event, name))
+        events.append(
+            {
+                "entry_id": row["entry_id"],
+                "event": event,
+                "name": name,
+                "path": row["path"],
+                "method": row["method"],
+                "status": row["status"],
+            }
+        )
     return events
 
 
@@ -186,21 +262,27 @@ def _cookie_flags_from_har(
     seen: set[tuple[Any, ...]] = set()
     with har_path.open("rb") as f:
         for entry_id, entry in enumerate(ijson_items(f, "log.entries.item")):
-            req = entry.get("request") or {}
-            resp = entry.get("response") or {}
-            url = req.get("url") or ""
+            if not isinstance(entry, dict):
+                continue
+            req = entry.get("request") if isinstance(entry.get("request"), dict) else {}
+            resp = entry.get("response") if isinstance(entry.get("response"), dict) else {}
+            url = req.get("url") if isinstance(req.get("url"), str) else ""
             parsed = parse_url(url)
             if host and parsed["host"].lower() != host.lower():
                 continue
-            method = (req.get("method") or "GET").upper()
-            mime = (resp.get("content") or {}).get("mimeType")
+            raw_method = req.get("method")
+            method = raw_method.strip().upper() if isinstance(raw_method, str) and raw_method.strip() else "GET"
+            content = resp.get("content") if isinstance(resp.get("content"), dict) else {}
+            mime = content.get("mimeType") if isinstance(content.get("mimeType"), str) else None
             if is_noise(
                 method=method, url=url, status=resp.get("status"), mime=mime
             ):
                 continue
+            saw_set = False
             for h in resp.get("headers") or []:
-                if (h.get("name") or "").lower() != "set-cookie":
+                if not isinstance(h, dict) or (h.get("name") or "").lower() != "set-cookie":
                     continue
+                saw_set = True
                 parsed_flags = _parse_set_cookie_flags(str(h.get("value") or ""))
                 if not parsed_flags.get("name"):
                     continue
@@ -224,7 +306,53 @@ def _cookie_flags_from_har(
                 )
                 if len(out) >= limit:
                     return out
+            if not saw_set:
+                for item in resp.get("cookies") or []:
+                    if not isinstance(item, dict):
+                        continue
+                    parsed_flags = _flags_from_cookie_object(item)
+                    if not parsed_flags.get("name"):
+                        continue
+                    key = (entry_id, parsed_flags["name"].lower())
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    out.append(
+                        {
+                            "entry_id": entry_id,
+                            "name": parsed_flags["name"],
+                            "path_attr": parsed_flags.get("path"),
+                            "domain": parsed_flags.get("domain"),
+                            "httponly": bool(parsed_flags.get("httponly")),
+                            "secure": bool(parsed_flags.get("secure")),
+                            "samesite": parsed_flags.get("samesite"),
+                            "max_age": parsed_flags.get("max_age"),
+                            "status": resp.get("status"),
+                            "request_path": parsed["path"],
+                        }
+                    )
+                    if len(out) >= limit:
+                        return out
     return out
+
+
+def _flags_from_cookie_object(cookie: dict[str, Any]) -> dict[str, Any]:
+    """Set-Cookie flags carried on a HAR cookie object rather than a header."""
+    name = cookie.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return {}
+    same = cookie.get("sameSite")
+    if same is None:
+        same = cookie.get("samesite")
+    return {
+        "name": name.strip(),
+        "httponly": bool(cookie.get("httpOnly") or cookie.get("httponly")),
+        "secure": bool(cookie.get("secure")),
+        "samesite": str(same) if same else None,
+        "path": cookie.get("path") or None,
+        "domain": cookie.get("domain") or None,
+        "max_age": None,
+    }
 
 
 def _parse_set_cookie_flags(header_value: str) -> dict[str, Any]:

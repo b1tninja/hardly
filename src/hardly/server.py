@@ -19,6 +19,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from hardly import session as sess
+from hardly.core.optin import is_explicit_true
 from hardly.session import resolve_path
 
 INSTRUCTIONS = """\
@@ -230,7 +231,7 @@ def _out(output_path: str | None, overwrite: bool, *, default_name: str | None =
             raise sess.OutputError(f"output_path is a directory: {p}", "Give a file name.")
         p = p / default_name
     guard_write(p)
-    if p.exists() and not overwrite:
+    if p.exists() and not is_explicit_true(overwrite):
         raise sess.OutputExists(
             f"output_path already exists: {p}",
             "Pass overwrite=true to replace it, or choose another path.",
@@ -586,7 +587,7 @@ def hardly_send_catalog_verify(
             recheck_after_s=recheck_after_seconds,
             force=force,
         )
-        if not confirm:
+        if not is_explicit_true(confirm):
             return _dry_run({"endpoints": runner.plan(**filters), "write_back": write_back, "max_requests": max_requests})
         res = runner.run(**filters)
         res["write_back"] = write_back
@@ -720,7 +721,7 @@ def hardly_browser_capture_discover(
     for st in steps or []:
         if isinstance(st, dict) and str(st.get("op") or "").lower() == "goto" and st.get("url"):
             check_url(str(st["url"]))
-    if not confirm:
+    if not is_explicit_true(confirm):
         return _dry_run(
             {
                 "action": "load the URL in a real browser and record its traffic",
@@ -1791,7 +1792,7 @@ def hardly_send_entry(
     from hardly.core.probe import probe_entry
 
     conn = sess.require_conn(session_id)
-    if not confirm:
+    if not is_explicit_true(confirm):
         rows, missing = _entry_rows(conn, [entry_id])
         return _dry_run(
             {
@@ -1838,7 +1839,7 @@ def hardly_send_entry_ablation(
     from hardly.core.replay_check import replay_check
 
     conn = sess.require_conn(session_id)
-    if not confirm:
+    if not is_explicit_true(confirm):
         rows, missing = _entry_rows(conn, entry_ids)
         return _dry_run(
             {
@@ -1934,7 +1935,7 @@ def hardly_send_site_crawl(
     from hardly.core.redact import redact_url
 
     check_url(url)
-    if not confirm:
+    if not is_explicit_true(confirm):
         return _dry_run(
             {
                 "method": "GET",
@@ -1979,7 +1980,7 @@ def hardly_send_arcgis_explore(url: str, confirm: bool = False) -> str:
     from hardly.core.redact import redact_url
 
     check_url(url)
-    if not confirm:
+    if not is_explicit_true(confirm):
         return _dry_run(
             {"method": "GET", "url": redact_url(url), "max_requests": 7, "note": "1 service doc + up to 5 layer docs + 1 one-row sample query"}
         )
@@ -2003,7 +2004,7 @@ def hardly_send_redirect_walk(url: str, confirm: bool = False, max_hops: int = 1
 
     check_url(url)
     hops = max(2, min(max_hops, 20))
-    if not confirm:
+    if not is_explicit_true(confirm):
         return _dry_run({"method": "GET", "url": redact_url(url), "max_hops": hops, "note": "two passes: with and without cookies"})
     from hardly.core.redirect_diag import diagnose_redirects
 

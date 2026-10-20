@@ -7,6 +7,7 @@ import sqlite3
 import httpx
 
 from hardly.core.netguard import check_url, new_client
+from hardly.core.optin import is_explicit_true
 from hardly.core.redact import is_sensitive_header, redact_body_text
 
 
@@ -25,7 +26,7 @@ def probe_entry(
     Requires confirm=True. Sensitive headers from the HAR are NOT sent unless
     explicitly provided in header_overrides.
     """
-    if not confirm:
+    if not is_explicit_true(confirm):
         return {
             "error": "probe requires confirm=true",
             "hint": "Pass confirm=true and supply secrets via header_overrides / body_override.",

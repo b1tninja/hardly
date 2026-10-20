@@ -83,7 +83,13 @@ ALL_VARIANTS = {
 
 
 def leaks(text: str) -> list[str]:
-    return sorted({k for k, v in ALL_VARIANTS.items() if v in text})
+    found = {k for k, v in ALL_VARIANTS.items() if v in text}
+    # Host is stored lowercased, so a case-sensitive scan missed a password sitting in ``user:pass@``.
+    folded = text.casefold()
+    for name, value in {**CANARIES, **INPUT_CANARIES}.items():
+        if len(value) >= 12 and value.casefold() in folded:
+            found.add(f"{name}:casefold")
+    return sorted(found)
 
 
 # ------------------------------------------------------------------ the synthetic HAR
