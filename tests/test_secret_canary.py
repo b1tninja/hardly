@@ -31,6 +31,7 @@ CANARIES: dict[str, str] = {
     "query_apikey": "cnry05QUERY/api+key=Ug2",
     "query_token": "cnry06QUERY/token+v=Vh3",
     "path_jsessionid": "cnry07PATHJSESS1ONID0Wi4",
+    "path_matrix_token": "cnry30MATRIXPARAM0Tok3n",
     "form_password": "cnry08FORM/pass+word=Xj5",
     "form_csrf": "cnry09FORM/csrf+tok=Yk6",
     "json_password": "cnry10JSON/pass+word=Zl7",
@@ -143,6 +144,7 @@ def build_har() -> dict:
         f'<script>var cfg = {{"apiKey": "{c["json_client_secret"]}", "base": "/api"}};</script>'
         "</body></html>"
     )
+    entries.append(_entry("GET", f"{host}/app/items;token={c['path_matrix_token']}"))
     entries.append(_entry(
         "GET", f"{host}/app/login;jsessionid={c['path_jsessionid']}?next=/home",
         req_headers=[("Authorization", f"Bearer {c['req_authorization']}"), ("Cookie", f"session={c['req_cookie']}; theme=dark"),
