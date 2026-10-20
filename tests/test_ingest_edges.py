@@ -96,6 +96,29 @@ def test_malformed_entries_and_secret_placement(tmp_path):
     assert "session" in offline["names_set"]
 
 
+def test_userinfo_is_not_a_host_label(tmp_path):
+    """Split groups and dependency steps must not carry a lowercased URL password."""
+    from hardly.core.flow_graph import flow_graph
+    from hardly.core.har_tools import split_har
+
+    entry = {
+        "request": {
+            "method": "GET",
+            "url": f"https://svc:{_USER_PW}@legacy.example.com/old",
+            "headers": [], "queryString": [], "cookies": [],
+        },
+        "response": {"status": 200, "headers": [], "cookies": [], "content": {"mimeType": "text/plain", "text": "ok"}},
+    }
+    path = tmp_path / "user.har"
+    path.write_text(json.dumps({"log": {"version": "1.2", "entries": [entry]}}), encoding="utf-8")
+    _stats, conn = ingest_memory(path)
+    assert _USER_PW.casefold() not in json.dumps(flow_graph(conn, 0)).casefold()
+    parts = split_har(path, outdir=tmp_path / "parts")
+    blob = json.dumps(parts).casefold()
+    assert _USER_PW.casefold() not in blob
+    assert "legacy.example.com" in blob
+
+
 def test_query_string_is_capped(tmp_path):
     qs = "&".join(f"p{i}=v" for i in range(3000))
     entry = {
