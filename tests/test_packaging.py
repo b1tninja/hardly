@@ -66,7 +66,9 @@ def test_runtime_data_is_packaged():
 def test_metadata_basics():
     proj = _pyproject()["project"]
     assert re.match(r"^>=3\.\d+$", proj["requires-python"])
-    assert (ROOT / proj["readme"]).is_file()
+    assert "readme" in proj["dynamic"]  # built by hatch-fancy-pypi-readme from README.md
+    frags = _pyproject()["tool"]["hatch"]["metadata"]["hooks"]["fancy-pypi-readme"]["fragments"]
+    assert all((ROOT / f["path"]).is_file() for f in frags)
     assert {"capture", "dev"} <= set(proj["optional-dependencies"])
     assert "Changelog" in proj["urls"]
 

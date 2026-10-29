@@ -2,6 +2,11 @@
 
 <!-- mcp-name: io.github.b1tninja/hardly -->
 
+[![PyPI](https://img.shields.io/pypi/v/hardly)](https://pypi.org/project/hardly/)
+[![Python](https://img.shields.io/pypi/pyversions/hardly)](https://pypi.org/project/hardly/)
+[![CI](https://github.com/b1tninja/hardly/actions/workflows/ci.yml/badge.svg)](https://github.com/b1tninja/hardly/actions/workflows/ci.yml)
+[![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue)](https://github.com/b1tninja/hardly/blob/master/LICENSE)
+
 A generic, content-neutral CLI and MCP server for **reading and capturing HAR files** and turning
 them into what a client SDK needs: endpoints, forms and labels, data and media kinds, and how
 credentials and authentication work.
@@ -21,10 +26,11 @@ particular site. Downstream SDKs keep their own recipes and vocabularies. See
 ## Install
 
 ```bash
-python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
-pip install -e ".[capture]" && playwright install chromium   # optional: record HARs
+pip install hardly                  # or: pipx install hardly / uv tool install hardly
+pip install 'hardly[capture]' && python -m playwright install chromium   # optional: record HARs
 ```
+
+To work on hardly itself: `pip install -e ".[dev]"` ([CONTRIBUTING.md](CONTRIBUTING.md)).
 
 Python 3.10+. **Give an output path to save; otherwise nothing is written.** Everything lives in
 memory unless you pass `output_path` (`hardly session open HAR -o index.db`). Python:

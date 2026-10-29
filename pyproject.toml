@@ -1,12 +1,12 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-fancy-pypi-readme>=24.1"]
 build-backend = "hatchling.build"
 
 [project]
 name = "hardly"
 version = "1.0.0"
 description = "HAR analysis MCP/CLI — archive, headless, or interactive modes to index and query captures without burning tokens on raw files"
-readme = "README.md"
+dynamic = ["readme"]
 requires-python = ">=3.10"
 license = "MPL-2.0"
 license-files = ["LICENSE", "NOTICE.md"]
@@ -53,6 +53,17 @@ capture = [
     # 1.49+: locator.aria_snapshot; 1.59+: mode="ai" (refs for agents)
     "playwright>=1.49",
 ]
+
+[tool.hatch.metadata.hooks.fancy-pypi-readme]
+content-type = "text/markdown"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
+path = "README.md"
+
+# PyPI renders the README outside the repository: point relative links back at GitHub.
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '\]\((?!https?:|#|mailto:)([^)\s]+)\)'
+replacement = '](https://github.com/b1tninja/hardly/blob/master/\1)'
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/hardly"]

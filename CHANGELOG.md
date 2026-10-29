@@ -11,6 +11,7 @@ All notable changes are documented here. The format follows
 First published release. The public surface in [docs/api-stability.md](docs/api-stability.md) is permanent from here.
 
 ### Packaging polish
+- The PyPI description is built from `README.md` with relative links rewritten to GitHub (`hatch-fancy-pypi-readme`), so they work on the project page. The README now leads with `pip install hardly` and carries status badges.
 - Ships `py.typed` (PEP 561) and the `Typing :: Typed` classifier.
 - License metadata is the PEP 639 SPDX expression only (redundant license classifier removed); `authors` and a `Homepage` URL added; status classifier is Production/Stable.
 
