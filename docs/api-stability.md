@@ -8,7 +8,7 @@ protect it, and the tests that enforce it. How the names were chosen: [api-decis
 
 ## Status before and after 1.0
 
-hardly has never been published. Versions below 1.0.0 are development builds: names, parameters
+Versions below 1.0.0 were unpublished development builds: names, parameters
 and formats may still change, but only deliberately (the snapshots below make an accidental change
 fail CI). **From the first published release (1.0.0) everything on the public surface is permanent**
 and changes only as described here.

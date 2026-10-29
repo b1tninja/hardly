@@ -6,7 +6,7 @@ and any name starting with an underscore, is internal and may change in any rele
 policy is docs/api-stability.md.
 """
 
-__version__ = "0.2.30"
+__version__ = "1.0.0"
 
 # Public Python API (lazy, so `import hardly` stays cheap for the CLI).
 _API = (

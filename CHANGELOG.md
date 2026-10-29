@@ -6,6 +6,14 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-29
+
+First published release. The public surface in [docs/api-stability.md](docs/api-stability.md) is permanent from here.
+
+### Packaging polish
+- Ships `py.typed` (PEP 561) and the `Typing :: Typed` classifier.
+- License metadata is the PEP 639 SPDX expression only (redundant license classifier removed); `authors` and a `Homepage` URL added; status classifier is Production/Stable.
+
 ### Review fixes
 - **Confirm and overwrite accept only a real boolean true.** The strings `"false"` and `"0"`, and any other truthy value, no longer send traffic or replace a file. JSON booleans from MCP are unchanged.
 - **HAR import.** A non-object entry, a non-object header, or a non-finite status no longer aborts the whole file. URL userinfo is not stored in `host` (a `basic_auth` shape is recorded instead). `;jsessionid` / `;sid` path parameters stay in the path with the value redacted. A `queryString` or `cookies` array is used when the URL query or the Cookie / Set-Cookie header is absent.

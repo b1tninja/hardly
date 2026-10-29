@@ -4,16 +4,16 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hardly"
-version = "0.2.30"
+version = "1.0.0"
 description = "HAR analysis MCP/CLI — archive, headless, or interactive modes to index and query captures without burning tokens on raw files"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MPL-2.0"
 license-files = ["LICENSE", "NOTICE.md"]
+authors = [{ name = "Justin Capella", email = "4584655+b1tninja@users.noreply.github.com" }]
 keywords = ["har", "http-archive", "mcp", "fastmcp", "reverse-engineering", "api", "playwright", "sdk"]
 classifiers = [
-    "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
@@ -22,6 +22,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
     "Topic :: Software Development :: Libraries",
     "Topic :: Internet :: WWW/HTTP",
 ]
@@ -32,6 +33,7 @@ dependencies = [
 ]
 
 [project.urls]
+Homepage = "https://github.com/b1tninja/hardly"
 Documentation = "https://github.com/b1tninja/hardly/tree/master/docs"
 Source = "https://github.com/b1tninja/hardly"
 Issues = "https://github.com/b1tninja/hardly/issues"

@@ -7,12 +7,12 @@
     "url": "https://github.com/b1tninja/hardly",
     "source": "github"
   },
-  "version": "0.2.30",
+  "version": "1.0.0",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "hardly",
-      "version": "0.2.30",
+      "version": "1.0.0",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
