@@ -1,0 +1,39 @@
+name: Tag release
+
+# Click "Run workflow" on master: tags vX.Y.Z (X.Y.Z from pyproject.toml) and starts release.yml on that tag.
+# Same as `git tag vX.Y.Z && git push origin vX.Y.Z`, for environments where pushing tags is not possible.
+# A tag pushed with GITHUB_TOKEN does not trigger the tag-push trigger, so release.yml is dispatched explicitly.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # create the tag
+  actions: write    # dispatch release.yml
+
+concurrency:
+  group: tag-release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Tag and start the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          TAG="v${VERSION}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" > /dev/null; then
+            echo "tag ${TAG} already exists" >&2; exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "hardly ${VERSION}"
+          git push origin "refs/tags/${TAG}"
+          gh workflow run release.yml --ref "${TAG}"
+          echo "Tagged ${TAG} and started release.yml" >> "$GITHUB_STEP_SUMMARY"

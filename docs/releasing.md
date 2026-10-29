@@ -79,3 +79,7 @@ PyPI attestations (PEP 740) appear on the file's page under "Provenance" ("Publi
 Top-level `permissions: contents: read`; `id-token`, `attestations`, `packages` and `contents: write` are granted only on the job that needs them. Checkout uses `persist-credentials: false`; superseded CI runs are cancelled; releases never are. `actionlint` and `zizmor` run (non-blocking) in CI, `pip-audit` too: make them blocking once they run clean.
 
 Third-party actions are pinned to full commit SHAs (Dependabot keeps them current). The MCP Registry job installs a **pinned, checksum-verified** `mcp-publisher`; to upgrade, change `MCP_PUBLISHER_VERSION`, download the new `mcp-publisher_linux_amd64.tar.gz`, compare its `sha256sum` with the release's `registry_<version>_checksums.txt`, then update `MCP_PUBLISHER_SHA256`. `fastmcp` is constrained to the tested major (`>=4.0.10,<5`); raise it deliberately after running the suite against the new version.
+
+## Tagging without a local git push
+
+Actions > **Tag release** > Run workflow (on `master`) creates `vX.Y.Z` from the version in `pyproject.toml` and dispatches `release.yml` on that tag, so everything under "Release steps" runs as for a pushed tag. It refuses to run if the tag already exists.
